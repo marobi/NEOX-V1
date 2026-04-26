@@ -1,0 +1,372 @@
+ca65 V2.19 - Git 916933f
+Main file   : bios.asm
+Current file: bios.asm
+
+000000r 1               ; ********************************
+000000r 1               ; * BIOS RIEN MATTHIJSSE         *
+000000r 1               ; *        NEO6502_MMU           *
+000000r 1               ; * V3.0   APRIL 2026            *
+000000r 1               ; ********************************
+000000r 1               ;
+000000r 1               	.SETCPU "65C02"
+000000r 1               
+000000r 1               	.include "bios.inc"
+000000r 2               ;
+000000r 2               ; BIOS jumptable + ...
+000000r 2               ;
+000000r 2               .ifndef __BIOS_INC__
+000000r 2               __BIOS_INC__ = 1
+000000r 2               
+000000r 2               BIOS_CMD_PORT   =   $D002
+000000r 2               BIOS_STAT_PORT  =   $D003
+000000r 2               
+000000r 2               BIOS_IRQ_SOURCE =   $D012
+000000r 2               
+000000r 2               BIOS_BASE         = $F000
+000000r 2               
+000000r 2               BIOS_GETCHAR      = BIOS_BASE
+000000r 2               BIOS_PUTCHAR      = BIOS_BASE+3
+000000r 2               BIOS_INKEY        = BIOS_BASE+6
+000000r 2               BIOS_STPKEY		  =	BIOS_BASE+9
+000000r 2               BIOS_CONTEXT_RTI  = BIOS_BASE+12
+000000r 2               BIOS_GETLINE      = BIOS_BASE+15
+000000r 2               BIOS_ACK_IRQ      = BIOS_BASE+18
+000000r 2               BIOS_CONTEXT_JUMP = BIOS_BASE+21
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               	.include "syscall.inc"
+000000r 2               ; ============================================================
+000000r 2               ; syscall.inc
+000000r 2               ; NEOX - syscall definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Defines syscall numbers, fixed syscall entry addresses,
+000000r 2               ;   error codes, and common syscall argument structures.
+000000r 2               ;
+000000r 2               ; Architecture:
+000000r 2               ;   - Syscall jump table is located in shared page C
+000000r 2               ;   - Each syscall entry is a 3-byte JMP stub
+000000r 2               ;   - User code calls fixed syscall entry addresses
+000000r 2               ;
+000000r 2               ; Notes:
+000000r 2               ;   SYS_MONITOR enters supervisor/MICMON context through the
+000000r 2               ;   kernel-defined monitor entry path. It is a controlled
+000000r 2               ;   privileged transfer, not direct user control of MMU/scheduler.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SYSCALL_INC__
+000000r 2               __SYSCALL_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Syscall table location
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               SYSCALL_BASE        = $C000
+000000r 2               SYSCALL_ENTRY_SIZE  = 3
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Standard file descriptors
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               STDIN               = 0
+000000r 2               STDOUT              = 1
+000000r 2               STDERR              = 2
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Syscall numbers
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               SYS_READ            = $03
+000000r 2               SYS_WRITE           = $04
+000000r 2               SYS_MONITOR         = $05
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Fixed syscall entry addresses
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common errno values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               E_OK                = 0
+000000r 2               EIO                 = 3
+000000r 2               EINVAL              = 6
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common read/write argument block
+000000r 2               ;
+000000r 2               ; fd:
+000000r 2               ;   STDIN / STDOUT / STDERR
+000000r 2               ;
+000000r 2               ; buf_ptr:
+000000r 2               ;   Pointer to caller buffer in the current task context
+000000r 2               ;
+000000r 2               ; len:
+000000r 2               ;   Requested transfer length
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct rw_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2                   buf_ptr         .word
+000000r 2                   len             .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               RW_ARGS_SIZE = .sizeof(rw_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; SYSCALL helper macro
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Load X/Y with the address of an argument block and call the
+000000r 2               ;   fixed syscall entry.
+000000r 2               ;
+000000r 2               ; Example:
+000000r 2               ;   SYSCALL my_args, sys_write
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro SYSCALL argblk, entry
+000000r 2                   ldx #<argblk
+000000r 2                   ldy #>argblk
+000000r 2                   jsr entry
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               KBD_PORT   = $D000
+000000r 1               DSP_PORT   = KBD_PORT + 1
+000000r 1               
+000000r 1               CMD_PORT   = KBD_PORT + 2
+000000r 1               PARAM_PORT = KBD_PORT + 3
+000000r 1               
+000000r 1               ; -----------------------------------------------------------------------------
+000000r 1               
+000000r 1               ; commands
+000000r 1               CMD_NONE           = 0
+000000r 1               CMD_ACK_IRQ        = 1
+000000r 1               CMD_CONTEXT_SWITCH = 2
+000000r 1               
+000000r 1               ; -----------------------------------------------------------------------------
+000000r 1               ; set up origin
+000000r 1               	.segment "BIOS"
+000000r 1               	.org $F000    		; nice for listing
+00F000  1               
+00F000  1               BIOS:					; jump table (16 cmds)
+00F000  1  4C 46 F0     	JMP _GETCHAR		; get char
+00F003  1  4C 65 F0     	JMP _PUTCHAR		; put char
+00F006  1  4C E6 F0     	JMP EMPTY			; check for char in available
+00F009  1  4C E6 F0     	JMP EMPTY			; check for ^C input
+00F00C  1  4C B2 F0     	JMP SET_MMU_CONTEXT_AND_RTI	; switch context and rti
+00F00F  1  4C 80 F0     	JMP _GETLINE		; getline of chars
+00F012  1  4C A7 F0     	JMP ACK_IRQ			; acknowledge IRQ
+00F015  1  4C C9 F0     	JMP SET_MMU_CONTEXT_AND_JUMP	; switch context and jump
+00F018  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F01B  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F01E  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F021  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F024  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F027  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F02A  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F02D  1  4C E6 F0     	JMP EMPTY			; empty slot
+00F030  1               
+00F030  1               ; -----------------------------------------------------------------------------
+00F030  1               ocharbuf:
+00F030  1  xx               .res 1
+00F031  1               
+00F031  1               icharbuf:
+00F031  1  xx           	.res 1
+00F032  1               
+00F032  1               read_blk:
+00F032  1  00               .byte STDIN
+00F033  1  00               .byte 0
+00F034  1  00 00            .word $0000				; ptr linebuf
+00F036  1  01 00            .word 1					; size linebuf
+00F038  1               
+00F038  1               readc_blk:
+00F038  1  00               .byte STDIN
+00F039  1  00               .byte 0
+00F03A  1  31 F0            .word icharbuf
+00F03C  1  01 00            .word 1
+00F03E  1               
+00F03E  1               write_blk:
+00F03E  1  01               .byte STDOUT
+00F03F  1  00               .byte 0
+00F040  1  30 F0            .word ocharbuf
+00F042  1  01 00            .word 1
+00F044  1               
+00F044  1               bios_jmp_vec:
+00F044  1  xx xx        	.res 2
+00F046  1               
+00F046  1               ; -----------------------------------------------------------------------------
+00F046  1               ; read a key from input, only a-reg is used
+00F046  1               ;
+00F046  1               .proc _GETCHAR
+00F046  1  DA           	phx
+00F047  1  5A           	phy
+00F048  1  A2 38 A0 F0  	SYSCALL readc_blk, sys_read
+00F04C  1  20 09 C0     
+00F04F  1  B0 0E        	bcs @ic_error
+00F051  1               
+00F051  1  7A           	ply
+00F052  1  FA           	plx
+00F053  1  AD 31 F0     	lda icharbuf
+00F056  1  29 7F        	and #$7f			; remove 8 bit
+00F058  1  9C 31 F0     	stz icharbuf
+00F05B  1  C9 00        	cmp #0
+00F05D  1  18           	clc
+00F05E  1  60           	rts
+00F05F  1               
+00F05F  1               @ic_error:
+00F05F  1  7A           	ply
+00F060  1  FA           	plx
+00F061  1  A9 00        	lda #0
+00F063  1  38           	sec
+00F064  1  60           	rts
+00F065  1               .endproc
+00F065  1               
+00F065  1               ; -----------------------------------------------------------------------------
+00F065  1               ; write a char to output, only a-reg is used
+00F065  1               ;
+00F065  1               .proc _PUTCHAR
+00F065  1  48           	pha
+00F066  1  29 7F        	and #$7f			; standard ASCII
+00F068  1  F0 10        	beq @pc_ok
+00F06A  1  8D 30 F0         sta ocharbuf
+00F06D  1               
+00F06D  1  DA           	phx
+00F06E  1  5A           	phy
+00F06F  1  A2 3E A0 F0      SYSCALL write_blk, sys_write
+00F073  1  20 0C C0     
+00F076  1  7A           	ply
+00F077  1  FA           	plx
+00F078  1  B0 03            bcs @pc_error
+00F07A  1               
+00F07A  1               @pc_ok:
+00F07A  1  68           	pla
+00F07B  1  18           	clc
+00F07C  1  60               rts
+00F07D  1               
+00F07D  1               @pc_error:
+00F07D  1  68           	pla
+00F07E  1  38               sec
+00F07F  1  60               rts
+00F080  1               .endproc
+00F080  1               
+00F080  1               ; -----------------------------------------------------------------------------
+00F080  1               ; X = <linebuf
+00F080  1               ; Y = >linebuf
+00F080  1               ; A = len linebuf
+00F080  1               ; -----------------------------------------------------------------------------
+00F080  1               .proc _GETLINE
+00F080  1  8E 34 F0     	stx read_blk + rw_args::buf_ptr
+00F083  1  8C 35 F0     	sty read_blk + rw_args::buf_ptr+1
+00F086  1  8D 36 F0     	sta read_blk + rw_args::len
+00F089  1  9C 37 F0     	stz read_blk + rw_args::len+1
+00F08C  1               
+00F08C  1  A2 32 A0 F0  	SYSCALL read_blk, sys_read
+00F090  1  20 09 C0     
+00F093  1  B0 02        	bcs @gl_error
+00F095  1               
+00F095  1  18           	clc
+00F096  1  60           	rts
+00F097  1               
+00F097  1               @gl_error:
+00F097  1  38           	sec
+00F098  1  60           	rts
+00F099  1               .endproc
+00F099  1               
+00F099  1               ; exec command  A=cmd, X=param (optional)
+00F099  1               ; wait for cmd == 0
+00F099  1               ; set new cmd
+00F099  1               ;
+00F099  1               .proc exec_cmd
+00F099  1  48           	pha
+00F09A  1               @wait_cmd:
+00F09A  1  AD 02 D0     	lda CMD_PORT
+00F09D  1  D0 FB        	bne @wait_cmd
+00F09F  1  8E 03 D0     	stx PARAM_PORT
+00F0A2  1  68           	pla
+00F0A3  1  8D 02 D0     	sta CMD_PORT
+00F0A6  1  60           	rts
+00F0A7  1               .endproc
+00F0A7  1               
+00F0A7  1               ;
+00F0A7  1               ; ack IRQ
+00F0A7  1               ; registers preserved
+00F0A7  1               ;
+00F0A7  1               .proc ACK_IRQ
+00F0A7  1  48           	pha
+00F0A8  1  9C 12 D0     	stz BIOS_IRQ_SOURCE
+00F0AB  1  A9 01        	lda #CMD_ACK_IRQ
+00F0AD  1  20 99 F0     	jsr exec_cmd
+00F0B0  1  68           	pla
+00F0B1  1  60           	rts
+00F0B2  1               .endproc
+00F0B2  1               
+00F0B2  1               ;
+00F0B2  1               ; switch context
+00F0B2  1               ; A = context
+00F0B2  1               ;
+00F0B2  1               .proc SET_MMU_CONTEXT_AND_RTI
+00F0B2  1  AA           	tax						; context
+00F0B3  1               @wait_cmd:
+00F0B3  1  AD 02 D0     	lda CMD_PORT
+00F0B6  1  D0 FB        	bne @wait_cmd
+00F0B8  1  8E 03 D0     	stx PARAM_PORT
+00F0BB  1  A9 02        	lda #CMD_CONTEXT_SWITCH
+00F0BD  1  8D 02 D0     	sta CMD_PORT			; context switch
+00F0C0  1               @wait_completion:
+00F0C0  1  AD 02 D0     	lda CMD_PORT
+00F0C3  1  D0 FB        	bne @wait_completion
+00F0C5  1               
+00F0C5  1  7A           	ply
+00F0C6  1  FA           	plx
+00F0C7  1  68           	pla
+00F0C8  1  40           	rti
+00F0C9  1               .endproc
+00F0C9  1               
+00F0C9  1               ; A = context
+00F0C9  1               ; X = target low
+00F0C9  1               ; Y = target high
+00F0C9  1               .proc SET_MMU_CONTEXT_AND_JUMP
+00F0C9  1                   ; save jump target
+00F0C9  1  8E 44 F0         stx bios_jmp_vec
+00F0CC  1  8C 45 F0         sty bios_jmp_vec+1
+00F0CF  1               
+00F0CF  1  AA           	tax				; context
+00F0D0  1               @wait_cmd:
+00F0D0  1  AD 02 D0     	lda CMD_PORT
+00F0D3  1  D0 FB        	bne @wait_cmd
+00F0D5  1  8E 03 D0     	stx PARAM_PORT
+00F0D8  1  A9 02        	lda #CMD_CONTEXT_SWITCH
+00F0DA  1  8D 02 D0     	sta CMD_PORT
+00F0DD  1               @wait_completion:
+00F0DD  1  AD 02 D0     	lda CMD_PORT
+00F0E0  1  D0 FB        	bne @wait_completion
+00F0E2  1               
+00F0E2  1  58           	cli
+00F0E3  1               
+00F0E3  1  6C 44 F0         jmp (bios_jmp_vec)
+00F0E6  1               .endproc
+00F0E6  1               
+00F0E6  1               ; -----------------------------------------------------------------------------
+00F0E6  1               ; empty
+00F0E6  1               ;
+00F0E6  1               .proc EMPTY
+00F0E6  1  00           	BRK
+00F0E7  1  EA           	NOP
+00F0E8  1               .endproc
+00F0E8  1               
+00F0E8  1               ;IRQ:
+00F0E8  1               ;NMI:
+00F0E8  1               ;	RTI						; stub
+00F0E8  1               ;
+00F0E8  1               ;RESET:
+00F0E8  1               ;	jmp RESET				; stub
+00F0E8  1               

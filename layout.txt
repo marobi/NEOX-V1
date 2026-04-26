@@ -1,0 +1,64 @@
+neo6502/
+│
+├── build/
+│   ├── neo6502.cfg        ; ld65 linker config
+│   ├── Makefile           ; or build script
+│
+├── include/
+│   ├── memorymap.inc      ; fixed addresses, segments
+│   ├── syscall.inc        ; syscall ABI + structs
+│   ├── mailbox.inc        ; RP2350 protocol
+│   ├── proc.inc           ; process table layout
+│   ├── fd.inc             ; fd + ofile definitions
+│   ├── channel.inc        ; pipe/channel structures
+│
+├── kernel/
+│   ├── zeropage.asm       ; <<< ONLY ZP definitions
+│   ├── kernelvars.asm     ; global kernel data (BSS)
+│
+│   ├── syscall_table.asm  ; jump table + handlers
+│   ├── syscall.asm        ; shared syscall helpers
+│
+│   ├── proc.asm           ; process management
+│   ├── sched.asm          ; scheduler
+│   ├── exec.asm           ; program loader
+│
+│   ├── fd.asm             ; fd layer
+│   ├── vfs.asm            ; filesystem logic (later)
+│
+│   ├── channel.asm        ; pipes / streams
+│   ├── service.asm        ; service registry
+│
+│   ├── rp2350.asm         ; mailbox + supervisor interface
+│   ├── mmu.asm            ; MMU mapping logic
+│
+│   ├── console.asm        ; console service (later)
+│   ├── console_early.asm  ; current BIOS-based fallback
+│
+│   └── init.asm           ; kernel entry / bootstrap
+│
+├── drivers/               ; optional, later
+│   ├── console/
+│   ├── block/
+│   └── usb/
+│
+├── user/
+│   ├── crt0.asm           ; user entry / startup
+│
+│   ├── sh.asm             ; shell
+│   ├── ls.asm
+│   ├── cat.asm
+│
+│   └── test_write.asm     ; first syscall test
+│
+├── lib/
+│   ├── klib.asm           ; memcpy, strlen, etc.
+│   └── ring.inc           ; shared helpers (optional)
+│
+├── bios/                  ; your current code
+│   ├── bios.asm           ; current BIOS (temporary)
+│   └── fifo.inc           ; FIFO (keep, fix size bug)
+│
+└── docs/
+    └── design.md          ; your spec (canvas version)
+	

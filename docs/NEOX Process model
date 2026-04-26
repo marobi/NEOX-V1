@@ -1,0 +1,256 @@
+# NEOX Minimal Process Model
+
+This document defines the initial process model for NEOX, a minimal UNIX-like operating system for the NEO6502-MMU platform.
+
+The design is intentionally simple and aligned with:
+
+* W65C02 CPU constraints
+* RP2350 supervisor model
+* MMU-based memory contexts
+* mailbox-driven I/O
+
+---
+
+## 1. Design Principles
+
+* minimal and inspectable implementation
+* explicit control flow
+* no hidden runtime behavior
+* incremental complexity
+
+Initial focus:
+
+> processes first, threads later
+
+---
+
+## 2. Execution Model
+
+* single 6502 CPU
+* one running process at a time
+* cooperative multitasking
+* no preemption in v1
+
+A process switch only occurs when:
+
+* `yield` is called
+* a syscall blocks
+* a process exits
+
+---
+
+## 3. Process Definition
+
+A process consists of:
+
+* one 64K virtual address space (via MMU)
+* one saved CPU context
+* one process descriptor
+* one file descriptor table
+* one execution stream
+
+v1 restriction:
+
+> one thread per process
+
+---
+
+## 4. Process States
+
+```
+FREE
+READY
+RUNNING
+BLOCKED
+ZOMBIE
+```
+
+Descriptions:
+
+* FREE: unused slot
+* READY: runnable
+* RUNNING: currently executing
+* BLOCKED: waiting for event
+* ZOMBIE: exited, awaiting collection
+
+---
+
+## 5. Process Descriptor
+
+```
+struct proc_t
+{
+    uint8_t state;
+    uint8_t pid;
+    uint8_t parent_pid;
+    uint8_t flags;
+
+    uint16_t ctx_ptr;
+    uint8_t mmu_context;
+    uint16_t fd_table_ptr;
+
+    uint8_t wait_reason;
+    uint8_t exit_code;
+};
+```
+
+---
+
+## 6. CPU Context
+
+```
+struct cpu_ctx_t
+{
+    uint8_t a;
+    uint8_t x;
+    uint8_t y;
+    uint8_t p;
+    uint8_t sp;
+    uint8_t pcl;
+    uint8_t pch;
+};
+```
+
+This context is saved/restored during a process switch.
+
+---
+
+## 7. Address Space Model
+
+Each process owns an MMU context.
+
+Shared regions:
+
+* syscall table at `$C000`
+* MMU I/O page `$D000-$DFFF`
+
+Process-private regions:
+
+* code
+* data
+* stack
+
+---
+
+## 8. Scheduling
+
+v1 scheduler:
+
+* cooperative
+* round-robin
+
+Simple ready queue:
+
+```
+ready_head
+ready_tail
+ready_q[NPROC]
+```
+
+---
+
+## 9. Process Switching
+
+Switch sequence:
+
+1. save CPU context
+2. update state
+3. select next READY process
+4. switch MMU context
+5. restore CPU context
+6. resume execution
+
+---
+
+## 10. Blocking Model
+
+A process becomes BLOCKED when:
+
+* waiting for console input
+* waiting for RP2350 service
+* waiting for child process (future)
+
+---
+
+## 11. Required Syscalls
+
+Minimal set:
+
+* `yield`
+* `exec`
+* `exit`
+* `wait`
+
+Behavior:
+
+* `yield`: relinquish CPU
+* `exec`: load new program
+* `exit`: terminate process
+* `wait`: collect child status
+
+---
+
+## 12. Thread Model (Future)
+
+Threads are not part of v1.
+
+Future model:
+
+* multiple execution contexts per process
+* shared address space
+* shared resources
+
+---
+
+## 13. UNIX-like Scope
+
+NEOX aims to provide:
+
+* process abstraction
+* file descriptor I/O
+* syscall interface
+* blocking semantics
+
+Not required initially:
+
+* POSIX completeness
+* signals
+* full libc
+
+---
+
+## 14. Implementation Phases
+
+Phase 1:
+
+* process table
+* single process
+* scheduler skeleton
+
+Phase 2:
+
+* multiple READY processes
+* context switching
+
+Phase 3:
+
+* blocking syscalls
+* scheduler interaction
+
+Phase 4:
+
+* exec / exit / wait
+
+Phase 5:
+
+* threading (optional)
+
+---
+
+## 15. Summary
+
+A NEOX process in v1 is:
+
+> one MMU context, one CPU state, one execution stream
+
+This model is sufficient to build a minimal, UNIX-like multitasking system on the NEO6502-MMU platform.

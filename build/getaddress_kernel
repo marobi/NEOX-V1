@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# Get load and run addresses from label file and output in hex in format
+# to be used as arguments to the bintomon program.
+
+LOAD=`grep ".kernel_entry_table" ./out/neox_kernel.lbl |  awk '{ print $2 }' | head -1`
+RESET=`grep ".RESET" ./out/neox_kernel.lbl | awk '{ print $2 }' | head -1`
+IRQ=`grep ".irq_entry" ./out/neox_kernel.lbl | awk '{ print $2 }' | head -1`
+NMI=`grep ".nmi_entry" ./out/neox_kernel.lbl | awk '{ print $2 }' | head -1`
+echo "-l 0x${LOAD} -R 0x${RESET} -I 0x${IRQ} -N 0x${NMI}"

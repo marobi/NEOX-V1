@@ -1,0 +1,16 @@
+0	Privat: RAM
+1	Privat: RAM
+2	Privat: RAM
+3	Privat: RAM
+4	Privat: RAM
+5	Privat: RAM
+6	Privat: RAM
+7	Privat: RAM
+8	Shared: ROM/RAM
+9	Shared: ROM/RAM
+A	Shared: ROM/RAM
+B	Shared: Micmon
+C	Shared: Syscalls
+D	Shared: I/O with RPI
+E	Shared: Kernel
+F	Shared: BIOS

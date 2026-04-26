@@ -1,0 +1,168 @@
+
+BIOS:
+F000  4C 46 F0 JMP _GETCHAR
+F003  4C 65 F0 JMP _PUTCHAR
+F006  4C E6 F0 JMP EMPTY
+F009  4C E6 F0 JMP EMPTY
+F00C  4C B2 F0 JMP SET_MMU_CONTEXT_AND_RTI
+F00F  4C 80 F0 JMP _GETLINE
+F012  4C A7 F0 JMP ACK_IRQ
+F015  4C C9 F0 JMP SET_MMU_CONTEXT_AND_JUMP
+F018  4C E6 F0 JMP EMPTY
+F01B  4C E6 F0 JMP EMPTY
+F01E  4C E6 F0 JMP EMPTY
+F021  4C E6 F0 JMP EMPTY
+F024  4C E6 F0 JMP EMPTY
+F027  4C E6 F0 JMP EMPTY
+F02A  4C E6 F0 JMP EMPTY
+F02D  4C E6 F0 JMP EMPTY
+
+ocharbuf:
+F030  00       BRK
+
+icharbuf:
+F031  00       BRK
+
+read_blk:
+F032  00       BRK
+F033  00       BRK
+F034  00       BRK
+F035  00       BRK
+F036  01 00    ORA ($00,X)
+
+readc_blk:
+F038  00       BRK
+F039  00       BRK
+F03A  31 F0    AND ($F0),Y
+F03C  01 00    ORA ($00,X)
+
+write_blk:
+F03E  01 00    ORA ($00,X)
+F040  30 F0    BMI read_blk
+F042  01 00    ORA ($00,X)
+
+bios_jmp_vec:
+F044  00       BRK
+F045  00       BRK
+
+_GETCHAR:
+F046  DA       PHX
+F047  5A       PHY
+F048  A2 38    LDX #$38
+F04A  A0 F0    LDY #$F0
+F04C  20 09 C0 JSR LC009
+F04F  B0 0E    BCS @ic_error
+F051  7A       PLY
+F052  FA       PLX
+F053  AD 31 F0 LDA icharbuf
+F056  29 7F    AND #$7F
+F058  9C 31 F0 STZ icharbuf
+F05B  C9 00    CMP #$00
+F05D  18       CLC
+F05E  60       RTS
+
+@ic_error:
+F05F  7A       PLY
+F060  FA       PLX
+F061  A9 00    LDA #$00
+F063  38       SEC
+F064  60       RTS
+
+_PUTCHAR:
+F065  48       PHA
+F066  29 7F    AND #$7F
+F068  F0 10    BEQ @pc_ok
+F06A  8D 30 F0 STA ocharbuf
+F06D  DA       PHX
+F06E  5A       PHY
+F06F  A2 3E    LDX #$3E
+F071  A0 F0    LDY #$F0
+F073  20 0C C0 JSR LC00C
+F076  7A       PLY
+F077  FA       PLX
+F078  B0 03    BCS @pc_error
+
+@pc_ok:
+F07A  68       PLA
+F07B  18       CLC
+F07C  60       RTS
+
+@pc_error:
+F07D  68       PLA
+F07E  38       SEC
+F07F  60       RTS
+
+_GETLINE:
+F080  8E 34 F0 STX $F034
+F083  8C 35 F0 STY $F035
+F086  8D 36 F0 STA $F036
+F089  9C 37 F0 STZ $F037
+F08C  A2 32    LDX #$32
+F08E  A0 F0    LDY #$F0
+F090  20 09 C0 JSR LC009
+F093  B0 02    BCS @gl_error
+F095  18       CLC
+F096  60       RTS
+
+@gl_error:
+F097  38       SEC
+F098  60       RTS
+
+exec_cmd:
+F099  48       PHA
+
+@wait_cmd:
+F09A  AD 02 D0 LDA $D002
+F09D  D0 FB    BNE @wait_cmd
+F09F  8E 03 D0 STX $D003
+F0A2  68       PLA
+F0A3  8D 02 D0 STA $D002
+F0A6  60       RTS
+
+ACK_IRQ:
+F0A7  48       PHA
+F0A8  9C 12 D0 STZ $D012
+F0AB  A9 01    LDA #$01
+F0AD  20 99 F0 JSR exec_cmd
+F0B0  68       PLA
+F0B1  60       RTS
+
+SET_MMU_CONTEXT_AND_RTI:
+F0B2  AA       TAX
+
+@wait_cmd:
+F0B3  AD 02 D0 LDA $D002
+F0B6  D0 FB    BNE @wait_cmd
+F0B8  8E 03 D0 STX $D003
+F0BB  A9 02    LDA #$02
+F0BD  8D 02 D0 STA $D002
+
+@wait_completion:
+F0C0  AD 02 D0 LDA $D002
+F0C3  D0 FB    BNE @wait_completion
+F0C5  7A       PLY
+F0C6  FA       PLX
+F0C7  68       PLA
+F0C8  40       RTI
+
+SET_MMU_CONTEXT_AND_JUMP:
+F0C9  8E 44 F0 STX bios_jmp_vec
+F0CC  8C 45 F0 STY $F045
+F0CF  AA       TAX
+
+@wait_cmd:
+F0D0  AD 02 D0 LDA $D002
+F0D3  D0 FB    BNE @wait_cmd
+F0D5  8E 03 D0 STX $D003
+F0D8  A9 02    LDA #$02
+F0DA  8D 02 D0 STA $D002
+
+@wait_completion:
+F0DD  AD 02 D0 LDA $D002
+F0E0  D0 FB    BNE @wait_completion
+F0E2  58       CLI
+F0E3  6C 44 F0 JMP (bios_jmp_vec)
+
+EMPTY:
+F0E6  00       BRK
+F0E7  EA       NOP

@@ -1,0 +1,6 @@
+sys_write proven
+mailbox serialization + scratch discipline
+sys_read
+console fd model
+exec
+shell loop
