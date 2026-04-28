@@ -6,11 +6,10 @@
 ;   Implements process scheduling and context switching.
 ;
 ; Architecture:
-;   - pid 0 = monitor/supervisor process descriptor
-;   - pid 0 is NOT selected by normal round-robin scheduling
-;   - existing tasks resume through BIOS_CONTEXT_RTI
-;   - PROC_NEW tasks are started directly inside this file
-;   - process state is stored in array-based process table
+;   - PID 0 = idle process
+;   - PID 0 is the fallback runnable process
+;   - normal tasks are PID 1..MAX_PROCS-1
+;   - monitor/supervisor uses context 0 directly, not a PID
 ;
 ; Blocking model:
 ;   - A task may mark itself PROC_BLOCKED.
@@ -56,7 +55,7 @@
 .import sched_lock
 .import saved_task_pid
 .import console_owner_pid
-.import monitor_pid
+.import console_wait_pid
 .import monitor_return_mode
 
 .importzp sched_ptr
@@ -170,18 +169,27 @@
     lda RP_CONSOLE_RDY
     beq @done
 
-    ldx console_owner_pid
+    ldx console_wait_pid
+    cpx #$FF
+    beq @done
+
     cpx #FIRST_TASK_PID
-    bcc @done
+    bcc @clear_wait
 
     cpx #MAX_PROCS
-    bcs @done
+    bcs @clear_wait
 
     lda proc_state,x
     cmp #PROC_BLOCKED
-    bne @done
+    bne @clear_wait
 
+    lda #$FF
+    sta console_wait_pid
     jmp proc_wake
+
+@clear_wait:
+    lda #$FF
+    sta console_wait_pid
 
 @done:
     rts
@@ -200,10 +208,12 @@
 .proc scheduler_init
     stz current_pid
     stz sched_lock
-    stz console_owner_pid
     stz saved_task_pid
     stz monitor_return_mode
-    stz monitor_pid
+
+    lda #$FF
+    sta console_owner_pid
+    sta console_wait_pid
 
     ldx #$00
 
@@ -218,6 +228,21 @@
     inx
     cpx #MAX_PROCS
     bne @clear
+
+    ; --------------------------------------------------------
+    ; Initialize PID 0 as idle descriptor.
+    ;
+    ; It becomes PROC_RUNNING in kernel_main because kernel_main
+    ; is already executing the idle/supervisor loop in context 0.
+    ; --------------------------------------------------------
+    lda #$00
+    sta proc_context+IDLE_PID
+
+    lda #$FF
+    sta proc_sp+IDLE_PID
+
+    lda #PROC_FLAG_IDLE
+    sta proc_flags+IDLE_PID
 
     rts
 .endproc
@@ -263,37 +288,6 @@
 .endproc
 
 ; ------------------------------------------------------------
-; has_monitor_context
-;
-; Return:
-;   C set   = context 0 already owned by a live process
-;   C clear = free
-; ------------------------------------------------------------
-
-.proc has_monitor_context
-    ldx #$00
-
-@scan:
-    lda proc_state,x
-    beq @next
-
-    lda proc_context,x
-    beq @found
-
-@next:
-    inx
-    cpx #MAX_PROCS
-    bne @scan
-
-    clc
-    rts
-
-@found:
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
 ; scheduler_create_process
 ;
 ; Inputs:
@@ -314,20 +308,15 @@
     stx sched_ptr
     sty sched_ptr+1
 
+    ; Context 0 is reserved for idle/supervisor/monitor.
+    ; Normal processes must not be created in context 0.
     ldy #proc_create_args::context
     lda (sched_ptr),y
-    beq @alloc_monitor
+    beq @fail
 
     jsr find_free_pid
     bcc @fail
-    bra @fill
 
-@alloc_monitor:
-    lda proc_state+0
-    bne @fail
-    ldx #$00
-
-@fill:
     jsr sched_lock_enter
 
     ; Save MMU context id.
@@ -350,16 +339,9 @@
 
     ; Initial process flags.
     lda #PROC_FLAG_NONE
-    cpx #$00
-    bne @store_flags
-
-    lda #PROC_FLAG_MONITOR
-    stx monitor_pid
-
-@store_flags:
     sta proc_flags,x
 
-    ; Publish process as NEW only after all other fields exist.
+    ; Publish process last.
     lda #PROC_NEW
     jsr proc_set_state
 
@@ -426,7 +408,7 @@
     beq @found
 
     dec sched_ptr
-    beq @none
+    beq @idle
 
     inx
     cpx #MAX_PROCS
@@ -435,12 +417,13 @@
     ldx #FIRST_TASK_PID
     bra @check
 
-@found:
+@idle:
+    ldx #IDLE_PID
     sec
     rts
 
-@none:
-    clc
+@found:
+    sec
     rts
 .endproc
 
@@ -469,18 +452,14 @@
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
-    ; Save interrupted SP using Y as pid index.
+    ; Save interrupted SP.
     ldy current_pid
     tsx
     txa
     sta proc_sp,y
 
-    ; Convert current RUNNING task back to READY.
-    ; Do not modify pid 0.
-    ; Do not turn BLOCKED back into READY here.
-    cpy #$00
-    beq @wake_events
-
+    ; Convert only RUNNING -> READY.
+    ; This applies to PID 0 as well, so only one PID is RUNNING.
     lda proc_state,y
     cmp #PROC_RUNNING
     bne @wake_events
@@ -490,81 +469,36 @@
     jsr proc_set_ready
 
 @wake_events:
-    ; External readiness events may make blocked tasks runnable.
     jsr scheduler_wake_console_input
 
 @pick:
     jsr sched_pick_next
-    bcc @resume_current
 
-    ; X = selected pid.
+    ; X = selected PID, including possible IDLE_PID fallback.
     stx current_pid
 
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new
 
-    ; --------------------------------------------------------
-    ; Resume existing task.
-    ; --------------------------------------------------------
+    ; Resume existing task/idle.
     jsr proc_set_running
 
-    ; Restore target SP before terminal context transfer.
     lda proc_sp,x
     tax
     txs
 
-    ; X was clobbered by TAX above, reload pid.
     ldx current_pid
     lda proc_context,x
     jmp BIOS_CONTEXT_RTI
 
 @start_new:
-    ; --------------------------------------------------------
-    ; Start a new task for the first time.
-    ; --------------------------------------------------------
     jsr proc_set_running
 
     lda proc_context,x
     ldx #<first_run_entry
     ldy #>first_run_entry
     jmp BIOS_CONTEXT_JUMP
-
-@resume_current:
-    ; --------------------------------------------------------
-    ; No runnable task found.
-    ;
-    ; If current process is BLOCKED, it must not be resumed.
-    ; In a healthy configuration there should normally be at
-    ; least one runnable task. If none exists and current is not
-    ; runnable, fall back to pid 0 context.
-    ; --------------------------------------------------------
-    ldx current_pid
-
-    lda proc_state,x
-    cmp #PROC_RUNNING
-    beq @resume_existing_current
-
-    cmp #PROC_READY
-    beq @resume_ready_current
-
-    ; Current task is not runnable. Fall back to monitor pid 0.
-    ldx #$00
-    stx current_pid
-    lda proc_context,x
-    jmp BIOS_CONTEXT_RTI
-
-@resume_ready_current:
-    jsr proc_set_running
-
-@resume_existing_current:
-    lda proc_sp,x
-    tax
-    txs
-
-    ldx current_pid
-    lda proc_context,x
-    jmp BIOS_CONTEXT_RTI
 .endproc
 
 ; ------------------------------------------------------------

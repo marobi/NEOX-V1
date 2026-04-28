@@ -30,7 +30,6 @@
 .include "scheduler_defs.inc"
 .include "mailbox.inc"
 .include "scheduler_defs.inc"
-.include "process.inc"
 
 .export kernel_main
 .export set_brk_vector
@@ -46,7 +45,6 @@
 
 .import kernel_version
 .import current_pid
-.import monitor_pid
 .import console_owner_pid
 .import proc_state
 
@@ -118,14 +116,16 @@
     jsr tasks_init
 
     ; --------------------------------------------------------
-    ; Mark current execution as
-    ; supervisor context 0.
+    ; Mark IDLE_PID execution 
     ; --------------------------------------------------------
-    lda monitor_pid
+    lda #0
     sta current_pid
+	
+	lda #$FF
     sta console_owner_pid
     tax
 
+	ldx #IDLE_PID
     lda #PROC_RUNNING
     sta proc_state,x
 

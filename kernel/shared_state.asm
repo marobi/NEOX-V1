@@ -27,10 +27,12 @@
 .export proc_flags
 
 .export sched_lock
-.export monitor_pid
 
 .export saved_task_pid
+
 .export console_owner_pid
+.export console_wait_pid
+
 .export monitor_return_mode
 
 .export test_ctr1
@@ -133,9 +135,25 @@ saved_task_pid:      .res 1
 
 console_owner_pid:   .res 1
 
-monitor_return_mode: .res 1
+; ------------------------------------------------------------
+; console_wait_pid
+;
+; Purpose:
+;   PID blocked waiting for console input.
+;
+; Value:
+;   $FF = nobody waiting
+;   otherwise PID waiting for input readiness
+;
+; Notes:
+;   Separate from console_owner_pid. Console ownership/focus may
+;   change independently from the process currently blocked on
+;   input availability.
+; ------------------------------------------------------------
 
-monitor_pid:		 .res 1
+console_wait_pid:    .res 1
+
+monitor_return_mode: .res 1
 
 ; ------------------------------------------------------------
 ; Shared scheduler test state

@@ -1,37 +1,27 @@
 ; ============================================================
 ; supervisor.asm
-; NEOX - explicit entry into monitor/supervisor process 0
+; NEOX - MICMON supervisor entry/exit
 ;
-; Purpose:
-;   Provides controlled transfer from a running task into the
-;   monitor process descriptor (pid 0), and controlled return
-;   back to the previously interrupted task.
-;
-; Design:
-;   - pid 0 is a real process-table entry
-;   - pid 0 is not part of normal round-robin scheduling
-;   - entering monitor is always treated as a fresh first run
-;   - leaving monitor resumes the previously saved task
-;   - scheduler is frozen while MICMON is active
-;
-; Notes:
-;   - first_run_entry now lives in scheduler.asm
-;   - proc_first_run no longer exists
+; Model:
+;   - PID 0 is the idle process.
+;   - MICMON is not a process.
+;   - MICMON runs directly in context 0 at $B000.
+;   - current_pid remains the interrupted scheduler PID while
+;     MICMON is active.
+;   - scheduler is locked while MICMON is active.
 ; ============================================================
 
 .setcpu "65C02"
 
 .include "process.inc"
 .include "scheduler_defs.inc"
-.include "process.inc"
-.include "bios.inc"
+.include "../bios/bios.inc"
 
 .export enter_monitor_irq
 .export enter_monitor_syscall
 .export leave_monitor
 .export resume_rts_from_monitor
 
-.import first_run_entry
 .import sched_lock_enter
 .import sched_lock_leave
 
@@ -46,197 +36,123 @@
 MONITOR_RET_RTI     = $01
 MONITOR_RET_RTS     = $02
 
+MONITOR_CONTEXT     = $00
+MONITOR_ENTRY       = $B000
+
 .segment "KERN_TEXT"
 
-; ------------------------------------------------------------
-; enter_monitor_irq
-;
-; Purpose:
-;   Enter monitor from an IRQ-driven path.
-;
-; Entry conditions:
-;   - entered from irq_entry
-;   - interrupted task already has hardware IRQ frame plus
-;     saved A/X/Y on its private stack
-;
-; Behavior:
-;   - save interrupted task SP
-;   - remember interrupted task pid
-;   - mark interrupted task READY
-;   - record IRQ-style return mode
-;   - freeze scheduling while MICMON is active
-;   - switch to pid 0 through first_run_entry
-;
-; Notes:
-;   Monitor entry is always a fresh first run of pid 0.
-;   It does not resume an old monitor stack.
-; ------------------------------------------------------------
-
 .proc enter_monitor_irq
-    ; Save interrupted task SP
+    ; Save interrupted task/idle SP.
     ldy current_pid
     tsx
     txa
     sta proc_sp,y
 
-    ; Remember which task we interrupted
+    ; Remember interrupted scheduler PID.
     sty saved_task_pid
 
-    ; Interrupted task becomes runnable again
-    lda #PROC_READY
-    sta proc_state,y
+    ; Current RUNNING process becomes READY while monitor runs.
+    lda proc_state,y
+    cmp #PROC_RUNNING
+    bne @state_done
 
-    ; Returning from monitor must resume through RTI semantics
+    tya
+    tax
+    lda #PROC_READY
+    sta proc_state,x
+
+@state_done:
     lda #MONITOR_RET_RTI
     sta monitor_return_mode
 
-    ; Freeze normal scheduling while MICMON is active
+    ; Freeze scheduler while MICMON owns the machine.
     jsr sched_lock_enter
 
-    ; pid 0 owns the console while monitor is active
-    stz current_pid
-    stz console_owner_pid
+    ; Monitor is not PID 0. Do not fake ownership.
+    lda #$FF
+    sta console_owner_pid
 
-    ; pid 0 is now considered running
-    lda #PROC_RUNNING
-    sta proc_state+0
-
-    ; Switch to context 0 and enter the inline first-run
-    ; bootstrap in scheduler.asm.
-    lda proc_context+0
-    ldx #<first_run_entry
-    ldy #>first_run_entry
+    ; Enter MICMON directly in context 0.
+    lda #MONITOR_CONTEXT
+    ldx #<MONITOR_ENTRY
+    ldy #>MONITOR_ENTRY
     jmp BIOS_CONTEXT_JUMP
 .endproc
 
-; ------------------------------------------------------------
-; enter_monitor_syscall
-;
-; Purpose:
-;   Enter monitor from a syscall path.
-;
-; Entry conditions:
-;   - current task is running normally
-;   - no IRQ-style frame is required for entry
-;
-; Behavior:
-;   - save current task SP
-;   - remember current task pid
-;   - mark current task READY
-;   - record syscall-style return mode
-;   - freeze scheduling while MICMON is active
-;   - switch to pid 0 through first_run_entry
-;
-; Notes:
-;   Monitor entry is always a fresh first run of pid 0.
-; ------------------------------------------------------------
-
 .proc enter_monitor_syscall
-    ; Save current task SP
+    ; Save current task/idle SP.
     ldy current_pid
     tsx
     txa
     sta proc_sp,y
 
-    ; Remember which task requested monitor entry
+    ; Remember requesting scheduler PID.
     sty saved_task_pid
 
-    ; Calling task becomes runnable again
-    lda #PROC_READY
-    sta proc_state,y
+    ; Current RUNNING process becomes READY while monitor runs.
+    lda proc_state,y
+    cmp #PROC_RUNNING
+    bne @state_done
 
-    ; Returning from monitor must resume through RTS semantics
+    tya
+    tax
+    lda #PROC_READY
+    sta proc_state,x
+
+@state_done:
     lda #MONITOR_RET_RTS
     sta monitor_return_mode
 
-    ; Freeze normal scheduling while MICMON is active
+    ; Freeze scheduler while MICMON owns the machine.
     jsr sched_lock_enter
 
-    ; pid 0 owns the console while monitor is active
-    stz current_pid
-    stz console_owner_pid
+    ; Monitor is not PID 0. Do not fake ownership.
+    lda #$FF
+    sta console_owner_pid
 
-    ; pid 0 is now considered running
-    lda #PROC_RUNNING
-    sta proc_state+0
-
-    ; Switch to context 0 and enter the inline first-run
-    ; bootstrap in scheduler.asm.
-    lda proc_context+0
-    ldx #<first_run_entry
-    ldy #>first_run_entry
+    ; Enter MICMON directly in context 0.
+    lda #MONITOR_CONTEXT
+    ldx #<MONITOR_ENTRY
+    ldy #>MONITOR_ENTRY
     jmp BIOS_CONTEXT_JUMP
 .endproc
 
-; ------------------------------------------------------------
-; leave_monitor
-;
-; Purpose:
-;   Leave MICMON and resume the previously saved task.
-;
-; Behavior:
-;   - restore task identity
-;   - mark that task RUNNING again
-;   - release scheduler lock before touching SP
-;   - restore saved task SP
-;   - resume through RTI or RTS depending on entry path
-;
-; Critical rule:
-;   After TXS, no subroutine calls are performed.
-; ------------------------------------------------------------
-
 .proc leave_monitor
-    ; Restore the task that was active before monitor entry
+    ; Restore interrupted scheduler PID.
     lda saved_task_pid
     sta current_pid
-;    sta console_owner_pid
-
     tax
+
+    ; Mark it running again.
     lda #PROC_RUNNING
     sta proc_state,x
 
-    ; Release scheduler freeze BEFORE restoring task SP
+    ; Release scheduler freeze before restoring task stack.
     jsr sched_lock_leave
 
-    ; Restore saved SP for the task we are about to resume
+    ; Restore saved task SP.
     lda proc_sp,x
     tax
     txs
 
-    ; Decide how to resume that task
+    ; After TXS, do not JSR.
     lda monitor_return_mode
     cmp #MONITOR_RET_RTS
     beq @resume_rts
 
-    ; Default: IRQ-style resume
+    ; IRQ-style return.
     ldx current_pid
     lda proc_context,x
     jmp BIOS_CONTEXT_RTI
 
 @resume_rts:
-    ; Syscall-style resume:
-    ; switch to the task context, then execute RTS there.
+    ; Syscall-style return.
     ldx current_pid
     lda proc_context,x
     ldx #<resume_rts_from_monitor
     ldy #>resume_rts_from_monitor
     jmp BIOS_CONTEXT_JUMP
 .endproc
-
-; ------------------------------------------------------------
-; resume_rts_from_monitor
-;
-; Purpose:
-;   Shared stub used to resume a syscall-entered task after
-;   monitor exit.
-;
-; Behavior:
-;   Executes RTS in the restored task context.
-;
-; Notes:
-;   Arrives here only after BIOS_CONTEXT_JUMP has already
-;   switched to the correct task context.
-; ------------------------------------------------------------
 
 .proc resume_rts_from_monitor
     rts
