@@ -293,6 +293,10 @@ syscall_table:
     lda #PROC_BLOCKED
     sta proc_state,x
 
+    ; A blocked reader must not keep console ownership.
+    lda #$FF
+    sta console_owner_pid
+
 @would_block_return:
     lda #$00
     tax

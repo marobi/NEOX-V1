@@ -13,7 +13,9 @@
 
 .setcpu "65C02"
 
+.include "syscall.inc"
 .include "scheduler_defs.inc"
+.include "bios.inc"
 
 .export tasks_init
 .export task1
@@ -46,6 +48,11 @@ task2_create:
     .byte $00
     .word task2
 
+task3_create:
+    .byte $03
+    .byte $00
+    .word task_console
+	
 ; ------------------------------------------------------------
 ; tasks_init
 ;
@@ -68,6 +75,10 @@ task2_create:
 
     ldx #<task2_create
     ldy #>task2_create
+    jsr scheduler_create_process
+
+    ldx #<task3_create
+    ldy #>task3_create
     jmp scheduler_create_process
 .endproc
 
@@ -92,5 +103,24 @@ task2_create:
     inc test_ctr2
     lda #$02
     sta test_turn
+    bra @loop
+.endproc
+
+; ------------------------------------------------------------
+; task3
+; ------------------------------------------------------------
+
+.proc task_console
+@loop:
+    ; try to read 1 byte
+    jsr BIOS_GETCHAR
+    beq @loop
+
+    ; echo received character
+    jsr BIOS_PUTCHAR
+	
+;	lda #'.'
+;	jsr BIOS_PUTCHAR
+
     bra @loop
 .endproc

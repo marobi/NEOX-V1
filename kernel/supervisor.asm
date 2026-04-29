@@ -118,6 +118,7 @@ MONITOR_ENTRY       = $B000
 .endproc
 
 .proc leave_monitor
+	sei
     ; Restore interrupted scheduler PID.
     lda saved_task_pid
     sta current_pid
@@ -126,9 +127,6 @@ MONITOR_ENTRY       = $B000
     ; Mark it running again.
     lda #PROC_RUNNING
     sta proc_state,x
-
-    ; Release scheduler freeze before restoring task stack.
-    jsr sched_lock_leave
 
     ; Restore saved task SP.
     lda proc_sp,x
@@ -143,7 +141,12 @@ MONITOR_ENTRY       = $B000
     ; IRQ-style return.
     ldx current_pid
     lda proc_context,x
-    jmp BIOS_CONTEXT_RTI
+
+    ; Release scheduler freeze before restoring task stack.
+    jsr sched_lock_leave
+
+    cli
+	jmp BIOS_CONTEXT_RTI
 
 @resume_rts:
     ; Syscall-style return.
@@ -151,6 +154,8 @@ MONITOR_ENTRY       = $B000
     lda proc_context,x
     ldx #<resume_rts_from_monitor
     ldy #>resume_rts_from_monitor
+
+	cli
     jmp BIOS_CONTEXT_JUMP
 .endproc
 
