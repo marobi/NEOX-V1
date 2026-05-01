@@ -11,6 +11,7 @@
 
 .include "scheduler_defs.inc"
 .include "process.inc"
+.include "fd.inc"
 
 .export kernel_version
 
@@ -154,6 +155,64 @@ console_owner_pid:   .res 1
 console_wait_pid:    .res 1
 
 monitor_return_mode: .res 1
+
+; ---------------------------------------------------------------------------------------------
+
+; ------------------------------------------------------------
+; Per-process file descriptor tables
+;
+; Each process owns a small fixed FD table.
+; Entry contains:
+;   - object index into open-object table
+;   - per-FD flags (read/write/close-on-exec)
+;
+; Layout:
+;   proc_fd_obj[pid * MAX_FDS + fd]
+; ------------------------------------------------------------
+
+.export proc_fd_obj
+.export proc_fd_flags
+
+proc_fd_obj:
+    .res MAX_PROCS * MAX_FDS
+
+proc_fd_flags:
+    .res MAX_PROCS * MAX_FDS
+
+; ------------------------------------------------------------
+; System-wide open object table
+;
+; Each entry represents a shared open resource.
+;
+; Fields:
+;   type     - object type (device/file/pipe)
+;   refcnt   - number of FDs referencing this object
+;   flags    - object-level flags (future use)
+;   dev      - backend device id (console for now)
+;
+; Notes:
+;   Multiple FDs (even from different processes) may refer to
+;   the same open object. Refcount tracks lifetime.
+; ------------------------------------------------------------
+
+.export open_type
+.export open_refcnt
+.export open_flags
+.export open_dev
+
+open_type:
+    .res OPEN_MAX
+
+open_refcnt:
+    .res OPEN_MAX
+
+open_flags:
+    .res OPEN_MAX
+
+open_dev:
+    .res OPEN_MAX
+	
+; ---------------------------------------------------------------------------------------------
 
 ; ------------------------------------------------------------
 ; Shared scheduler test state

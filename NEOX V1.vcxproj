@@ -131,6 +131,7 @@
     <None Include="bios\getaddress" />
     <None Include="bios\Makefile" />
     <None Include="docs\neox abi v1.md" />
+    <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
     <None Include="include\kernel_entry.inc" />
     <None Include="include\mailbox.inc" />
@@ -140,6 +141,7 @@
     <None Include="include\supervisor.inc" />
     <None Include="include\syscall.inc" />
     <None Include="kernel\entry_table.asm" />
+    <None Include="kernel\fd.asm" />
     <None Include="kernel\init_tasks.asm" />
     <None Include="kernel\irq.asm" />
     <None Include="kernel\main.asm" />

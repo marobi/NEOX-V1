@@ -18,6 +18,9 @@
 .exportzp sched_ptr
 .exportzp sched_count
 
+.exportzp fd_ptr
+.exportzp fd_flags_tmp
+
 .segment "ZEROPAGE"
 
 proc_ptr:     .res 2
@@ -32,3 +35,6 @@ rp_tmp:       .res 2
 
 sched_ptr:	  .res 2
 sched_count:  .res 2
+
+fd_ptr:        .res 2
+fd_flags_tmp:  .res 1

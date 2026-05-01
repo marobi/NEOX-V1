@@ -119,8 +119,5 @@ task3_create:
     ; echo received character
     jsr BIOS_PUTCHAR
 	
-;	lda #'.'
-;	jsr BIOS_PUTCHAR
-
     bra @loop
 .endproc

@@ -113,5 +113,11 @@
     <None Include="include\process.inc">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="include\fd.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="kernel\fd.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

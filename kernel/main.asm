@@ -29,21 +29,23 @@
 .include "process.inc"
 .include "scheduler_defs.inc"
 .include "mailbox.inc"
-.include "scheduler_defs.inc"
 
 .export kernel_main
 .export set_brk_vector
 
 .import kernel_version
+
 .import irq_entry
 .import brk_vector
 .import irq_restore
 
 .import scheduler_init
 .import scheduler_set_current_context
+
+.import fd_init_tables
+
 .import tasks_init
 
-.import kernel_version
 .import current_pid
 .import console_owner_pid
 .import proc_state
@@ -81,10 +83,6 @@
     cld
     ldx #$FF
     txs                     ; initialize supervisor stack
-
-	lda #$01
-	sta kernel_version
-	sta kernel_version+1
 	
 	lda #<irq_restore
 	sta brk_vector
@@ -96,9 +94,9 @@
     ; --------------------------------------------------------
 	; set the version of the kernel
     ; --------------------------------------------------------
-	lda #$01				; major
+	lda #$01				; minor
 	sta kernel_version
-	Lda #$01				; minor
+	Lda #$02				; major
 	sta kernel_version+1
 	
     ; --------------------------------------------------------
@@ -106,10 +104,14 @@
     ; supervisor context 0.
     ; --------------------------------------------------------
     jsr scheduler_init
-	
+	    
     ; --------------------------------------------------------
+    ; Initialize fd table/objects
+    ; --------------------------------------------------------
+	jsr fd_init_tables
+
+	; --------------------------------------------------------
     ; Create initial runnable tasks.
-    ;
     ; tasks_init is expected to create processes in contexts
     ; 1..N and mark them runnable (typically PROC_NEW).
     ; --------------------------------------------------------
@@ -123,7 +125,6 @@
 	
 	lda #$FF
     sta console_owner_pid
-    tax
 
 	ldx #IDLE_PID
     lda #PROC_RUNNING
@@ -171,8 +172,9 @@
     stz RP_ERR
     stz RP_FLAGS
     stz RP_STATE
-    stz RP_DOORBELL
     stz RP_STATUS
+
+    stz RP_DOORBELL
 	rts
 .endproc
 

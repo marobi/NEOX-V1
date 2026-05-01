@@ -45,6 +45,8 @@
 .import sched_lock_enter
 .import sched_lock_leave
 
+.import fd_init_process
+
 .import current_pid
 .import proc_state
 .import proc_context
@@ -341,11 +343,16 @@
     lda #PROC_FLAG_NONE
     sta proc_flags,x
 
+	; Initialise FD list
+	;jsr fd_init_process
+    
     ; Publish process last.
     lda #PROC_NEW
     jsr proc_set_state
 
-    jsr sched_lock_leave
+	; free scheduler
+	jsr sched_lock_leave
+	
     txa
     clc
     rts
