@@ -54,5 +54,15 @@ OBJ_PIPE    = $03        ; reserved
 
 DEV_NONE        = $00
 DEV_CONSOLE     = $01
+DEV_MAX         = $02
+
+; ------------------------------------------------------------
+; Device operation offsets
+; ------------------------------------------------------------
+
+DEVOP_READ      = 0
+DEVOP_WRITE     = 2
+DEVOP_IOCTL     = 4
+DEVOP_CLOSE     = 6
 
 .endif

@@ -21,10 +21,10 @@
 
 .setcpu "65C02"
 
+.include "bios.inc"
 .include "process.inc"
-.include "scheduler_defs.inc"
 .include "mailbox.inc"
-.include "../bios/bios.inc"
+.include "scheduler_defs.inc"
 
 .export scheduler_init
 .export scheduler_set_current_context
@@ -344,7 +344,7 @@
     sta proc_flags,x
 
 	; Initialise FD list
-	;jsr fd_init_process
+	jsr fd_init_process
     
     ; Publish process last.
     lda #PROC_NEW

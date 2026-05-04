@@ -58,6 +58,9 @@ sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
 E_OK                = 0
 EIO                 = 3
 EINVAL              = 6
+EBADF           	= 9
+ENODEV          	= 10
+ENOSYS          	= 11
 
 ; ------------------------------------------------------------
 ; Common read/write argument block

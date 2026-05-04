@@ -77,9 +77,6 @@
     <None Include="kernel\main.asm">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="kernel\mmu.asm">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="kernel\sched_lock.asm">
       <Filter>Source Files</Filter>
     </None>
@@ -98,9 +95,6 @@
     <None Include="include\scheduler_defs.inc">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="include\kernel_entry.inc">
-      <Filter>Header Files</Filter>
-    </None>
     <None Include="include\supervisor.inc">
       <Filter>Header Files</Filter>
     </None>
@@ -117,6 +111,12 @@
       <Filter>Header Files</Filter>
     </None>
     <None Include="kernel\fd.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="include\kernel.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="kernel\ksys_io.asm">
       <Filter>Source Files</Filter>
     </None>
   </ItemGroup>

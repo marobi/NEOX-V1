@@ -82,15 +82,26 @@ bios_jmp_vec:
 	SYSCALL readc_blk, sys_read
 	bcs @ic_error
 	
-	ply
-	plx
+	ora #0
+	bne @got_char
+	txa
+    bne @got_char
+	lda #0
+	bra @ok_exit
+
+@got_char:
 	lda icharbuf
 	and #$7f			; remove 8 bit
+	
 	stz icharbuf
-	cmp #0
+
+@ok_exit:
+	ply
+	plx
+	ora #0
 	clc
 	rts
-	
+
 @ic_error:
 	ply
 	plx

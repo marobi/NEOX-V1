@@ -43,6 +43,7 @@
 .import scheduler_set_current_context
 
 .import fd_init_tables
+.import fd_init_process
 
 .import tasks_init
 
@@ -109,6 +110,9 @@
     ; Initialize fd table/objects
     ; --------------------------------------------------------
 	jsr fd_init_tables
+
+	ldx #IDLE_PID
+	jsr fd_init_process
 
 	; --------------------------------------------------------
     ; Create initial runnable tasks.

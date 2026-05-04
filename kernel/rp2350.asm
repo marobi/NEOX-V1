@@ -26,6 +26,7 @@
 .setcpu "65C02"
 
 .include "bios.inc"
+.include "kernel.inc"
 .include "mailbox.inc"
 .include "syscall.inc"
 
@@ -41,6 +42,7 @@
 .importzp rp_tmp
 
 .import rp_lock
+
 .import sched_lock_enter
 .import sched_lock_leave
 

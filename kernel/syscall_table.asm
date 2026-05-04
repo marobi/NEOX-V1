@@ -26,11 +26,8 @@
 
 .setcpu "65C02"
 
-.include "process.inc"
 .include "syscall.inc"
-.include "mailbox.inc"
-.include "scheduler_defs.inc"
-.include "kernel_entry.inc"
+.include "kernel.inc"
 
 .export syscall_table
 .export k_exit
@@ -47,20 +44,6 @@
 .export k_yield
 .export k_sbrk
 .export k_ioctl
-
-.import sched_lock
-
-.import current_pid
-.import proc_state
-.import console_owner_pid
-.import console_wait_pid
-
-.import rp_console_write
-.import rp_console_read
-
-.importzp io_ptr
-.importzp io_tmp
-
 
 .segment "SYSCALL_STUBS"
 
@@ -120,61 +103,6 @@ syscall_table:
     rts
 .endproc
 
-; ------------------------------------------------------------
-; sys_err_inval
-;
-; Return:
-;   C set
-;   Y = EINVAL
-; ------------------------------------------------------------
-
-.proc sys_err_inval
-    ldy #EINVAL
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; sys_err_enoent
-;
-; Return:
-;   C set
-;   Y = 2
-; ------------------------------------------------------------
-
-.proc sys_err_enoent
-    ldy #2
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; sys_err_eio
-;
-; Return:
-;   C set
-;   Y = EIO
-; ------------------------------------------------------------
-
-.proc sys_err_eio
-    ldy #EIO
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; sys_err_enomem
-;
-; Return:
-;   C set
-;   Y = 4
-; ------------------------------------------------------------
-
-.proc sys_err_enomem
-    ldy #4
-    sec
-    rts
-.endproc
 
 .proc k_exit
     ldy #EINVAL
@@ -192,177 +120,12 @@ syscall_table:
     jmp sys_ok_ax0
 .endproc
 
-; ------------------------------------------------------------
-; k_read
-;
-; Calling convention:
-;   X/Y -> rw_args block
-;
-; Supported fds:
-;   STDIN only
-;
-; Behavior:
-;   - validates fd
-;   - enforces console ownership
-;   - decodes buf_ptr and len from rw_args
-;   - only after full decode repoints io_ptr to caller buffer
-;   - tail-calls RP console read transport
-;
-; Ownership policy:
-;   - only console_owner_pid may consume STDIN
-;   - non-owner sees "nothing available" for now
-; ------------------------------------------------------------
-
 .proc k_read
-    ; Save pointer to rw_args
-    stx io_ptr
-    sty io_ptr+1
-
-    ; Validate fd
-    ldy #rw_args::fd
-    lda (io_ptr),y
-    cmp #STDIN
-    beq @stdin
-
-    jmp sys_err_inval
-
-@stdin:
-    ; If scheduler is locked, MICMON/supervisor is active.
-    ; Monitor is not a scheduler process, so bypass PID ownership.
-    lda sched_lock
-    bne @decode_args
-
-    ; Normal task path: RP owns console focus.
-    lda RP_CONSOLE_PID
-    sta console_owner_pid
-    cmp #$FF
-    beq @not_owner
-
-    cmp current_pid
-    beq @decode_args
-
-@not_owner:
-    jmp sys_ok_ax0
-
-@decode_args:
-    ; Save caller buffer pointer while io_ptr still points to rw_args.
-    ldy #rw_args::buf_ptr
-    lda (io_ptr),y
-    sta io_tmp
-    iny
-    lda (io_ptr),y
-    sta io_tmp+1
-
-    ; Read requested length while io_ptr still points to rw_args.
-    ; rp_console_read expects length in A/X.
-    ldy #rw_args::len
-    lda (io_ptr),y
-    pha
-    iny
-    lda (io_ptr),y
-    tax
-
-    ; Repoint io_ptr to caller buffer.
-    lda io_tmp
-    sta io_ptr
-    lda io_tmp+1
-    sta io_ptr+1
-
-    ; Restore low length byte into A.
-    pla
-
-    ; If RP FIFO has input, perform existing read transfer.
-    ldy RP_CONSOLE_RDY
-    bne @read_available
-
-    ; No input available.
-    ; If monitor is active, do not block a scheduler PID.
-    lda sched_lock
-    bne @would_block_return
-
-    ; PID 0 is idle and must never block.
-    ldy current_pid
-    cpy #FIRST_TASK_PID
-    bcc @would_block_return
-
-    ; Remember which process is waiting for console input.
-    sty console_wait_pid
-
-    ; Mark current process BLOCKED.
-    ldx current_pid
-    lda #PROC_BLOCKED
-    sta proc_state,x
-
-    ; A blocked reader must not keep console ownership.
-    lda #$FF
-    sta console_owner_pid
-
-@would_block_return:
-    lda #$00
-    tax
-    sec
-    rts
-
-@read_available:
-    jmp rp_console_read
+	jmp KERN_ENTRY_KSYS_READ
 .endproc
 
-; ------------------------------------------------------------
-; k_write
-;
-; Calling convention:
-;   X/Y -> rw_args block
-;
-; Supported fds:
-;   STDOUT, STDERR
-;
-; Behavior:
-;   - validates fd
-;   - decodes buf_ptr and len from rw_args
-;   - only after full decode repoints io_ptr to caller buffer
-;   - tail-calls RP console write transport
-; ------------------------------------------------------------
-
 .proc k_write
-    ; Save pointer to argument block
-    stx io_ptr
-    sty io_ptr+1
-
-    ; Validate file descriptor
-    ldy #rw_args::fd
-    lda (io_ptr),y
-    cmp #STDOUT
-    beq @decode_args
-    cmp #STDERR
-    beq @decode_args
-    jmp sys_err_inval
-
-@decode_args:
-    ; Read caller buffer pointer from argument block
-    ldy #rw_args::buf_ptr
-    lda (io_ptr),y
-    sta io_tmp
-    iny
-    lda (io_ptr),y
-    sta io_tmp+1
-
-    ; Read requested length while io_ptr still points at args
-    ldy #rw_args::len
-    lda (io_ptr),y
-    pha
-    iny
-    lda (io_ptr),y
-    tax
-
-    ; Now repoint io_ptr to the caller buffer
-    lda io_tmp
-    sta io_ptr
-    lda io_tmp+1
-    sta io_ptr+1
-
-    ; Restore low length byte and tail-call transport
-    pla
-    jmp rp_console_write
+	jmp KERN_ENTRY_KSYS_WRITE
 .endproc
 
 ; ------------------------------------------------------------

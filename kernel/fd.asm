@@ -18,13 +18,17 @@
 
 .setcpu "65C02"
 
-.include "scheduler_defs.inc"
 .include "fd.inc"
+.include "math8.inc"
+.include "scheduler_defs.inc"
 .include "syscall.inc"
 
 .export fd_init_tables
 .export fd_init_process
 .export fd_attach
+.export fd_lookup
+
+.import current_pid
 
 .import proc_fd_obj
 .import proc_fd_flags
@@ -35,6 +39,10 @@
 .import open_dev
 
 .importzp fd_ptr
+.importzp fd_flags_tmp
+.importzp fd_obj_tmp
+.importzp fd_index_tmp
+.importzp fd_pid_tmp
 
 .segment "KERN_TEXT"
 
@@ -94,99 +102,159 @@
 ; fd_attach
 ;
 ; Purpose:
-;   Attach an FD to an open object for a given process.
+;   Attach one process FD slot to an existing open object.
 ;
 ; Input:
 ;   X = pid
 ;   Y = fd index
 ;   A = open object index
+;   fd_flags_tmp = FD_FLAG_READ / FD_FLAG_WRITE / ...
 ;
-;   fd_flags_tmp must already be set by caller
+; Output:
+;   C clear = success
 ;
 ; Behavior:
-;   - stores object index in proc_fd_obj
-;   - stores flags in proc_fd_flags
-;   - increments open_refcnt
+;   proc_fd_obj[pid * MAX_FDS + fd]   = object index
+;   proc_fd_flags[pid * MAX_FDS + fd] = fd flags
+;   open_refcnt[object]++
 ;
 ; Notes:
-;   - no validation (caller must ensure fd is valid)
-;   - no close of previous fd content (bootstrap usage)
+;   - Caller must ensure fd is valid.
+;   - Caller must ensure object is valid.
+;   - Does not close an existing fd first.
+;   - Uses mul8u:
+;       factor1 = pid
+;       factor2 = MAX_FDS
+;       result low  = factor1
+;       result high = factor2
 ; ------------------------------------------------------------
 
-.importzp fd_flags_tmp
-
 .proc fd_attach
-    ; --------------------------------------------------------
-    ; Compute base pointer for proc_fd_obj[pid][0]
-    ; --------------------------------------------------------
-    lda #<proc_fd_obj
-    sta fd_ptr
-    lda #>proc_fd_obj
-    sta fd_ptr+1
+    ; Preserve inputs because address calculation clobbers A/Y
+    stx fd_pid_tmp
+    sty fd_index_tmp
+    sta fd_obj_tmp
 
+    ; --------------------------------------------------------
+    ; Calculate offset = pid * MAX_FDS
+    ; --------------------------------------------------------
     txa
-    beq @obj_base_done
-    tay
+    sta factor1
 
-@obj_base_loop:
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    ; --------------------------------------------------------
+    ; fd_ptr = proc_fd_obj + offset
+    ; --------------------------------------------------------
     clc
-    lda fd_ptr
-    adc #<MAX_FDS
+    lda #<proc_fd_obj
+    adc factor1
     sta fd_ptr
 
-    lda fd_ptr+1
-    adc #>MAX_FDS
+    lda #>proc_fd_obj
+    adc factor2
     sta fd_ptr+1
 
-    dey
-    bne @obj_base_loop
-
-@obj_base_done:
-    ; --------------------------------------------------------
-    ; Store object index into fd slot
-    ; --------------------------------------------------------
+    ; Store open object index in fd object table
+    ldy fd_index_tmp
+    lda fd_obj_tmp
     sta (fd_ptr),y
 
     ; --------------------------------------------------------
-    ; Compute base pointer for proc_fd_flags[pid][0]
+    ; fd_ptr = proc_fd_flags + offset
     ; --------------------------------------------------------
-    lda #<proc_fd_flags
-    sta fd_ptr
-    lda #>proc_fd_flags
-    sta fd_ptr+1
-
-    txa
-    beq @flags_base_done
-    tay
-
-@flags_base_loop:
     clc
-    lda fd_ptr
-    adc #<MAX_FDS
+    lda #<proc_fd_flags
+    adc factor1
     sta fd_ptr
 
-    lda fd_ptr+1
-    adc #>MAX_FDS
+    lda #>proc_fd_flags
+    adc factor2
     sta fd_ptr+1
 
-    dey
-    bne @flags_base_loop
-
-@flags_base_done:
-    ; --------------------------------------------------------
-    ; Store fd flags
-    ; --------------------------------------------------------
+    ; Store descriptor flags
+    ldy fd_index_tmp
     lda fd_flags_tmp
     sta (fd_ptr),y
 
     ; --------------------------------------------------------
-    ; Increment open object refcount
+    ; Update open object refcount
     ; --------------------------------------------------------
-    tax
+    ldx fd_obj_tmp
     inc open_refcnt,x
 
+    ; Restore useful caller-visible values
+    ldx fd_pid_tmp
+    ldy fd_index_tmp
+    lda fd_obj_tmp
+
+    clc
     rts
 .endproc
+
+; ------------------------------------------------------------
+; fd_lookup
+;
+; Input:
+;   A = fd
+;
+; Output:
+;   C clear = success
+;   X = open object index
+;
+;   C set = failure
+;   Y = errno
+;
+; Clobbers:
+;   A, X, Y, fd_ptr, fd_index_tmp, factor1, factor2
+; ------------------------------------------------------------
+
+.proc fd_lookup
+    cmp #MAX_FDS
+    bcc @fd_ok
+
+    ldy #EBADF
+    sec
+    rts
+
+@fd_ok:
+    sta fd_index_tmp
+
+    lda current_pid
+    sta factor1
+
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    clc
+    lda #<proc_fd_obj
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda (fd_ptr),y
+    cmp #FD_NONE
+    bne @obj_ok
+
+    ldy #EBADF
+    sec
+    rts
+
+@obj_ok:
+    tax
+    clc
+    rts
+.endproc
+
 
 ; ------------------------------------------------------------
 ; fd_init_process

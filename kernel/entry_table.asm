@@ -22,7 +22,7 @@
 
 .setcpu "65C02"
 
-.include "kernel_entry.inc"
+.include "kernel.inc"
 
 .export kernel_entry_table
 
@@ -30,6 +30,8 @@
 .import set_brk_vector
 .import enter_monitor_syscall
 .import leave_monitor
+.import ksys_read
+.import ksys_write
 
 .segment "KERNEL_ENTRY"
 
@@ -41,13 +43,15 @@ kernel_entry_table:
     jmp enter_monitor_syscall
 	jmp set_brk_vector
 	jmp leave_monitor
-
-; ------------------------------------------------------------
-; Padding
-;
-; Fill remaining bytes of the 16-byte entry region with NOPs.
-; This guarantees that the next segment (KERN_TEXT) starts
-; exactly at $E010 in both memory and binary representation.
-; ------------------------------------------------------------
-
-    .res 4, $EA			; 16 -4 * 3
+	jmp ksys_read
+	jmp ksys_write
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00

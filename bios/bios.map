@@ -7,7 +7,7 @@ bios.o:
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
     ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
     NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
-    BIOS              Offs=000000  Size=0000E8  Align=00001  Fill=0000
+    BIOS              Offs=000000  Size=0000F3  Align=00001  Fill=0000
 
 
 Segment list:
@@ -20,7 +20,7 @@ DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
 RODATA                000000  000000  000000  00001
 ZEROPAGE              0000E0  0000E0  000000  00001
-BIOS                  00F000  00F0E7  0000E8  00001
+BIOS                  00F000  00F0F2  0000F3  00001
 
 
 Exports list by name:

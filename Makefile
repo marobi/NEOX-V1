@@ -55,23 +55,25 @@ INSTALL_DIR := $(BASE_DIR)$(PROJECT_DIR)/data/system
 # -------------------------------------------------
 
 SYSCALL_SRCS := \
-	kernel/syscall_table.asm \
 	kernel/zero_page.asm \
 	kernel/shared_state.asm \
-	kernel/sched_lock.asm \
-	kernel/rp2350.asm
-	
+	kernel/syscall_table.asm
+
 KERNEL_SRCS := \
+	kernel/zero_page.asm \
+	kernel/shared_state.asm \
 	kernel/entry_table.asm \
 	kernel/main.asm \
-	kernel/zero_page.asm \
-	kernel/shared_state.asm \
 	kernel/irq.asm \
+	kernel/math8.asm \
 	kernel/sched_lock.asm \
 	kernel/scheduler.asm \
 	kernel/supervisor.asm \
-	kernel/rp2350.asm \
 	kernel/fd.asm \
+	kernel/ksys_io.asm \
+	kernel/device.asm \
+	kernel/console_device.asm \
+	kernel/rp2350.asm \
 	kernel/init_tasks.asm
 
 # Optional user library objects

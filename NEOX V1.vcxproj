@@ -133,7 +133,7 @@
     <None Include="docs\neox abi v1.md" />
     <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
-    <None Include="include\kernel_entry.inc" />
+    <None Include="include\kernel.inc" />
     <None Include="include\mailbox.inc" />
     <None Include="include\process.inc" />
     <None Include="include\scheduler.inc" />
@@ -144,8 +144,8 @@
     <None Include="kernel\fd.asm" />
     <None Include="kernel\init_tasks.asm" />
     <None Include="kernel\irq.asm" />
+    <None Include="kernel\ksys_io.asm" />
     <None Include="kernel\main.asm" />
-    <None Include="kernel\mmu.asm" />
     <None Include="kernel\rp2350.asm" />
     <None Include="kernel\scheduler.asm" />
     <None Include="kernel\sched_lock.asm" />

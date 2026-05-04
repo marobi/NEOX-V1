@@ -18,8 +18,7 @@
 .exportzp sched_ptr
 .exportzp sched_count
 
-.exportzp fd_ptr
-.exportzp fd_flags_tmp
+.exportzp dev_ptr
 
 .segment "ZEROPAGE"
 
@@ -36,5 +35,22 @@ rp_tmp:       .res 2
 sched_ptr:	  .res 2
 sched_count:  .res 2
 
+dev_ptr:      .res 2
+
+; ============================================================
+.exportzp fd_ptr
+.exportzp fd_pid_tmp
+.exportzp fd_index_tmp
+.exportzp fd_obj_tmp
+.exportzp fd_flags_tmp
+.exportzp factor1
+.exportzp factor2
+
 fd_ptr:        .res 2
+fd_pid_tmp:    .res 1
+fd_index_tmp:  .res 1
+fd_obj_tmp:    .res 1
 fd_flags_tmp:  .res 1
+
+factor1:       .res 1
+factor2:       .res 1
