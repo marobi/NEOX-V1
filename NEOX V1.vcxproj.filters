@@ -96,5 +96,6 @@
     <None Include="kernel\ksys_io.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="README.md" />
   </ItemGroup>
 </Project>

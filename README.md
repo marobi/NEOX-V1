@@ -1,217 +1,288 @@
 # NEOX
 
-NEOX is a minimalistic UNIX-like operating system for the **NEO6502-MMU system**.
+NEOX is a minimal UNIX-like operating system for the **NEO6502-MMU platform**.
 
-The goal of NEOX is to provide a small, inspectable, and deterministic environment with support for multitasking on a 6502-based platform.
+The system is designed to be:
+
+* deterministic
+* inspectable
+* explicitly layered
+* free of hidden runtime behavior
 
 ---
 
 ## Platform: NEO6502-MMU
 
-NEOX runs on a heterogeneous system consisting of:
+NEOX runs on a heterogeneous system:
 
-* **W65C02 CPU**
-* **RP2350 supervisor**
+* **W65C02 CPU** (kernel + user execution)
+* **RP2350** (I/O, MMU switching, external services)
 
-The RP2350 is responsible for:
+### RP2350 responsibilities
 
 * MMU context switching
-* device and I/O handling
-* mailbox-based service interface
+* console and device I/O
+* mailbox protocol handling
 
-The 6502 executes all kernel and user code.
-
----
-
-## Design goals
-
-NEOX aims to be:
-
-* minimalistic and fully inspectable
-* deterministic and explicit in all operations
-* UNIX-like in structure (not necessarily implementation)
-* free of hidden runtime dependencies
+The 6502 owns all OS logic.
 
 ---
 
-## Architecture
+## Architecture Overview
 
 ### Execution model
 
-* Kernel and user tasks run on the 6502
-* RP2350 provides external services
-* All I/O is performed via a mailbox protocol
-* Scheduling is driven by a **timer IRQ**
+* Kernel and user processes run on the 6502
+* RP2350 provides asynchronous services via mailbox
+* Timer IRQ drives preemptive scheduling
 
 ---
 
-## MMU and Context Model
+## Memory Model
 
-The system uses **multiple execution contexts**.
-
-### Context roles
+### Context-based execution
 
 * **Context 0**
 
-  * supervisor / kernel control
-  * used for MICMON and system inspection
-  * **not part of the scheduler**
+  * supervisor / monitor (MICMON)
+  * not scheduled
 
 * **Contexts 1..N**
 
-  * runnable processes
-  * scheduled by the kernel
+  * user/kernel processes
+  * scheduled by kernel
 
 ---
 
-### Memory layout (logical)
+### Logical memory layout
 
-| Page | Type    | Description           |
-| ---- | ------- | --------------------- |
-| 0–7  | Private | RAM (ZP, stack, heap) |
-| 8–A  | Shared  | general shared RAM    |
-| B    | Shared  | MICMON                |
-| C    | Shared  | Syscalls              |
-| D    | Shared  | RP2350 I/O            |
-| E    | Shared  | Kernel                |
-| F    | Shared  | BIOS                  |
+| Page | Type    | Description     |
+| ---- | ------- | --------------- |
+| 0–7  | Private | ZP, stack, heap |
+| 8–A  | Shared  | shared RAM      |
+| B    | Shared  | MICMON          |
+| C    | Shared  | syscall veneer  |
+| D    | Shared  | RP I/O          |
+| E    | Shared  | kernel          |
+| F    | Shared  | BIOS            |
 
-Important:
+Key properties:
 
-* **Zero page and stack are private per context**
-* Shared state must live in pages `8+`
+* ZP and stack are private per context
+* shared state must live in shared pages
 
 ---
 
 ## Scheduler
 
-NEOX implements a **timer-driven preemptive scheduler**.
+### Properties
 
-### Key properties
+* timer-driven (IRQ)
+* round-robin
+* preemptive
+* context-based
 
-* Round-robin scheduling
-* IRQ-driven context switching
-* Context 0 is supervisor-only and excluded from normal scheduling
-* MMU switching is a mapping primitive only
-* Context switching policy is handled entirely in kernel code
+### Process states
+
+```
+EMPTY → NEW → RUNNING ↔ READY
+             ↘ BLOCKED
+```
+
+### Blocking
+
+Processes may enter `PROC_BLOCKED` when waiting for I/O.
 
 ---
 
-### Process lifecycle
+## Console Model
 
-Processes move through these states:
+### Key variables
 
-```text
-EMPTY → NEW → RUNNING ↔ READY
+```
+console_owner_pid   = process allowed to read input
+console_wait_pid    = process blocked waiting for input
+RP_CONSOLE_PID      = RP/user-selected focus (external)
+RP_CONSOLE_RDY      = input available flag
 ```
 
 ---
 
-### First run vs normal run
+### Ownership
 
-NEOX distinguishes between:
+* `RP_CONSOLE_PID` is set by the RP/user interface
+* kernel validates and mirrors into:
 
-#### First run (bootstrap)
+```
+console_owner_pid
+```
 
-* Process is in `PROC_NEW`
-* Scheduler:
-
-  * switches MMU context
-  * jumps to bootstrap entry
-* Bootstrap:
-
-  * initializes the private stack
-  * jumps to the process entry point
-
-#### Subsequent runs
-
-* Stack pointer is saved on IRQ
-* Scheduler restores SP
-* Execution resumes via `RTI`
+* only `console_owner_pid` may consume console input
 
 ---
 
-## Interrupt model
+### Blocking behavior
 
-* Timer IRQ is the scheduler trigger
-* IRQ entry:
+For a process calling `read`:
 
-  * saves A/X/Y
-  * acknowledges or classifies the IRQ source
-  * checks scheduler lock
-  * either:
+```
+not owner
+    → return 0
 
-    * restores the interrupted context unchanged
-    * or performs context switch
+owner + no input
+    → console_wait_pid = pid
+    → process becomes BLOCKED
 
-Context switching itself happens only in the scheduler path.
+owner + input ready
+    → rp_console_read executes
+```
 
 ---
 
-## Preemption control
+### Wake-up
 
-NEOX uses a minimal preemption guard:
+Scheduler performs wake-up:
 
-```text
+```
+if RP_CONSOLE_RDY != 0 and console_wait_pid != $FF:
+    wake console_wait_pid
+    console_wait_pid = $FF
+```
+
+---
+
+### Invariant
+
+```
+if console_wait_pid != $FF:
+    console_wait_pid == console_owner_pid
+```
+
+---
+
+## Monitor (MICMON)
+
+### Model
+
+* runs in **context 0**
+* **not a process**
+* **not scheduled**
+
+### Entry
+
+```
+save SP of current task
+sched_lock_enter
+jump to monitor
+```
+
+### Exit
+
+```
+sched_lock_leave
+restore SP
+return to interrupted context
+```
+
+### Important
+
+Monitor does NOT modify:
+
+```
+console_owner_pid
+console_wait_pid
+RP_CONSOLE_PID
+current_pid
+proc_state
+```
+
+---
+
+## Scheduler Lock
+
+```
 sched_lock
 ```
 
-* non-zero → scheduler is disabled
-* used during short critical kernel operations
-* **not a general mutex**
+* disables scheduler preemption
+* used during:
 
-This prevents timer-driven preemption during operations such as mailbox exchange or scheduler table updates.
-
----
-
-## Mailbox protocol
-
-All I/O is delegated to the RP2350.
-
-### Request flow
-
-1. Kernel fills shared request block
-2. Sets `RP_STATUS = BUSY`
-3. Writes command to doorbell register
-4. RP2350 processes request
-5. RP2350 sets `DONE` or `ERROR`
+  * monitor execution
+  * critical kernel operations
 
 ---
 
-### Mailbox layout (shared RAM)
+## Mailbox I/O
 
-```text
-RP_REQ_BASE = $80C0   (shared page 8)
+### Flow
+
+```
+kernel:
+    fill request block
+    set RP_STATUS = BUSY
+    write RP_DOORBELL
+
+RP2350:
+    executes request
+    sets DONE / ERROR
 ```
 
-This replaces the earlier low-RAM location, which is no longer valid because low memory is private per context.
-
 ---
 
-### Control registers
+### Registers
 
-```text
+```
 RP_DOORBELL = $D010
 RP_STATUS   = $D011
 ```
-
-These live in the shared I/O page.
 
 ---
 
 ### Synchronization
 
 * `rp_lock` → mailbox ownership
-* `sched_lock` → prevents preemption during transactions
+* `sched_lock` → prevents preemption
 
 ---
 
-## Syscall interface
+## FD / Device Layer
 
-```text
-SYSCALL_BASE = $C000
-ENTRY SIZE   = 3 bytes (JMP)
+### Path
+
 ```
+ksys_read
+ → fd_lookup
+ → dev_resolve_op
+ → console_read
+```
+
+### Device dispatch
+
+```
+open_dev → dev_ops → operation table
+```
+
+Devices implement:
+
+```
+read
+write
+ioctl
+close
+```
+
+---
+
+## Syscall Interface
+
+### Layout
+
+```
+$C000 = syscall veneer
+```
+
+* fixed ABI
+* each syscall = `JMP kernel_entry`
 
 ### Current syscalls
 
@@ -222,61 +293,46 @@ ENTRY SIZE   = 3 bytes (JMP)
 
 ### Calling convention
 
-* `X/Y` → pointer to argument block
-* `C` clear → success
-* `C` set → error (`Y = errno`)
-* `A/X` → return value
-
----
-
-## Current status
-
-* MMU context model implemented
-* shared vs private memory model defined and applied
-* timer-driven scheduler implemented
-* first-run bootstrap model implemented
-* supervisor context 0 model implemented
-* mailbox I/O operational
-* console read/write working
-* MICMON retained as supervisor/debug environment
-
----
-
-## Project structure
-
-* `kernel/` → kernel (scheduler, MMU, IRQ, RP interface)
-* `user/` → test tasks and user-side support code
-* `include/` → ABI and shared definitions
-* `build/` → linker configs and helper tools
-* RP2350 firmware → hardware abstraction / MMU / I/O controller
-
----
-
-## Build
-
-```bash
-make
+```
+X/Y = pointer to args
+C clear = success
+C set   = error (Y = errno)
+A/X     = return value
 ```
 
 ---
 
-## Notes
+## Project Structure
 
-NEOX is still in an early but functional stage.
+```
+kernel/   → kernel implementation
+include/  → shared definitions
+build/    → linker configs
+user/     → user/test code
+```
 
-Current focus:
+---
 
-* validating scheduler stability
-* refining context switching
-* keeping supervisor/debug access through context 0
-* expanding the syscall layer
+## Current Status
 
-Planned next steps:
+Working:
 
-* blocking syscalls
-* process control
-* basic userland environment
-* filesystem abstraction
+* scheduler (preemptive, stable)
+* context switching
+* mailbox I/O
+* FD/device layer
+* console ownership + blocking + wake
+* monitor integration (no corruption of state)
+
+---
+
+## Next Steps
+
+* generalize blocking (beyond console)
+* add wait reason abstraction
+* extend device layer
+* process control syscalls
+* filesystem layer
 
 ---
 

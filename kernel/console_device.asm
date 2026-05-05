@@ -24,7 +24,6 @@
 .include "mailbox.inc"
 
 .export console_ops
-.export console_set_focus
 
 .import current_pid
 .import sched_lock
@@ -53,31 +52,6 @@ console_ops:
     .word console_write
     .word console_ioctl
     .word console_close
-
-
-; ------------------------------------------------------------
-; console_set_focus
-;
-; Input:
-;   A = PID that owns keyboard focus
-;       $FF = no console owner
-;
-; Effect:
-;   Updates both the RP-visible focus byte and the kernel mirror used
-;   by debug/status output.
-;
-; Notes:
-;   This routine is not called by the scheduler. Console focus is a
-;   user/supervisor policy decision, independent of which task currently
-;   has CPU time.
-; ------------------------------------------------------------
-
-.proc console_set_focus
-    sta RP_CONSOLE_PID
-    sta console_owner_pid
-    clc
-    rts
-.endproc
 
 ; ------------------------------------------------------------
 ; console_read

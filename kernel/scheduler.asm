@@ -55,7 +55,6 @@
 .import proc_entryH
 .import proc_flags
 .import sched_lock
-.import saved_task_pid
 .import console_owner_pid
 .import console_wait_pid
 .import monitor_return_mode
@@ -168,27 +167,34 @@
 ; ------------------------------------------------------------
 
 .proc sched_update_console_focus
+    ; Read RP/user requested focus.
     lda RP_CONSOLE_PID
+
+    ; PID 0 is idle/monitor-adjacent.
+    ; Do not overwrite the accepted user console owner.
+    cmp #FIRST_TASK_PID
+    bcc @no_update
+
+    ; $FF means explicit no-focus request.
     cmp #$FF
     beq @set_focus
 
-    ; PID 0 is idle/monitor-adjacent, not a user console owner.
-    cmp #FIRST_TASK_PID
-    bcc  @no_focus
-
+    ; Reject out-of-range PID requests.
     cmp #MAX_PROCS
-    bcs @no_focus
+    bcs @no_update
 
+    ; Reject empty process slots.
     tax
     lda proc_state,x
     cmp #PROC_EMPTY
-    beq @no_focus
+    beq @no_update
 
+    ; Accept requested user PID as console owner.
     txa
-    bra @set_focus
+    sta console_owner_pid
 
-@no_focus:
-    lda #$FF
+@no_update:
+    rts
 
 @set_focus:
     sta console_owner_pid
