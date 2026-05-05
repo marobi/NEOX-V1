@@ -29,8 +29,6 @@
 
 .export sched_lock
 
-.export saved_task_pid
-
 .export console_owner_pid
 .export console_wait_pid
 
@@ -110,18 +108,6 @@ proc_entryH:    .res MAX_PROCS
 proc_flags:		.res MAX_PROCS
 
 sched_lock:     .res 1
-
-; ------------------------------------------------------------
-; saved_task_pid
-;
-; Purpose:
-;   Remembers which task context entered the supervisor.
-;
-; Notes:
-;   Used by leave_monitor to return to the interrupted task.
-; ------------------------------------------------------------
-
-saved_task_pid:      .res 1
 
 ; ------------------------------------------------------------
 ; console_owner_pid

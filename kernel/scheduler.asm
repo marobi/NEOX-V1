@@ -147,6 +147,55 @@
 .endproc
 
 ; ------------------------------------------------------------
+; sched_update_console_focus
+;
+; Purpose:
+;   Accept console focus selected by RP/user interface.
+;
+; Policy:
+;   The RP side chooses the requested foreground PID by writing
+;   RP_CONSOLE_PID. The scheduler only mirrors that request into
+;   kernel-owned console_owner_pid after validating the PID.
+;
+; Input:
+;   RP_CONSOLE_PID = requested focus PID, or $FF for no owner
+;
+; Output:
+;   console_owner_pid updated
+;
+; Clobbers:
+;   A, X
+; ------------------------------------------------------------
+
+.proc sched_update_console_focus
+    lda RP_CONSOLE_PID
+    cmp #$FF
+    beq @set_focus
+
+    ; PID 0 is idle/monitor-adjacent, not a user console owner.
+    cmp #FIRST_TASK_PID
+    bcc  @no_focus
+
+    cmp #MAX_PROCS
+    bcs @no_focus
+
+    tax
+    lda proc_state,x
+    cmp #PROC_EMPTY
+    beq @no_focus
+
+    txa
+    bra @set_focus
+
+@no_focus:
+    lda #$FF
+
+@set_focus:
+    sta console_owner_pid
+    rts
+.endproc
+
+; ------------------------------------------------------------
 ; scheduler_wake_console_input
 ;
 ; Purpose:
@@ -185,9 +234,13 @@
     cmp #PROC_BLOCKED
     bne @clear_wait
 
+    ; X = waiting PID.
+    ; Wake before clearing the wait slot.
+    jsr proc_wake
+
     lda #$FF
     sta console_wait_pid
-    jmp proc_wake
+    rts
 
 @clear_wait:
     lda #$FF
@@ -196,6 +249,7 @@
 @done:
     rts
 .endproc
+
 
 ; ------------------------------------------------------------
 ; scheduler_init
@@ -210,7 +264,6 @@
 .proc scheduler_init
     stz current_pid
     stz sched_lock
-    stz saved_task_pid
     stz monitor_return_mode
 
     lda #$FF
@@ -474,8 +527,9 @@
     tya
     tax
     jsr proc_set_ready
-
+	
 @wake_events:
+	jsr sched_update_console_focus
     jsr scheduler_wake_console_input
 
 @pick:

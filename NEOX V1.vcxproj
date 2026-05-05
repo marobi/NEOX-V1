@@ -125,12 +125,9 @@
   <ItemGroup>
     <None Include="bios\bios.asm" />
     <None Include="bios\bios.cfg" />
-    <None Include="bios\bios.dis" />
     <None Include="bios\bios.inc" />
-    <None Include="bios\bios.LST" />
     <None Include="bios\getaddress" />
     <None Include="bios\Makefile" />
-    <None Include="docs\neox abi v1.md" />
     <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
     <None Include="include\kernel.inc" />
@@ -153,18 +150,6 @@
     <None Include="kernel\supervisor.asm" />
     <None Include="kernel\syscall_table.asm" />
     <None Include="kernel\zero_page.asm" />
-    <None Include="out\neox_kernel.bin" />
-    <None Include="out\neox_kernel.dis" />
-    <None Include="out\neox_kernel.lbl" />
-    <None Include="out\neox_kernel.map" />
-    <None Include="out\neox_kernel.rom" />
-    <None Include="out\neox_syscall.bin" />
-    <None Include="out\neox_syscall.dis" />
-    <None Include="out\neox_syscall.lbl" />
-    <None Include="out\neox_syscall.map" />
-    <None Include="out\neox_syscall.rom" />
-    <None Include="user\test_read.asm" />
-    <None Include="user\test_write.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

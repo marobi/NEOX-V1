@@ -15,7 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="docs\neox abi v1.md" />
     <None Include="include\mailbox.inc">
       <Filter>Header Files</Filter>
     </None>
@@ -31,26 +30,6 @@
     <None Include="kernel\zero_page.asm">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="user\test_write.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="out\neox_kernel.bin">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="out\neox_kernel.dis" />
-    <None Include="out\neox_kernel.lbl" />
-    <None Include="out\neox_kernel.map" />
-    <None Include="out\neox_kernel.rom" />
-    <None Include="out\neox_syscall.bin">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="out\neox_syscall.dis" />
-    <None Include="out\neox_syscall.lbl" />
-    <None Include="out\neox_syscall.map" />
-    <None Include="out\neox_syscall.rom" />
-    <None Include="user\test_read.asm">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="bios\bios.asm">
       <Filter>Source Files</Filter>
     </None>
@@ -60,11 +39,9 @@
     <None Include="bios\getaddress">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="bios\bios.LST" />
     <None Include="bios\bios.inc">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="bios\bios.dis" />
     <None Include="bios\Makefile">
       <Filter>Resource Files</Filter>
     </None>
