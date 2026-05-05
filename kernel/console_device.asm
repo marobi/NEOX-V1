@@ -6,9 +6,9 @@
 ;   Device backend for FD-based console I/O.
 ;
 ; Read policy:
-;   - Only the PID selected by RP_CONSOLE_PID may consume input.
-;   - console_owner_pid mirrors RP_CONSOLE_PID for kernel state/debug.
-;   - If the current task does not own the console, read returns 0 bytes.
+;   - console_read uses console_owner_pid only
+;   - normal owner with no data blocks
+;   - monitor/supervisor path polls and never blocks
 ;   - If no character is ready, read returns 0 bytes.
 ;   - The actual RP mailbox read is only started when input is ready.
 ;
