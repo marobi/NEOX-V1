@@ -139,9 +139,11 @@
     <None Include="include\syscall.inc" />
     <None Include="kernel\entry_table.asm" />
     <None Include="kernel\fd.asm" />
+    <None Include="kernel\idle_task.asm" />
     <None Include="kernel\init_tasks.asm" />
     <None Include="kernel\irq.asm" />
     <None Include="kernel\ksys_io.asm" />
+    <None Include="kernel\ksys_proc.asm" />
     <None Include="kernel\main.asm" />
     <None Include="kernel\rp2350.asm" />
     <None Include="kernel\scheduler.asm" />

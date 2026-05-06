@@ -97,5 +97,11 @@
       <Filter>Source Files</Filter>
     </None>
     <None Include="README.md" />
+    <None Include="kernel\idle_task.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="kernel\ksys_proc.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
