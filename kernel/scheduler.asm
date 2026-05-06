@@ -37,10 +37,12 @@
 .export proc_set_state
 .export proc_set_ready
 .export proc_set_running
-.export proc_set_blocked
-.export proc_block_current
 .export proc_wake
 .export scheduler_wake_console_input
+
+.export proc_set_wait
+.export proc_clear_wait
+.export proc_exit_current
 
 .import sched_lock_enter
 .import sched_lock_leave
@@ -56,10 +58,14 @@
 .import proc_flags
 .import sched_lock
 .import console_owner_pid
-.import console_wait_pid
 .import monitor_return_mode
 
 .importzp sched_ptr
+
+.import wait_reason
+.import wait_object
+
+.import proc_exit_code
 
 .segment "KERN_TEXT"
 
@@ -101,48 +107,97 @@
 .endproc
 
 ; ------------------------------------------------------------
-; proc_set_blocked
-;
-; Input:
-;   X = pid
-; ------------------------------------------------------------
-
-.proc proc_set_blocked
-    lda #PROC_BLOCKED
-    jmp proc_set_state
-.endproc
-
-; ------------------------------------------------------------
-; proc_block_current
-;
-; Purpose:
-;   Mark current process BLOCKED.
-;
-; Notes:
-;   This does NOT invoke sched_context_switch.
-;   sched_context_switch is IRQ-only and expects an IRQ frame.
-; ------------------------------------------------------------
-
-.proc proc_block_current
-    ldx current_pid
-    jmp proc_set_blocked
-.endproc
-
-; ------------------------------------------------------------
 ; proc_wake
 ;
 ; Input:
 ;   X = pid
 ;
 ; Purpose:
-;   Wake a blocked process by making it READY.
+;   Wake a blocked process:
+;     - clear its wait reason/object
+;     - mark it READY
 ;
 ; Notes:
-;   Caller is responsible for selecting the correct pid.
+;   The caller decides that the wait condition is satisfied.
 ; ------------------------------------------------------------
 
 .proc proc_wake
+    jsr proc_clear_wait
     jmp proc_set_ready
+.endproc
+
+; ------------------------------------------------------------
+; proc_set_wait
+;
+; Input:
+;   X = pid
+;   A = wait reason
+;   Y = wait object
+;
+; Purpose:
+;   Mark a process as blocked on a specific wait reason/object.
+;
+; Notes:
+;   This is the generic replacement for device-specific wait
+;   variables such as console_wait_pid.
+; ------------------------------------------------------------
+
+.proc proc_set_wait
+    sta wait_reason,x
+    tya
+    sta wait_object,x
+
+    lda #PROC_BLOCKED
+    jmp proc_set_state
+.endproc
+
+; ------------------------------------------------------------
+; proc_clear_wait
+;
+; Input:
+;   X = pid
+;
+; Purpose:
+;   Clear the wait reason/object for a process.
+;
+; Notes:
+;   This does not change proc_state. The caller decides whether
+;   the process becomes READY, RUNNING, etc.
+; ------------------------------------------------------------
+
+.proc proc_clear_wait
+    lda #WAIT_NONE
+    sta wait_reason,x
+
+    stz wait_object,x
+
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; proc_exit_current
+;
+; Input:
+;   A = exit code
+;
+; Purpose:
+;   Mark the current process as terminated.
+;
+; Notes:
+;   This does not context-switch directly. The next scheduler IRQ
+;   will choose another READY process.
+; ------------------------------------------------------------
+
+.proc proc_exit_current
+    ldx current_pid
+
+    ; Exit code storage can be added later.
+    ; For now the process slot is simply made unavailable.
+
+    jsr proc_clear_wait
+
+    lda #PROC_EMPTY
+    jmp proc_set_state
 .endproc
 
 ; ------------------------------------------------------------
@@ -205,57 +260,60 @@
 ; scheduler_wake_console_input
 ;
 ; Purpose:
-;   Wake the console owner when RP2350 reports input available.
+;   Wake processes blocked on console input when RP reports that
+;   keyboard data is available.
 ;
-; Source:
-;   RP_CONSOLE_RDY is maintained by the RP2350:
-;       0     = RP input FIFO empty
-;       non-0 = one or more chars available
+; Model:
+;   A process is considered console-blocked when:
 ;
-; Policy:
-;   - Only normal task pids are woken here.
-;   - PID 0 is monitor/supervisor and is not part of normal
-;     round-robin scheduling.
-;   - Only PROC_BLOCKED is changed to PROC_READY.
+;       proc_state[pid]  == PROC_BLOCKED
+;       wait_reason[pid] == WAIT_CONSOLE
 ;
-; Clobbers:
-;   A, X
+; Notes:
+;   This currently wakes the first matching process.
+;   With the console ownership invariant, only the owner should
+;   be waiting on console input anyway.
 ; ------------------------------------------------------------
 
 .proc scheduler_wake_console_input
+    ; No input ready → nothing to wake.
     lda RP_CONSOLE_RDY
     beq @done
 
-    ldx console_wait_pid
-    cpx #$FF
-    beq @done
+    ; Scan user task PIDs only.
+    ldx #FIRST_TASK_PID
 
-    cpx #FIRST_TASK_PID
-    bcc @clear_wait
-
+@scan:
     cpx #MAX_PROCS
-    bcs @clear_wait
+    bcs @done
 
+    ; Only blocked processes can be woken.
     lda proc_state,x
     cmp #PROC_BLOCKED
-    bne @clear_wait
+    bne @next
 
-    ; X = waiting PID.
-    ; Wake before clearing the wait slot.
+    ; Only wake console waiters here.
+    lda wait_reason,x
+    cmp #WAIT_CONSOLE
+    bne @next
+
+    ; Clear wait state before making process READY.
+    ; The wake reason is now satisfied.
+    jsr proc_clear_wait
+
+    ; Wake this process.
     jsr proc_wake
 
-    lda #$FF
-    sta console_wait_pid
+    ; Current console model has only one console waiter.
     rts
 
-@clear_wait:
-    lda #$FF
-    sta console_wait_pid
+@next:
+    inx
+    bra @scan
 
 @done:
     rts
 .endproc
-
 
 ; ------------------------------------------------------------
 ; scheduler_init
@@ -274,7 +332,6 @@
 
     lda #$FF
     sta console_owner_pid
-    sta console_wait_pid
 
     ldx #$00
 
@@ -285,7 +342,13 @@
     stz proc_entryL,x
     stz proc_entryH,x
     stz proc_flags,x
-
+    
+	lda #WAIT_NONE
+    sta wait_reason,x
+    stz wait_object,x
+	
+	stz proc_exit_code,x
+	
     inx
     cpx #MAX_PROCS
     bne @clear
@@ -398,7 +461,12 @@
     lda #$FF
     sta proc_sp,x
 
-    ; Initial process flags.
+	; Initial wait state
+	lda #WAIT_NONE
+	sta wait_reason,x
+	stz wait_object,x
+    
+	; Initial process flags.
     lda #PROC_FLAG_NONE
     sta proc_flags,x
 

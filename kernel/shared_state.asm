@@ -30,7 +30,7 @@
 .export sched_lock
 
 .export console_owner_pid
-.export console_wait_pid
+;.export console_wait_pid
 
 .export monitor_return_mode
 
@@ -122,24 +122,6 @@ sched_lock:     .res 1
 
 console_owner_pid:   .res 1
 
-; ------------------------------------------------------------
-; console_wait_pid
-;
-; Purpose:
-;   PID blocked waiting for console input.
-;
-; Value:
-;   $FF = nobody waiting
-;   otherwise PID waiting for input readiness
-;
-; Notes:
-;   Separate from console_owner_pid. Console ownership/focus may
-;   change independently from the process currently blocked on
-;   input availability.
-; ------------------------------------------------------------
-
-console_wait_pid:    .res 1
-
 monitor_return_mode: .res 1
 
 ; ---------------------------------------------------------------------------------------------
@@ -197,6 +179,41 @@ open_flags:
 
 open_dev:
     .res OPEN_MAX
+
+
+; ------------------------------------------------------------
+; Per-process wait state
+;
+; wait_reason[pid]:
+;   WAIT_NONE, WAIT_CONSOLE, WAIT_DEVICE, ...
+;
+; wait_object[pid]:
+;   reason-specific object id.
+;   For WAIT_CONSOLE this is currently 0.
+; ------------------------------------------------------------
+
+.export wait_reason
+.export wait_object
+
+wait_reason:
+    .res MAX_PROCS
+
+wait_object:
+    .res MAX_PROCS
+
+;
+;
+;
+.export proc_exit_code
+
+proc_exit_code:
+    .res MAX_PROCS
+
+
+
+
+
+
 
 	
 ; ---------------------------------------------------------------------------------------------

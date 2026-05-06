@@ -69,8 +69,10 @@ KERNEL_SRCS := \
 	kernel/sched_lock.asm \
 	kernel/scheduler.asm \
 	kernel/supervisor.asm \
+	kernel/idle_task.asm \
 	kernel/fd.asm \
 	kernel/ksys_io.asm \
+	kernel/ksys_proc.asm \
 	kernel/device.asm \
 	kernel/console_device.asm \
 	kernel/rp2350.asm \

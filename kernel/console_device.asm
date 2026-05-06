@@ -32,6 +32,8 @@
 
 .import proc_set_blocked
 
+.import proc_set_wait
+
 .import rp_console_read
 .import rp_console_write
 
@@ -121,26 +123,26 @@ console_ops:
     bne @has_data
 
     ; --------------------------------------------------------
-    ; Owner + no data → block process
+    ; Owner + no data → block on console input
     ; --------------------------------------------------------
 
-    ; Record waiting PID
-    lda current_pid
-    sta console_wait_pid
+    ; Generic wait model:
+    ;   current process waits for console input.
+    ;   wait_object is unused for console, so Y = 0.
+    ldx current_pid
+    lda #WAIT_CONSOLE
+    ldy #0
+    jsr proc_set_wait
 
-    ; Block current process
-    tax
-    jsr proc_set_blocked
-
-    ; Restore registers
+    ; Restore requested read length from stack before returning.
     plx
     pla
 
-    ; Signal "blocked, not error"
+    ; C set + Y = E_OK means "blocked, not an error".
     ldy #E_OK
     sec
     rts
-
+	
 ; ------------------------------------------------------------
 ; Monitor path: nonblocking polling only
 ; ------------------------------------------------------------

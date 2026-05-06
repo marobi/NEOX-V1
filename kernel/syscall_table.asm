@@ -105,9 +105,7 @@ syscall_table:
 
 
 .proc k_exit
-    ldy #EINVAL
-    sec
-    rts
+    jmp KERN_ENTRY_KSYS_EXIT
 .endproc
 
 .proc k_open
@@ -170,8 +168,7 @@ syscall_table:
 .endproc
 
 .proc k_yield
-    clc
-    rts
+    jmp KERN_ENTRY_KSYS_YIELD
 .endproc
 
 .proc k_sbrk

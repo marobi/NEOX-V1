@@ -32,6 +32,8 @@
 .import leave_monitor
 .import ksys_read
 .import ksys_write
+.import ksys_exit
+.import ksys_yield
 
 .segment "KERNEL_ENTRY"
 
@@ -45,8 +47,8 @@ kernel_entry_table:
 	jmp leave_monitor
 	jmp ksys_read
 	jmp ksys_write
-	.res 3, $00
-	.res 3, $00
+	jmp ksys_exit
+	jmp ksys_yield
 	.res 3, $00
 	.res 3, $00
 	.res 3, $00

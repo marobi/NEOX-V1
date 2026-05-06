@@ -20,4 +20,20 @@ PROC_FLAG_NONE          = $00
 PROC_FLAG_IDLE          = $01
 PROC_FLAG_ATTACHED_CON  = $02
 
+; ------------------------------------------------------------
+; Process wait reasons
+;
+; WAIT_NONE means the process is not blocked on a known wait object.
+; Other values describe why a PROC_BLOCKED process is blocked.
+; ------------------------------------------------------------
+
+WAIT_NONE       = $00
+WAIT_CONSOLE    = $01
+WAIT_DEVICE     = $02
+WAIT_PIPE       = $03
+WAIT_TIMER      = $04
+WAIT_PROC       = $05
+
+EXIT_OK			= $00
+
 .endif
