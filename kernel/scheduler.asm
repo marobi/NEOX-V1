@@ -48,6 +48,7 @@
 .import sched_lock_leave
 
 .import fd_init_process
+.import fd_close_process
 
 .import current_pid
 .import proc_state
@@ -181,21 +182,33 @@
 ;   A = exit code
 ;
 ; Purpose:
-;   Mark the current process as terminated.
+;   Terminate the currently running process.
+;
+; Current model:
+;   - no parent/child tracking yet
+;   - no zombie state yet
+;   - exit code currently ignored
+;
+; Effects:
+;   - closes all process file descriptors
+;   - clears wait state
+;   - marks process slot EMPTY
 ;
 ; Notes:
-;   This does not context-switch directly. The next scheduler IRQ
-;   will choose another READY process.
+;   Caller must not return to user code afterwards.
 ; ------------------------------------------------------------
 
 .proc proc_exit_current
+    ; Resolve exiting PID.
     ldx current_pid
 
-    ; Exit code storage can be added later.
-    ; For now the process slot is simply made unavailable.
+    ; Release all process-owned file descriptors.
+    jsr fd_close_process
 
+    ; Clear generic wait metadata.
     jsr proc_clear_wait
 
+    ; Mark process slot unused.
     lda #PROC_EMPTY
     jmp proc_set_state
 .endproc
@@ -204,52 +217,63 @@
 ; sched_update_console_focus
 ;
 ; Purpose:
-;   Accept console focus selected by RP/user interface.
+;   Synchronize console ownership with RP console focus state.
+;
+; Model:
+;   RP_CONSOLE_PID is authoritative and controlled only by the
+;   RP2350 side.
 ;
 ; Policy:
-;   The RP side chooses the requested foreground PID by writing
-;   RP_CONSOLE_PID. The scheduler only mirrors that request into
-;   kernel-owned console_owner_pid after validating the PID.
+;   - $FF = no focused task
+;   - 0   = monitor/supervisor focus
+;   - >0  = foreground process
 ;
-; Input:
-;   RP_CONSOLE_PID = requested focus PID, or $FF for no owner
-;
-; Output:
-;   console_owner_pid updated
-;
-; Clobbers:
-;   A, X
+; Safety:
+;   If RP points at an EMPTY process slot, ownership is cleared.
 ; ------------------------------------------------------------
 
 .proc sched_update_console_focus
-    ; Read RP/user requested focus.
     lda RP_CONSOLE_PID
 
-    ; PID 0 is idle/monitor-adjacent.
-    ; Do not overwrite the accepted user console owner.
-    cmp #FIRST_TASK_PID
-    bcc @no_update
+    ; --------------------------------------------------------
+    ; No focused task.
+    ; --------------------------------------------------------
 
-    ; $FF means explicit no-focus request.
     cmp #$FF
+    beq @clear_focus
+
+    ; --------------------------------------------------------
+    ; Monitor/supervisor owns console.
+    ; --------------------------------------------------------
+
+    cmp #0
     beq @set_focus
 
-    ; Reject out-of-range PID requests.
-    cmp #MAX_PROCS
-    bcs @no_update
+    ; --------------------------------------------------------
+    ; Validate PID range.
+    ; --------------------------------------------------------
 
-    ; Reject empty process slots.
+    cmp #MAX_PROCS
+    bcs @clear_focus
+
+    ; --------------------------------------------------------
+    ; Reject EMPTY process slots.
+    ; --------------------------------------------------------
+
     tax
     lda proc_state,x
     cmp #PROC_EMPTY
-    beq @no_update
+    beq @clear_focus
 
-    ; Accept requested user PID as console owner.
+    ; --------------------------------------------------------
+    ; Valid live PID.
+    ; --------------------------------------------------------
+
     txa
-    sta console_owner_pid
+    bra @set_focus
 
-@no_update:
-    rts
+@clear_focus:
+    lda #$FF
 
 @set_focus:
     sta console_owner_pid

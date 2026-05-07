@@ -116,8 +116,12 @@ task3_create:
     jsr BIOS_GETCHAR
     beq @loop
 
+	
     ; echo received character
     jsr BIOS_PUTCHAR
 	
-    bra @loop
+	cmp #'q'
+	bne @loop
+	
+	jmp sys_exit
 .endproc

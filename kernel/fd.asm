@@ -25,6 +25,7 @@
 
 .export fd_init_tables
 .export fd_init_process
+.export fd_close_process
 .export fd_attach
 .export fd_lookup
 
@@ -372,5 +373,115 @@
     lda #STDERR
     jsr fd_attach
 
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_close_process
+;
+; Input:
+;   X = pid
+;
+; Purpose:
+;   Release all file descriptors belonging to a process.
+;
+; Effects:
+;   - decrements open object refcounts
+;   - clears proc_fd_obj entries
+;   - clears proc_fd_flags entries
+;
+; Notes:
+;   - Uses the same table traversal model as fd_init_process
+;   - Does not currently reclaim open object slots when
+;     refcount reaches zero
+; ------------------------------------------------------------
+
+.proc fd_close_process
+    ; Preserve pid.
+    stx fd_pid_tmp
+
+    ; --------------------------------------------------------
+    ; Calculate:
+    ;
+    ;   offset = pid * MAX_FDS
+    ; --------------------------------------------------------
+
+    txa
+    sta factor1
+
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    ; --------------------------------------------------------
+    ; fd_ptr = proc_fd_obj + offset
+    ; --------------------------------------------------------
+
+    clc
+    lda #<proc_fd_obj
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc factor2
+    sta fd_ptr+1
+
+    ldy #0
+
+@close_loop:
+    cpy #MAX_FDS
+    beq @clear_flags
+
+    ; Fetch open object index.
+    lda (fd_ptr),y
+
+    ; Empty slot → skip.
+    cmp #FD_NONE
+    beq @next_fd
+
+    tax
+
+    ; --------------------------------------------------------
+    ; Decrement object reference count.
+    ; --------------------------------------------------------
+
+    lda open_refcnt,x
+    beq @clear_fd
+
+    dec open_refcnt,x
+
+@clear_fd:
+    lda #FD_NONE
+    sta (fd_ptr),y
+
+@next_fd:
+    iny
+    bra @close_loop
+
+@clear_flags:
+    ; --------------------------------------------------------
+    ; fd_ptr = proc_fd_flags + offset
+    ; --------------------------------------------------------
+
+    clc
+    lda #<proc_fd_flags
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_flags
+    adc factor2
+    sta fd_ptr+1
+
+    ldy #0
+    lda #0
+
+@flag_loop:
+    sta (fd_ptr),y
+    iny
+    cpy #MAX_FDS
+    bne @flag_loop
+
+    ldx fd_pid_tmp
     rts
 .endproc

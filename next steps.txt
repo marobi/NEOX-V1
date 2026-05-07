@@ -1,0 +1,8 @@
+1. proc_exit_current cleanup
+2. idle integration finalization
+3. scheduler invariants/assertions
+4. generalized event wake model
+5. sleep/timer wait
+
+
+IRQ gen error

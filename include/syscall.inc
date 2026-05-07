@@ -38,7 +38,7 @@ STDERR              = 2
 ; ------------------------------------------------------------
 ; Syscall numbers
 ; ------------------------------------------------------------
-
+SYS_EXIT			= $00
 SYS_READ            = $03
 SYS_WRITE           = $04
 SYS_MONITOR         = $05
@@ -47,6 +47,7 @@ SYS_MONITOR         = $05
 ; Fixed syscall entry addresses
 ; ------------------------------------------------------------
 
+sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
 sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
