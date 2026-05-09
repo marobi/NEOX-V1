@@ -21,6 +21,15 @@ PROC_FLAG_IDLE          = $01
 PROC_FLAG_ATTACHED_CON  = $02
 
 ; ------------------------------------------------------------
+; Process resume mode
+;
+; Defines how a saved process stack must be resumed.
+; ------------------------------------------------------------
+
+PROC_RESUME_RTI = $00
+PROC_RESUME_RTS = $01
+
+; ------------------------------------------------------------
 ; Process wait reasons
 ;
 ; WAIT_NONE means the process is not blocked on a known wait object.

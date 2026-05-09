@@ -32,6 +32,7 @@
 .export sched_pick_next
 .export sched_context_switch
 .export sched_yield
+.export sched_resume_rts
 .export first_run_entry
 
 .export proc_set_state
@@ -57,6 +58,8 @@
 .import proc_entryL
 .import proc_entryH
 .import proc_flags
+.import proc_resume_mode
+
 .import sched_lock
 .import console_owner_pid
 .import monitor_return_mode
@@ -67,6 +70,10 @@
 .import wait_object
 
 .import proc_exit_code
+
+.import timer_init
+.import scheduler_tick
+.import scheduler_wake_timers
 
 .segment "KERN_TEXT"
 
@@ -366,6 +373,7 @@
     stz proc_entryL,x
     stz proc_entryH,x
     stz proc_flags,x
+	stz proc_resume_mode,x
     
 	lda #WAIT_NONE
     sta wait_reason,x
@@ -392,6 +400,7 @@
     lda #PROC_FLAG_IDLE
     sta proc_flags+IDLE_PID
 
+	jsr timer_init
     rts
 .endproc
 
@@ -589,35 +598,33 @@
 ; sched_context_switch
 ;
 ; Purpose:
-;   Perform timer-driven context switching.
+;   IRQ-driven context switch.
 ;
-; Entry conditions:
-;   - entered from irq_entry
-;   - stack contains hardware IRQ frame + saved A/X/Y
+; Stack model:
+;   Entered from IRQ path. The saved process stack contains an
+;   IRQ/RTI-compatible frame.
 ;
-; Behavior:
-;   - save current SP
-;   - wake blocked console owner if RP input is ready
-;   - mark current RUNNING task READY, except pid 0
-;   - pick next runnable pid
-;   - existing task -> BIOS_CONTEXT_RTI
-;   - new task      -> BIOS_CONTEXT_JUMP into inline bootstrap
-;
-; Important:
-;   A task that has changed itself to PROC_BLOCKED must remain
-;   blocked. Therefore this routine only converts RUNNING to
-;   READY. It must not blindly write READY to the current pid.
+; Policy:
+;   - Save current SP
+;   - Mark saved stack as RTI-resumable
+;   - Convert current RUNNING process to READY
+;   - Wake pending events
+;   - Pick next runnable process
+;   - Resume next process using its recorded resume mode
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
-    ; Save interrupted SP.
+    ; Save interrupted SP for current PID.
     ldy current_pid
     tsx
     txa
     sta proc_sp,y
 
-    ; Convert only RUNNING -> READY.
-    ; This applies to PID 0 as well, so only one PID is RUNNING.
+    ; This stack was saved from IRQ context.
+    lda #PROC_RESUME_RTI
+    sta proc_resume_mode,y
+
+    ; IRQ preemption: RUNNING -> READY.
     lda proc_state,y
     cmp #PROC_RUNNING
     bne @wake_events
@@ -625,32 +632,128 @@
     tya
     tax
     jsr proc_set_ready
-	
+
 @wake_events:
-	jsr sched_update_console_focus
+    jsr scheduler_tick
+    jsr sched_update_console_focus
     jsr scheduler_wake_console_input
+    jsr scheduler_wake_timers
 
 @pick:
     jsr sched_pick_next
 
-    ; X = selected PID, including possible IDLE_PID fallback.
+    ; X = selected PID, including possible IDLE fallback.
     stx current_pid
 
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new
 
-    ; Resume existing task/idle.
+    ; Resume existing process.
     jsr proc_set_running
 
     lda proc_sp,x
     tax
     txs
 
+    ; Select RTI or RTS resume based on saved stack type.
     ldx current_pid
+    lda proc_resume_mode,x
+    cmp #PROC_RESUME_RTS
+    beq @resume_rts
+
+@resume_rti:
     lda proc_context,x
     jmp BIOS_CONTEXT_RTI
 
+@resume_rts:
+    lda proc_context,x
+    ldx #<sched_resume_rts
+    ldy #>sched_resume_rts
+    jmp BIOS_CONTEXT_JUMP
+
+@start_new:
+    jsr proc_set_running
+
+    lda proc_context,x
+    ldx #<first_run_entry
+    ldy #>first_run_entry
+    jmp BIOS_CONTEXT_JUMP
+.endproc
+
+; ------------------------------------------------------------
+; sched_yield
+;
+; Purpose:
+;   Voluntary scheduler handoff from syscall/user-call context.
+;
+; Stack model:
+;   This is NOT an IRQ path.
+;   The saved stack contains an RTS-compatible return frame.
+;
+; Used by:
+;   sys_yield
+;   sys_sleep after marking current process BLOCKED
+;   future blocking syscalls
+; ------------------------------------------------------------
+
+.proc sched_yield
+    ; Save current syscall/user stack pointer.
+    ldy current_pid
+    tsx
+    txa
+    sta proc_sp,y
+
+    lda #PROC_RESUME_RTS
+    sta proc_resume_mode,y
+
+    ; If caller is still RUNNING, make it READY.
+    ; Blocking syscalls set PROC_BLOCKED before calling this,
+    ; so they are left blocked.
+    lda proc_state,y
+    cmp #PROC_RUNNING
+    bne @wake
+
+    tya
+    tax
+    jsr proc_set_ready
+
+@wake:
+    jsr sched_update_console_focus
+    jsr scheduler_wake_console_input
+    jsr scheduler_wake_timers
+
+    jsr sched_pick_next
+    stx current_pid
+
+    lda proc_state,x
+    cmp #PROC_NEW
+    beq @start_new
+
+    jsr proc_set_running
+
+    lda proc_sp,x
+    tax
+    txs
+
+    ; Voluntary handoff resumes through RTS semantics.
+    ldx current_pid
+
+    lda proc_resume_mode,x
+    cmp #PROC_RESUME_RTS
+    beq @resume_rts
+
+@resume_rti:
+    lda proc_context,x
+    jmp BIOS_CONTEXT_RTI
+
+@resume_rts:
+    lda proc_context,x
+
+    ldx #<sched_resume_rts
+    ldy #>sched_resume_rts
+    jmp BIOS_CONTEXT_JUMP
+	
 @start_new:
     jsr proc_set_running
 
@@ -696,12 +799,16 @@
 .endproc
 
 ; ------------------------------------------------------------
-; sched_yield
+; sched_resume_rts
 ;
 ; Purpose:
-;   Placeholder for cooperative yield.
+;   Resume a task suspended from syscall/yield context.
+;
+; Stack:
+;   Restored process stack contains the original RTS return
+;   address from the blocking syscall.
 ; ------------------------------------------------------------
 
-.proc sched_yield
+.proc sched_resume_rts
     rts
 .endproc

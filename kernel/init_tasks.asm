@@ -88,6 +88,8 @@ task3_create:
 
 .proc task1
 @loop:
+	lda #25
+	jsr sys_sleep
     inc test_ctr1
     lda #$01
     sta test_turn
@@ -99,10 +101,14 @@ task3_create:
 ; ------------------------------------------------------------
 
 .proc task2
+	lda #12
+	jsr sys_sleep
 @loop:
     inc test_ctr2
     lda #$02
     sta test_turn
+	lda #48
+	jsr sys_sleep
     bra @loop
 .endproc
 
@@ -115,7 +121,6 @@ task3_create:
     ; try to read 1 byte
     jsr BIOS_GETCHAR
     beq @loop
-
 	
     ; echo received character
     jsr BIOS_PUTCHAR

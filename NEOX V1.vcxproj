@@ -137,6 +137,7 @@
     <None Include="include\scheduler_defs.inc" />
     <None Include="include\supervisor.inc" />
     <None Include="include\syscall.inc" />
+    <None Include="include\timer.inc" />
     <None Include="kernel\entry_table.asm" />
     <None Include="kernel\fd.asm" />
     <None Include="kernel\idle_task.asm" />
@@ -151,6 +152,7 @@
     <None Include="kernel\shared_state.asm" />
     <None Include="kernel\supervisor.asm" />
     <None Include="kernel\syscall_table.asm" />
+    <None Include="kernel\timer.asm" />
     <None Include="kernel\zero_page.asm" />
     <None Include="README.md" />
   </ItemGroup>

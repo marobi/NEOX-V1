@@ -71,6 +71,7 @@ KERNEL_SRCS := \
 	kernel/supervisor.asm \
 	kernel/idle_task.asm \
 	kernel/fd.asm \
+	kernel/timer.asm \
 	kernel/ksys_io.asm \
 	kernel/ksys_proc.asm \
 	kernel/device.asm \

@@ -1,8 +1,6 @@
-1. proc_exit_current cleanup
-2. idle integration finalization
-3. scheduler invariants/assertions
-4. generalized event wake model
-5. sleep/timer wait
-
-
-IRQ gen error
+1. sys_sleep using WAIT_TIMER
+2. generalized timer wake-up
+3. cooperative sys_yield later
+4. process lifecycle extensions
+5. multi-threading model
+6. eventually sys_wait / parent-child / zombie support

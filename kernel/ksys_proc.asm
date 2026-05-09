@@ -10,13 +10,21 @@
 
 .include "process.inc"
 .include "syscall.inc"
+.include "timer.inc"
 
 .export ksys_exit
 .export ksys_yield
+.export ksys_sleep
 
 .import idle_loop
 .import current_pid
 .import proc_exit_current
+.import sched_yield
+
+.import sched_handoff
+
+.import timer_start_current
+
 
 .segment "KERN_TEXT"
 
@@ -53,6 +61,42 @@
 ; ------------------------------------------------------------
 
 .proc ksys_yield
+    jmp sched_yield
+.endproc
+
+; ------------------------------------------------------------
+; ksys_sleep
+;
+; Input:
+;   A = relative sleep ticks
+;
+; Purpose:
+;   Block current process until timer expiration.
+;
+; Notes:
+;   timer_start_current:
+;       - allocates timer slot
+;       - sets WAIT_TIMER
+;       - marks process BLOCKED
+; ------------------------------------------------------------
+
+.proc ksys_sleep
+    cmp #0
+    beq @done
+
+    jsr timer_start_current
+    bcs @fail
+
+    ; timer_start_current made current process PROC_BLOCKED.
+    ; Now yield immediately using syscall-context scheduler path.
+    jmp sched_yield
+
+@fail:
+    ldy #EAGAIN
+    sec
+    rts
+
+@done:
     clc
     rts
 .endproc

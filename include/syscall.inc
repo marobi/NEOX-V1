@@ -42,6 +42,7 @@ SYS_EXIT			= $00
 SYS_READ            = $03
 SYS_WRITE           = $04
 SYS_MONITOR         = $05
+SYS_SLEEP           = $0E
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -51,6 +52,7 @@ sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
 sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values
@@ -62,6 +64,7 @@ EINVAL              = 6
 EBADF           	= 9
 ENODEV          	= 10
 ENOSYS          	= 11
+EAGAIN              = 12
 
 ; ------------------------------------------------------------
 ; Common read/write argument block

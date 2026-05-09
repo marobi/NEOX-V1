@@ -44,6 +44,7 @@
 .export k_yield
 .export k_sbrk
 .export k_ioctl
+.export k_sleep
 
 .segment "SYSCALL_STUBS"
 
@@ -67,6 +68,7 @@
 ;   11 -> k_yield
 ;   12 -> k_sbrk
 ;   13 -> k_ioctl
+;	14 -> k_sleep
 ; ------------------------------------------------------------
 
 syscall_table:
@@ -84,6 +86,8 @@ syscall_table:
     jmp k_yield
     jmp k_sbrk
     jmp k_ioctl
+	jmp k_sleep
+
 
 .segment "KERN_TEXT"
 
@@ -181,4 +185,8 @@ syscall_table:
     ldy #EINVAL
     sec
     rts
+.endproc
+
+.proc k_sleep
+	jmp KERN_ENTRY_KSYS_SLEEP
 .endproc

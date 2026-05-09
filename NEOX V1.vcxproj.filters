@@ -103,5 +103,11 @@
     <None Include="kernel\ksys_proc.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="include\timer.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="kernel\timer.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

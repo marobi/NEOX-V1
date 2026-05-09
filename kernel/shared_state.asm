@@ -12,6 +12,7 @@
 .include "scheduler_defs.inc"
 .include "process.inc"
 .include "fd.inc"
+.include "timer.inc"
 
 .export kernel_version
 
@@ -19,20 +20,15 @@
 
 .export rp_lock
 
-.export current_pid
-.export proc_state
-.export proc_context
-.export proc_sp
-.export proc_entryL
-.export proc_entryH
-.export proc_flags
-
 .export sched_lock
 
 .export console_owner_pid
-;.export console_wait_pid
 
 .export monitor_return_mode
+
+; ------------------------------------------------------------
+;
+; ------------------------------------------------------------
 
 .export test_ctr1
 .export test_ctr2
@@ -98,6 +94,17 @@ rp_lock:        .res 1
 ;   unchanged instead of invoking sched_context_switch.
 ; ------------------------------------------------------------
 
+.export current_pid
+
+.export proc_state
+.export proc_context
+.export proc_sp
+.export proc_entryL
+.export proc_entryH
+.export proc_flags
+.export proc_resume_mode
+
+
 current_pid:    .res 1
 
 proc_state:     .res MAX_PROCS
@@ -106,7 +113,9 @@ proc_sp:        .res MAX_PROCS
 proc_entryL:    .res MAX_PROCS
 proc_entryH:    .res MAX_PROCS
 proc_flags:		.res MAX_PROCS
-
+proc_resume_mode:
+				.res MAX_PROCS
+	
 sched_lock:     .res 1
 
 ; ------------------------------------------------------------
@@ -210,11 +219,49 @@ proc_exit_code:
     .res MAX_PROCS
 
 
+.export system_ticks_lo
+.export system_ticks_hi
 
+.export timer_pid
+.export timer_until_lo
+.export timer_until_hi
 
+; ------------------------------------------------------------
+; Global scheduler tick counter
+;
+; Incremented once per timer IRQ.
+;
+; 16-bit:
+;   ~21.8 minutes at 50 Hz.
+; ------------------------------------------------------------
 
+system_ticks_lo:   .res 1
+system_ticks_hi:   .res 1
 
+; ------------------------------------------------------------
+; Active timer wait table
+;
+; timer_pid[slot]:
+;   PID waiting on this timer slot.
+;
+;   TIMER_NONE = unused slot
+;
+; timer_until_lo/hi[slot]:
+;   Absolute wake tick.
+;
+; Notes:
+;   wait_object[pid] stores the timer slot index while the
+;   process is blocked on WAIT_TIMER.
+; ------------------------------------------------------------
 
+timer_pid:
+    .res MAX_TIMER
+
+timer_until_lo:
+    .res MAX_TIMER
+
+timer_until_hi:
+    .res MAX_TIMER
 	
 ; ---------------------------------------------------------------------------------------------
 
