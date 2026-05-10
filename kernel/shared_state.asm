@@ -262,6 +262,23 @@ timer_until_lo:
 
 timer_until_hi:
     .res MAX_TIMER
+
+; ============================================================
+; Process runtime accounting
+;
+; Updated from timer IRQ context.
+;
+; proc_ticks_*:
+;   Per-process scheduled runtime in timer ticks.
+;
+; Counters are 16-bit and naturally wrap.
+; ============================================================
+
+.export proc_ticks_lo
+.export proc_ticks_hi
+
+proc_ticks_lo:    .res MAX_PROCS
+proc_ticks_hi:    .res MAX_PROCS
 	
 ; ---------------------------------------------------------------------------------------------
 

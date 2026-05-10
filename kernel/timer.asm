@@ -46,6 +46,11 @@
 .import proc_set_wait
 .import proc_wake
 
+.import proc_ticks_lo
+.import proc_ticks_hi
+.import idle_ticks_lo
+.import idle_ticks_hi
+
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
@@ -318,4 +323,3 @@
 @done:
     rts
 .endproc
-

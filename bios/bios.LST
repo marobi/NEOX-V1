@@ -73,18 +73,21 @@ Current file: bios.asm
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Syscall numbers
 000000r 2               ; ------------------------------------------------------------
-000000r 2               
+000000r 2               SYS_EXIT			= $00
 000000r 2               SYS_READ            = $03
 000000r 2               SYS_WRITE           = $04
 000000r 2               SYS_MONITOR         = $05
+000000r 2               SYS_SLEEP           = $0E
 000000r 2               
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Fixed syscall entry addresses
 000000r 2               ; ------------------------------------------------------------
 000000r 2               
+000000r 2               sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
 000000r 2               
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Common errno values
@@ -96,6 +99,7 @@ Current file: bios.asm
 000000r 2               EBADF           	= 9
 000000r 2               ENODEV          	= 10
 000000r 2               ENOSYS          	= 11
+000000r 2               EAGAIN              = 12
 000000r 2               
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Common read/write argument block
@@ -140,7 +144,6 @@ Current file: bios.asm
 000000r 2               
 000000r 1               
 000000r 1               KBD_PORT   = $D000
-000000r 1               DSP_PORT   = KBD_PORT + 1
 000000r 1               
 000000r 1               CMD_PORT   = KBD_PORT + 2
 000000r 1               PARAM_PORT = KBD_PORT + 3
@@ -155,229 +158,220 @@ Current file: bios.asm
 000000r 1               ; -----------------------------------------------------------------------------
 000000r 1               ; set up origin
 000000r 1               	.segment "BIOS"
-000000r 1               	.org $F000    		; nice for listing
-00F000  1               
-00F000  1               BIOS:					; jump table (16 cmds)
-00F000  1  4C 46 F0     	JMP _GETCHAR		; get char
-00F003  1  4C 70 F0     	JMP _PUTCHAR		; put char
-00F006  1  4C F1 F0     	JMP EMPTY			; check for char in available
-00F009  1  4C F1 F0     	JMP EMPTY			; check for ^C input
-00F00C  1  4C BD F0     	JMP SET_MMU_CONTEXT_AND_RTI	; switch context and rti
-00F00F  1  4C 8B F0     	JMP _GETLINE		; getline of chars
-00F012  1  4C B2 F0     	JMP ACK_IRQ			; acknowledge IRQ
-00F015  1  4C D4 F0     	JMP SET_MMU_CONTEXT_AND_JUMP	; switch context and jump
-00F018  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F01B  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F01E  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F021  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F024  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F027  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F02A  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F02D  1  4C F1 F0     	JMP EMPTY			; empty slot
-00F030  1               
-00F030  1               ; -----------------------------------------------------------------------------
-00F030  1               ocharbuf:
-00F030  1  xx               .res 1
-00F031  1               
-00F031  1               icharbuf:
-00F031  1  xx           	.res 1
-00F032  1               
-00F032  1               read_blk:
-00F032  1  00               .byte STDIN
-00F033  1  00               .byte 0
-00F034  1  00 00            .word $0000				; ptr linebuf
-00F036  1  01 00            .word 1					; size linebuf
-00F038  1               
-00F038  1               readc_blk:
-00F038  1  00               .byte STDIN
-00F039  1  00               .byte 0
-00F03A  1  31 F0            .word icharbuf
-00F03C  1  01 00            .word 1
-00F03E  1               
-00F03E  1               write_blk:
-00F03E  1  01               .byte STDOUT
-00F03F  1  00               .byte 0
-00F040  1  30 F0            .word ocharbuf
-00F042  1  01 00            .word 1
-00F044  1               
-00F044  1               bios_jmp_vec:
-00F044  1  xx xx        	.res 2
-00F046  1               
-00F046  1               ; -----------------------------------------------------------------------------
-00F046  1               ; read a key from input, only a-reg is used
-00F046  1               ;
-00F046  1               .proc _GETCHAR
-00F046  1  DA           	phx
-00F047  1  5A           	phy
-00F048  1  A2 38 A0 F0  	SYSCALL readc_blk, sys_read
-00F04C  1  20 09 C0     
-00F04F  1  B0 19        	bcs @ic_error
-00F051  1               
-00F051  1  09 00        	ora #0
-00F053  1  D0 07        	bne @got_char
-00F055  1  8A           	txa
-00F056  1  D0 04            bne @got_char
-00F058  1  A9 00        	lda #0
-00F05A  1  80 08        	bra @ok_exit
-00F05C  1               
-00F05C  1               @got_char:
-00F05C  1  AD 31 F0     	lda icharbuf
-00F05F  1  29 7F        	and #$7f			; remove 8 bit
-00F061  1               
-00F061  1  9C 31 F0     	stz icharbuf
-00F064  1               
-00F064  1               @ok_exit:
-00F064  1  7A           	ply
-00F065  1  FA           	plx
-00F066  1  09 00        	ora #0
-00F068  1  18           	clc
-00F069  1  60           	rts
-00F06A  1               
-00F06A  1               @ic_error:
-00F06A  1  7A           	ply
-00F06B  1  FA           	plx
-00F06C  1  A9 00        	lda #0
-00F06E  1  38           	sec
-00F06F  1  60           	rts
-00F070  1               .endproc
-00F070  1               
-00F070  1               ; -----------------------------------------------------------------------------
-00F070  1               ; write a char to output, only a-reg is used
-00F070  1               ;
-00F070  1               .proc _PUTCHAR
-00F070  1  48           	pha
-00F071  1  29 7F        	and #$7f			; standard ASCII
-00F073  1  F0 10        	beq @pc_ok
-00F075  1  8D 30 F0         sta ocharbuf
-00F078  1               
-00F078  1  DA           	phx
-00F079  1  5A           	phy
-00F07A  1  A2 3E A0 F0      SYSCALL write_blk, sys_write
-00F07E  1  20 0C C0     
-00F081  1  7A           	ply
-00F082  1  FA           	plx
-00F083  1  B0 03            bcs @pc_error
-00F085  1               
-00F085  1               @pc_ok:
-00F085  1  68           	pla
-00F086  1  18           	clc
-00F087  1  60               rts
-00F088  1               
-00F088  1               @pc_error:
-00F088  1  68           	pla
-00F089  1  38               sec
-00F08A  1  60               rts
-00F08B  1               .endproc
-00F08B  1               
-00F08B  1               ; -----------------------------------------------------------------------------
-00F08B  1               ; X = <linebuf
-00F08B  1               ; Y = >linebuf
-00F08B  1               ; A = len linebuf
-00F08B  1               ; -----------------------------------------------------------------------------
-00F08B  1               .proc _GETLINE
-00F08B  1  8E 34 F0     	stx read_blk + rw_args::buf_ptr
-00F08E  1  8C 35 F0     	sty read_blk + rw_args::buf_ptr+1
-00F091  1  8D 36 F0     	sta read_blk + rw_args::len
-00F094  1  9C 37 F0     	stz read_blk + rw_args::len+1
-00F097  1               
-00F097  1  A2 32 A0 F0  	SYSCALL read_blk, sys_read
-00F09B  1  20 09 C0     
-00F09E  1  B0 02        	bcs @gl_error
-00F0A0  1               
-00F0A0  1  18           	clc
-00F0A1  1  60           	rts
-00F0A2  1               
-00F0A2  1               @gl_error:
-00F0A2  1  38           	sec
-00F0A3  1  60           	rts
-00F0A4  1               .endproc
-00F0A4  1               
-00F0A4  1               ; exec command  A=cmd, X=param (optional)
-00F0A4  1               ; wait for cmd == 0
-00F0A4  1               ; set new cmd
-00F0A4  1               ;
-00F0A4  1               .proc exec_cmd
-00F0A4  1  48           	pha
-00F0A5  1               @wait_cmd:
-00F0A5  1  AD 02 D0     	lda CMD_PORT
-00F0A8  1  D0 FB        	bne @wait_cmd
-00F0AA  1  8E 03 D0     	stx PARAM_PORT
-00F0AD  1  68           	pla
-00F0AE  1  8D 02 D0     	sta CMD_PORT
-00F0B1  1  60           	rts
-00F0B2  1               .endproc
-00F0B2  1               
-00F0B2  1               ;
-00F0B2  1               ; ack IRQ
-00F0B2  1               ; registers preserved
-00F0B2  1               ;
-00F0B2  1               .proc ACK_IRQ
-00F0B2  1  48           	pha
-00F0B3  1  9C 12 D0     	stz BIOS_IRQ_SOURCE
-00F0B6  1  A9 01        	lda #CMD_ACK_IRQ
-00F0B8  1  20 A4 F0     	jsr exec_cmd
-00F0BB  1  68           	pla
-00F0BC  1  60           	rts
-00F0BD  1               .endproc
-00F0BD  1               
-00F0BD  1               ;
-00F0BD  1               ; switch context
-00F0BD  1               ; A = context
-00F0BD  1               ;
-00F0BD  1               .proc SET_MMU_CONTEXT_AND_RTI
-00F0BD  1  AA           	tax						; context
-00F0BE  1               @wait_cmd:
-00F0BE  1  AD 02 D0     	lda CMD_PORT
-00F0C1  1  D0 FB        	bne @wait_cmd
-00F0C3  1  8E 03 D0     	stx PARAM_PORT
-00F0C6  1  A9 02        	lda #CMD_CONTEXT_SWITCH
-00F0C8  1  8D 02 D0     	sta CMD_PORT			; context switch
-00F0CB  1               @wait_completion:
-00F0CB  1  AD 02 D0     	lda CMD_PORT
-00F0CE  1  D0 FB        	bne @wait_completion
-00F0D0  1               
-00F0D0  1  7A           	ply
-00F0D1  1  FA           	plx
-00F0D2  1  68           	pla
-00F0D3  1  40           	rti
-00F0D4  1               .endproc
-00F0D4  1               
-00F0D4  1               ; A = context
-00F0D4  1               ; X = target low
-00F0D4  1               ; Y = target high
-00F0D4  1               .proc SET_MMU_CONTEXT_AND_JUMP
-00F0D4  1                   ; save jump target
-00F0D4  1  8E 44 F0         stx bios_jmp_vec
-00F0D7  1  8C 45 F0         sty bios_jmp_vec+1
-00F0DA  1               
-00F0DA  1  AA           	tax				; context
-00F0DB  1               @wait_cmd:
-00F0DB  1  AD 02 D0     	lda CMD_PORT
-00F0DE  1  D0 FB        	bne @wait_cmd
-00F0E0  1  8E 03 D0     	stx PARAM_PORT
-00F0E3  1  A9 02        	lda #CMD_CONTEXT_SWITCH
-00F0E5  1  8D 02 D0     	sta CMD_PORT
-00F0E8  1               @wait_completion:
-00F0E8  1  AD 02 D0     	lda CMD_PORT
-00F0EB  1  D0 FB        	bne @wait_completion
-00F0ED  1               
-00F0ED  1  58           	cli
-00F0EE  1               
-00F0EE  1  6C 44 F0         jmp (bios_jmp_vec)
-00F0F1  1               .endproc
-00F0F1  1               
-00F0F1  1               ; -----------------------------------------------------------------------------
-00F0F1  1               ; empty
-00F0F1  1               ;
-00F0F1  1               .proc EMPTY
-00F0F1  1  00           	BRK
-00F0F2  1  EA           	NOP
-00F0F3  1               .endproc
-00F0F3  1               
-00F0F3  1               ;IRQ:
-00F0F3  1               ;NMI:
-00F0F3  1               ;	RTI						; stub
-00F0F3  1               ;
-00F0F3  1               ;RESET:
-00F0F3  1               ;	jmp RESET				; stub
-00F0F3  1               
+000000r 1               
+000000r 1               BIOS:					; jump table (16 cmds)
+000000r 1  4C rr rr     	JMP _GETCHAR		; get char
+000003r 1  4C rr rr     	JMP _PUTCHAR		; put char
+000006r 1  4C rr rr     	JMP EMPTY			; check for char in available
+000009r 1  4C rr rr     	JMP EMPTY			; check for ^C input
+00000Cr 1  4C rr rr     	JMP SET_MMU_CONTEXT_AND_RTI	; switch context and rti
+00000Fr 1  4C rr rr     	JMP _GETLINE		; getline of chars
+000012r 1  4C rr rr     	JMP ACK_IRQ			; acknowledge IRQ
+000015r 1  4C rr rr     	JMP SET_MMU_CONTEXT_AND_JUMP	; switch context and jump
+000018r 1  4C rr rr     	JMP EMPTY			; empty slot
+00001Br 1  4C rr rr     	JMP EMPTY			; empty slot
+00001Er 1  4C rr rr     	JMP EMPTY			; empty slot
+000021r 1  4C rr rr     	JMP EMPTY			; empty slot
+000024r 1  4C rr rr     	JMP EMPTY			; empty slot
+000027r 1  4C rr rr     	JMP EMPTY			; empty slot
+00002Ar 1  4C rr rr     	JMP EMPTY			; empty slot
+00002Dr 1  4C rr rr     	JMP EMPTY			; empty slot
+000030r 1               
+000030r 1               ; -----------------------------------------------------------------------------
+000030r 1               ocharbuf:
+000030r 1  xx               .res 1
+000031r 1               
+000031r 1               icharbuf:
+000031r 1  xx           	.res 1
+000032r 1               
+000032r 1               read_blk:
+000032r 1  00               .byte STDIN
+000033r 1  00               .byte 0
+000034r 1  00 00            .word $0000				; ptr linebuf
+000036r 1  01 00            .word 1					; size linebuf
+000038r 1               
+000038r 1               readc_blk:
+000038r 1  00               .byte STDIN
+000039r 1  00               .byte 0
+00003Ar 1  rr rr            .word icharbuf
+00003Cr 1  01 00            .word 1
+00003Er 1               
+00003Er 1               write_blk:
+00003Er 1  01               .byte STDOUT
+00003Fr 1  00               .byte 0
+000040r 1  rr rr            .word ocharbuf
+000042r 1  01 00            .word 1
+000044r 1               
+000044r 1               bios_jmp_vec:
+000044r 1  xx xx        	.res 2
+000046r 1               
+000046r 1               ; -----------------------------------------------------------------------------
+000046r 1               ; read a key from input, only a-reg is used
+000046r 1               ;
+000046r 1               .proc _GETCHAR
+000046r 1  DA           	phx
+000047r 1  5A           	phy
+000048r 1  A2 rr A0 rr  	SYSCALL readc_blk, sys_read
+00004Cr 1  20 09 C0     
+00004Fr 1  B0 19        	bcs @ic_error
+000051r 1               
+000051r 1  09 00        	ora #0
+000053r 1  D0 07        	bne @got_char
+000055r 1  8A           	txa
+000056r 1  D0 04            bne @got_char
+000058r 1  A9 00        	lda #0
+00005Ar 1  80 08        	bra @ok_exit
+00005Cr 1               
+00005Cr 1               @got_char:
+00005Cr 1  AD rr rr     	lda icharbuf
+00005Fr 1  29 7F        	and #$7f			; remove 8 bit
+000061r 1               
+000061r 1  9C rr rr     	stz icharbuf
+000064r 1               
+000064r 1               @ok_exit:
+000064r 1  7A           	ply
+000065r 1  FA           	plx
+000066r 1  09 00        	ora #0
+000068r 1  18           	clc
+000069r 1  60           	rts
+00006Ar 1               
+00006Ar 1               @ic_error:
+00006Ar 1  7A           	ply
+00006Br 1  FA           	plx
+00006Cr 1  A9 00        	lda #0
+00006Er 1  38           	sec
+00006Fr 1  60           	rts
+000070r 1               .endproc
+000070r 1               
+000070r 1               ; -----------------------------------------------------------------------------
+000070r 1               ; write a char to output, only a-reg is used
+000070r 1               ;
+000070r 1               .proc _PUTCHAR
+000070r 1  48           	pha
+000071r 1  29 7F        	and #$7f			; standard ASCII
+000073r 1  F0 10        	beq @pc_ok
+000075r 1  8D rr rr         sta ocharbuf
+000078r 1               
+000078r 1  DA           	phx
+000079r 1  5A           	phy
+00007Ar 1  A2 rr A0 rr      SYSCALL write_blk, sys_write
+00007Er 1  20 0C C0     
+000081r 1  7A           	ply
+000082r 1  FA           	plx
+000083r 1  B0 03            bcs @pc_error
+000085r 1               
+000085r 1               @pc_ok:
+000085r 1  68           	pla
+000086r 1  18           	clc
+000087r 1  60               rts
+000088r 1               
+000088r 1               @pc_error:
+000088r 1  68           	pla
+000089r 1  38               sec
+00008Ar 1  60               rts
+00008Br 1               .endproc
+00008Br 1               
+00008Br 1               ; -----------------------------------------------------------------------------
+00008Br 1               ; X = <linebuf
+00008Br 1               ; Y = >linebuf
+00008Br 1               ; A = len linebuf
+00008Br 1               ; -----------------------------------------------------------------------------
+00008Br 1               .proc _GETLINE
+00008Br 1  8E rr rr     	stx read_blk + rw_args::buf_ptr
+00008Er 1  8C rr rr     	sty read_blk + rw_args::buf_ptr+1
+000091r 1  8D rr rr     	sta read_blk + rw_args::len
+000094r 1  9C rr rr     	stz read_blk + rw_args::len+1
+000097r 1               
+000097r 1  A2 rr A0 rr  	SYSCALL read_blk, sys_read
+00009Br 1  20 09 C0     
+00009Er 1  B0 02        	bcs @gl_error
+0000A0r 1               
+0000A0r 1  18           	clc
+0000A1r 1  60           	rts
+0000A2r 1               
+0000A2r 1               @gl_error:
+0000A2r 1  38           	sec
+0000A3r 1  60           	rts
+0000A4r 1               .endproc
+0000A4r 1               
+0000A4r 1               ; exec command  A=cmd, X=param (optional)
+0000A4r 1               ; wait for cmd == 0
+0000A4r 1               ; set new cmd
+0000A4r 1               ;
+0000A4r 1               .proc exec_cmd
+0000A4r 1  48           	pha
+0000A5r 1               @wait_cmd:
+0000A5r 1  AD 02 D0     	lda CMD_PORT
+0000A8r 1  D0 FB        	bne @wait_cmd
+0000AAr 1  8E 03 D0     	stx PARAM_PORT
+0000ADr 1  68           	pla
+0000AEr 1  8D 02 D0     	sta CMD_PORT
+0000B1r 1  60           	rts
+0000B2r 1               .endproc
+0000B2r 1               
+0000B2r 1               ;
+0000B2r 1               ; ack IRQ
+0000B2r 1               ; registers preserved
+0000B2r 1               ;
+0000B2r 1               .proc ACK_IRQ
+0000B2r 1  48           	pha
+0000B3r 1  A9 01        	lda #CMD_ACK_IRQ
+0000B5r 1  20 rr rr     	jsr exec_cmd
+0000B8r 1  68           	pla
+0000B9r 1  60           	rts
+0000BAr 1               .endproc
+0000BAr 1               
+0000BAr 1               ;
+0000BAr 1               ; switch context
+0000BAr 1               ; A = context
+0000BAr 1               ;
+0000BAr 1               .proc SET_MMU_CONTEXT_AND_RTI
+0000BAr 1  AA           	tax						; context
+0000BBr 1               @wait_cmd:
+0000BBr 1  AD 02 D0     	lda CMD_PORT
+0000BEr 1  D0 FB        	bne @wait_cmd
+0000C0r 1  8E 03 D0     	stx PARAM_PORT
+0000C3r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
+0000C5r 1  8D 02 D0     	sta CMD_PORT			; context switch
+0000C8r 1               @wait_completion:
+0000C8r 1  AD 02 D0     	lda CMD_PORT
+0000CBr 1  D0 FB        	bne @wait_completion
+0000CDr 1               
+0000CDr 1  7A           	ply
+0000CEr 1  FA           	plx
+0000CFr 1  68           	pla
+0000D0r 1  40           	rti
+0000D1r 1               .endproc
+0000D1r 1               
+0000D1r 1               ; A = context
+0000D1r 1               ; X = target low
+0000D1r 1               ; Y = target high
+0000D1r 1               .proc SET_MMU_CONTEXT_AND_JUMP
+0000D1r 1                   ; save jump target
+0000D1r 1  8E rr rr         stx bios_jmp_vec
+0000D4r 1  8C rr rr         sty bios_jmp_vec+1
+0000D7r 1               
+0000D7r 1  AA           	tax				; context
+0000D8r 1               @wait_cmd:
+0000D8r 1  AD 02 D0     	lda CMD_PORT
+0000DBr 1  D0 FB        	bne @wait_cmd
+0000DDr 1  8E 03 D0     	stx PARAM_PORT
+0000E0r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
+0000E2r 1  8D 02 D0     	sta CMD_PORT
+0000E5r 1               @wait_completion:
+0000E5r 1  AD 02 D0     	lda CMD_PORT
+0000E8r 1  D0 FB        	bne @wait_completion
+0000EAr 1               
+0000EAr 1  58           	cli
+0000EBr 1               
+0000EBr 1  6C rr rr         jmp (bios_jmp_vec)
+0000EEr 1               .endproc
+0000EEr 1               
+0000EEr 1               ; -----------------------------------------------------------------------------
+0000EEr 1               ; empty
+0000EEr 1               ;
+0000EEr 1               .proc EMPTY
+0000EEr 1  00           	BRK
+0000EFr 1  EA           	NOP
+0000F0r 1               .endproc
+0000F0r 1               

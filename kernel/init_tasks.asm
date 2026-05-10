@@ -88,7 +88,7 @@ task3_create:
 
 .proc task1
 @loop:
-	lda #25
+	lda #01
 	jsr sys_sleep
     inc test_ctr1
     lda #$01
@@ -101,8 +101,6 @@ task3_create:
 ; ------------------------------------------------------------
 
 .proc task2
-	lda #12
-	jsr sys_sleep
 @loop:
     inc test_ctr2
     lda #$02

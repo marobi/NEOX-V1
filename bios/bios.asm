@@ -10,7 +10,6 @@
 	.include "syscall.inc" 
  
 KBD_PORT   = $D000
-DSP_PORT   = KBD_PORT + 1
 
 CMD_PORT   = KBD_PORT + 2
 PARAM_PORT = KBD_PORT + 3
@@ -25,7 +24,6 @@ CMD_CONTEXT_SWITCH = 2
 ; -----------------------------------------------------------------------------
 ; set up origin
 	.segment "BIOS"
-	.org $F000    		; nice for listing
 
 BIOS:					; jump table (16 cmds)
 	JMP _GETCHAR		; get char
@@ -180,7 +178,6 @@ bios_jmp_vec:
 ;
 .proc ACK_IRQ
 	pha
-	stz BIOS_IRQ_SOURCE
 	lda #CMD_ACK_IRQ
 	jsr exec_cmd
 	pla
@@ -240,10 +237,3 @@ bios_jmp_vec:
 	BRK
 	NOP
 .endproc
-
-;IRQ:	
-;NMI:
-;	RTI						; stub
-;	
-;RESET:
-;	jmp RESET				; stub

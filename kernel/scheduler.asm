@@ -75,6 +75,9 @@
 .import scheduler_tick
 .import scheduler_wake_timers
 
+.import proc_ticks_lo
+.import proc_ticks_hi
+
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
@@ -137,26 +140,24 @@
 ; ------------------------------------------------------------
 ; proc_set_wait
 ;
-; Input:
-;   X = pid
-;   A = wait reason
-;   Y = wait object
+; Mark process X blocked on wait reason A / object Y.
 ;
-; Purpose:
-;   Mark a process as blocked on a specific wait reason/object.
-;
-; Notes:
-;   This is the generic replacement for device-specific wait
-;   variables such as console_wait_pid.
+; PID 0 is the idle task and must never enter a wait state.
+; If idle blocks, the scheduler has no guaranteed fallback task.
 ; ------------------------------------------------------------
-
 .proc proc_set_wait
+    cpx #IDLE_PID
+    beq @done
+
     sta wait_reason,x
     tya
     sta wait_object,x
 
     lda #PROC_BLOCKED
-    jmp proc_set_state
+    sta proc_state,x
+
+@done:
+    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -206,18 +207,75 @@
 ; ------------------------------------------------------------
 
 .proc proc_exit_current
-    ; Resolve exiting PID.
     ldx current_pid
 
-    ; Release all process-owned file descriptors.
-    jsr fd_close_process
+    ; If the exiting process owns the console, release ownership.
+    ; Do not transfer ownership to whatever process runs next.
+    cpx console_owner_pid
+    bne @console_done
 
-    ; Clear generic wait metadata.
+    lda #$FF
+    sta console_owner_pid
+
+@console_done:
+    jsr fd_close_process
     jsr proc_clear_wait
 
-    ; Mark process slot unused.
     lda #PROC_EMPTY
-    jmp proc_set_state
+    jsr proc_set_state
+
+    jmp sched_yield
+.endproc
+
+; ------------------------------------------------------------
+; proc_accounting_init
+;
+; Clear per-process runtime counters.
+;
+; This must run during scheduler/process initialization before
+; the timer IRQ is enabled. Once IRQ accounting starts, these
+; counters are updated from interrupt context and must not be
+; cleared casually.
+;
+; Clobbers:
+;   X
+; ------------------------------------------------------------
+.proc proc_accounting_init
+    ldx #MAX_PROCS - 1
+
+@clear_proc:
+    stz proc_ticks_lo,x
+    stz proc_ticks_hi,x
+
+    dex
+    bpl @clear_proc
+
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; sched_account_tick
+;
+; Account one scheduler tick to the currently running process.
+;
+; PID 0 is the idle task. System idle time is therefore equal
+; to proc_ticks[0].
+;
+; Called from timer IRQ context.
+;
+; Clobbers:
+;   X
+; ------------------------------------------------------------
+.proc sched_account_tick
+    ldx current_pid
+
+    inc proc_ticks_lo,x
+    bne @done
+
+    inc proc_ticks_hi,x
+
+@done:
+    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -254,7 +312,7 @@
     ; --------------------------------------------------------
 
     cmp #0
-    beq @set_focus
+    beq @clear_focus
 
     ; --------------------------------------------------------
     ; Validate PID range.
@@ -290,57 +348,37 @@
 ; ------------------------------------------------------------
 ; scheduler_wake_console_input
 ;
-; Purpose:
-;   Wake processes blocked on console input when RP reports that
-;   keyboard data is available.
+; Wake the console owner if it is blocked on console input.
 ;
-; Model:
-;   A process is considered console-blocked when:
+; RP_CONSOLE_RDY only means input may be available. The woken
+; process must retry the actual console read after resuming.
 ;
-;       proc_state[pid]  == PROC_BLOCKED
-;       wait_reason[pid] == WAIT_CONSOLE
-;
-; Notes:
-;   This currently wakes the first matching process.
-;   With the console ownership invariant, only the owner should
-;   be waiting on console input anyway.
+; This routine does not consume input.
 ; ------------------------------------------------------------
 
 .proc scheduler_wake_console_input
-    ; No input ready → nothing to wake.
     lda RP_CONSOLE_RDY
     beq @done
 
-    ; Scan user task PIDs only.
-    ldx #FIRST_TASK_PID
+    ldx console_owner_pid
+    cpx #$FF
+    beq @done
 
-@scan:
+    cpx #FIRST_TASK_PID
+    bcc @done
+
     cpx #MAX_PROCS
     bcs @done
 
-    ; Only blocked processes can be woken.
     lda proc_state,x
     cmp #PROC_BLOCKED
-    bne @next
+    bne @done
 
-    ; Only wake console waiters here.
     lda wait_reason,x
     cmp #WAIT_CONSOLE
-    bne @next
+    bne @done
 
-    ; Clear wait state before making process READY.
-    ; The wake reason is now satisfied.
-    jsr proc_clear_wait
-
-    ; Wake this process.
-    jsr proc_wake
-
-    ; Current console model has only one console waiter.
-    rts
-
-@next:
-    inx
-    bra @scan
+    jmp proc_wake
 
 @done:
     rts
@@ -357,6 +395,8 @@
 ; ------------------------------------------------------------
 
 .proc scheduler_init
+	jsr proc_accounting_init
+	
     stz current_pid
     stz sched_lock
     stz monitor_return_mode
@@ -614,6 +654,8 @@
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
+	jsr sched_account_tick
+
     ; Save interrupted SP for current PID.
     ldy current_pid
     tsx
@@ -644,7 +686,7 @@
 
     ; X = selected PID, including possible IDLE fallback.
     stx current_pid
-
+	
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new
@@ -725,7 +767,7 @@
 
     jsr sched_pick_next
     stx current_pid
-
+	
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new
