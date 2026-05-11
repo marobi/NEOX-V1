@@ -98,8 +98,6 @@ MONITOR_ENTRY       = $B000
 ; ------------------------------------------------------------
 
 .proc leave_monitor
-    sei
-
     ; Release scheduler before restoring task stack.
     jsr sched_lock_leave
 
@@ -117,12 +115,13 @@ MONITOR_ENTRY       = $B000
     cmp #MONITOR_RET_RTS
     beq @return_rts
 
+	cli
     jmp BIOS_CONTEXT_RTI
 
 @return_rts:
     ldx #<resume_rts_from_monitor
     ldy #>resume_rts_from_monitor
-    jmp BIOS_CONTEXT_JUMP
+	jmp BIOS_CONTEXT_JUMP
 .endproc
 
 ; ------------------------------------------------------------
@@ -132,5 +131,5 @@ MONITOR_ENTRY       = $B000
 ; ------------------------------------------------------------
 
 .proc resume_rts_from_monitor
-    rts
+	rts
 .endproc

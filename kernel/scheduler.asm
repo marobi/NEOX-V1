@@ -737,6 +737,10 @@
 ;   sys_yield
 ;   sys_sleep after marking current process BLOCKED
 ;   future blocking syscalls
+;
+; Important:
+;   This routine does not wake timers or console waiters.
+;   Event wakeups belong to the IRQ scheduler path.
 ; ------------------------------------------------------------
 
 .proc sched_yield
@@ -746,41 +750,40 @@
     txa
     sta proc_sp,y
 
+    ; This stack was saved from syscall/user context.
     lda #PROC_RESUME_RTS
     sta proc_resume_mode,y
 
-    ; If caller is still RUNNING, make it READY.
+    ; If the caller is still RUNNING, make it READY.
     ; Blocking syscalls set PROC_BLOCKED before calling this,
-    ; so they are left blocked.
+    ; so blocked tasks must remain blocked.
     lda proc_state,y
     cmp #PROC_RUNNING
-    bne @wake
+    bne @pick
 
     tya
     tax
     jsr proc_set_ready
 
-@wake:
-    jsr sched_update_console_focus
-    jsr scheduler_wake_console_input
-    jsr scheduler_wake_timers
-
+@pick:
     jsr sched_pick_next
+
+    ; X = selected PID, including possible IDLE fallback.
     stx current_pid
-	
+
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new
 
+    ; Resume existing process.
     jsr proc_set_running
 
     lda proc_sp,x
     tax
     txs
 
-    ; Voluntary handoff resumes through RTS semantics.
+    ; Resume through the stack format recorded for this PID.
     ldx current_pid
-
     lda proc_resume_mode,x
     cmp #PROC_RESUME_RTS
     beq @resume_rts
@@ -791,11 +794,10 @@
 
 @resume_rts:
     lda proc_context,x
-
     ldx #<sched_resume_rts
     ldy #>sched_resume_rts
     jmp BIOS_CONTEXT_JUMP
-	
+
 @start_new:
     jsr proc_set_running
 
@@ -827,15 +829,16 @@
     ldx #$FF
     txs
 
-    ; First-run path does not restore P via RTI.
-    cli
-
     ; Resolve entry address into private zero-page sched_ptr.
     ldx current_pid
     lda proc_entryL,x
     sta sched_ptr
     lda proc_entryH,x
     sta sched_ptr+1
+
+    ; First-run path does not restore P via RTI.
+    cld
+	cli
 
     jmp (sched_ptr)
 .endproc

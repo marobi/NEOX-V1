@@ -88,11 +88,11 @@
 
     jsr irq_get_source
 
-    cmp #RP_IRQ_SRC_MONITOR
-    beq @monitor
-
     cmp #RP_IRQ_SRC_TIMER
     beq @timer
+
+    cmp #RP_IRQ_SRC_MONITOR
+    beq @monitor
 
     tsx
     lda $0104,x
@@ -100,6 +100,7 @@
     bne brk_entry
 
     ; unknown → just return
+    jsr BIOS_ACK_IRQ         ; clear source
     bra irq_restore
 
 @monitor:

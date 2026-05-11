@@ -75,37 +75,47 @@ bios_jmp_vec:
 ; read a key from input, only a-reg is used
 ;
 .proc _GETCHAR
-	phx
-	phy
-	SYSCALL readc_blk, sys_read
-	bcs @ic_error
-	
-	ora #0
-	bne @got_char
-	txa
+@retry:
+    phx
+    phy
+
+    SYSCALL readc_blk, sys_read
+    bcs @ic_error
+
+    ; A/X = bytes read.
+    ; If zero bytes were returned, retry inside BIOS instead of
+    ; returning NUL to the caller. This prevents user tasks from
+    ; spinning on BEQ loops.
+    ora #0
     bne @got_char
-	lda #0
-	bra @ok_exit
+
+    txa
+    bne @got_char
+
+    ply
+    plx
+    bra @retry
 
 @got_char:
-	lda icharbuf
-	and #$7f			; remove 8 bit
-	
-	stz icharbuf
+    lda icharbuf
+    and #$7f
 
-@ok_exit:
-	ply
-	plx
-	ora #0
-	clc
-	rts
+    stz icharbuf
+
+    ply
+    plx
+
+    ora #0
+    clc
+    rts
 
 @ic_error:
-	ply
-	plx
-	lda #0
-	sec
-	rts
+    ply
+    plx
+
+    lda #0
+    sec
+    rts
 .endproc
 
 ; -----------------------------------------------------------------------------
@@ -163,12 +173,14 @@ bios_jmp_vec:
 ;
 .proc exec_cmd
 	pha
+
 @wait_cmd:
 	lda CMD_PORT
 	bne @wait_cmd
 	stx PARAM_PORT
 	pla
 	sta CMD_PORT
+	
 	rts
 .endproc
 
@@ -177,10 +189,12 @@ bios_jmp_vec:
 ; registers preserved
 ;
 .proc ACK_IRQ
+	sei
 	pha
 	lda #CMD_ACK_IRQ
 	jsr exec_cmd
 	pla
+	cli
 	rts
 .endproc
 
@@ -190,12 +204,14 @@ bios_jmp_vec:
 ;
 .proc SET_MMU_CONTEXT_AND_RTI
 	tax						; context
+	sei
 @wait_cmd:
 	lda CMD_PORT
 	bne @wait_cmd
 	stx PARAM_PORT
 	lda #CMD_CONTEXT_SWITCH
 	sta CMD_PORT			; context switch
+
 @wait_completion:
 	lda CMD_PORT
 	bne @wait_completion
@@ -203,6 +219,7 @@ bios_jmp_vec:
 	ply
 	plx
 	pla
+	cli
 	rti
 .endproc
 
@@ -210,6 +227,7 @@ bios_jmp_vec:
 ; X = target low
 ; Y = target high
 .proc SET_MMU_CONTEXT_AND_JUMP
+	sei
     ; save jump target
     stx bios_jmp_vec
     sty bios_jmp_vec+1
@@ -224,9 +242,8 @@ bios_jmp_vec:
 @wait_completion:
 	lda CMD_PORT
 	bne @wait_completion
-	
-	cli
 
+	cli
     jmp (bios_jmp_vec)
 .endproc
 	

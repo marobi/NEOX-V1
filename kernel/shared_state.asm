@@ -279,6 +279,19 @@ timer_until_hi:
 
 proc_ticks_lo:    .res MAX_PROCS
 proc_ticks_hi:    .res MAX_PROCS
+
+.export console_read_len_lo
+.export console_read_len_hi
+
+.segment "KERN_BSS"
+
+; Requested console read length for the active console read.
+;
+; console_read may block and resume through sched_yield. The
+; original A/X length is not reliable after that resume, so the
+; console device stores it here before blocking.
+console_read_len_lo: .res 1
+console_read_len_hi: .res 1
 	
 ; ---------------------------------------------------------------------------------------------
 

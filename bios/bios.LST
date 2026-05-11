@@ -209,38 +209,48 @@ Current file: bios.asm
 000046r 1               ; read a key from input, only a-reg is used
 000046r 1               ;
 000046r 1               .proc _GETCHAR
-000046r 1  DA           	phx
-000047r 1  5A           	phy
-000048r 1  A2 rr A0 rr  	SYSCALL readc_blk, sys_read
+000046r 1               @retry:
+000046r 1  DA               phx
+000047r 1  5A               phy
+000048r 1               
+000048r 1  A2 rr A0 rr      SYSCALL readc_blk, sys_read
 00004Cr 1  20 09 C0     
-00004Fr 1  B0 19        	bcs @ic_error
+00004Fr 1  B0 19            bcs @ic_error
 000051r 1               
-000051r 1  09 00        	ora #0
-000053r 1  D0 07        	bne @got_char
-000055r 1  8A           	txa
+000051r 1                   ; A/X = bytes read.
+000051r 1                   ; If zero bytes were returned, retry inside BIOS instead of
+000051r 1                   ; returning NUL to the caller. This prevents user tasks from
+000051r 1                   ; spinning on BEQ loops.
+000051r 1  09 00            ora #0
+000053r 1  D0 07            bne @got_char
+000055r 1               
+000055r 1  8A               txa
 000056r 1  D0 04            bne @got_char
-000058r 1  A9 00        	lda #0
-00005Ar 1  80 08        	bra @ok_exit
+000058r 1               
+000058r 1  7A               ply
+000059r 1  FA               plx
+00005Ar 1  80 EA            bra @retry
 00005Cr 1               
 00005Cr 1               @got_char:
-00005Cr 1  AD rr rr     	lda icharbuf
-00005Fr 1  29 7F        	and #$7f			; remove 8 bit
+00005Cr 1  AD rr rr         lda icharbuf
+00005Fr 1  29 7F            and #$7f
 000061r 1               
-000061r 1  9C rr rr     	stz icharbuf
+000061r 1  9C rr rr         stz icharbuf
 000064r 1               
-000064r 1               @ok_exit:
-000064r 1  7A           	ply
-000065r 1  FA           	plx
-000066r 1  09 00        	ora #0
-000068r 1  18           	clc
-000069r 1  60           	rts
+000064r 1  7A               ply
+000065r 1  FA               plx
+000066r 1               
+000066r 1  09 00            ora #0
+000068r 1  18               clc
+000069r 1  60               rts
 00006Ar 1               
 00006Ar 1               @ic_error:
-00006Ar 1  7A           	ply
-00006Br 1  FA           	plx
-00006Cr 1  A9 00        	lda #0
-00006Er 1  38           	sec
-00006Fr 1  60           	rts
+00006Ar 1  7A               ply
+00006Br 1  FA               plx
+00006Cr 1               
+00006Cr 1  A9 00            lda #0
+00006Er 1  38               sec
+00006Fr 1  60               rts
 000070r 1               .endproc
 000070r 1               
 000070r 1               ; -----------------------------------------------------------------------------
@@ -300,12 +310,14 @@ Current file: bios.asm
 0000A4r 1               ;
 0000A4r 1               .proc exec_cmd
 0000A4r 1  48           	pha
+0000A5r 1               
 0000A5r 1               @wait_cmd:
 0000A5r 1  AD 02 D0     	lda CMD_PORT
 0000A8r 1  D0 FB        	bne @wait_cmd
 0000AAr 1  8E 03 D0     	stx PARAM_PORT
 0000ADr 1  68           	pla
 0000AEr 1  8D 02 D0     	sta CMD_PORT
+0000B1r 1               
 0000B1r 1  60           	rts
 0000B2r 1               .endproc
 0000B2r 1               
@@ -314,64 +326,69 @@ Current file: bios.asm
 0000B2r 1               ; registers preserved
 0000B2r 1               ;
 0000B2r 1               .proc ACK_IRQ
-0000B2r 1  48           	pha
-0000B3r 1  A9 01        	lda #CMD_ACK_IRQ
-0000B5r 1  20 rr rr     	jsr exec_cmd
-0000B8r 1  68           	pla
-0000B9r 1  60           	rts
-0000BAr 1               .endproc
-0000BAr 1               
-0000BAr 1               ;
-0000BAr 1               ; switch context
-0000BAr 1               ; A = context
-0000BAr 1               ;
-0000BAr 1               .proc SET_MMU_CONTEXT_AND_RTI
-0000BAr 1  AA           	tax						; context
-0000BBr 1               @wait_cmd:
-0000BBr 1  AD 02 D0     	lda CMD_PORT
-0000BEr 1  D0 FB        	bne @wait_cmd
-0000C0r 1  8E 03 D0     	stx PARAM_PORT
-0000C3r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
-0000C5r 1  8D 02 D0     	sta CMD_PORT			; context switch
-0000C8r 1               @wait_completion:
-0000C8r 1  AD 02 D0     	lda CMD_PORT
-0000CBr 1  D0 FB        	bne @wait_completion
-0000CDr 1               
-0000CDr 1  7A           	ply
-0000CEr 1  FA           	plx
-0000CFr 1  68           	pla
-0000D0r 1  40           	rti
-0000D1r 1               .endproc
-0000D1r 1               
-0000D1r 1               ; A = context
-0000D1r 1               ; X = target low
-0000D1r 1               ; Y = target high
-0000D1r 1               .proc SET_MMU_CONTEXT_AND_JUMP
-0000D1r 1                   ; save jump target
-0000D1r 1  8E rr rr         stx bios_jmp_vec
-0000D4r 1  8C rr rr         sty bios_jmp_vec+1
-0000D7r 1               
-0000D7r 1  AA           	tax				; context
-0000D8r 1               @wait_cmd:
-0000D8r 1  AD 02 D0     	lda CMD_PORT
-0000DBr 1  D0 FB        	bne @wait_cmd
-0000DDr 1  8E 03 D0     	stx PARAM_PORT
-0000E0r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
-0000E2r 1  8D 02 D0     	sta CMD_PORT
-0000E5r 1               @wait_completion:
-0000E5r 1  AD 02 D0     	lda CMD_PORT
-0000E8r 1  D0 FB        	bne @wait_completion
-0000EAr 1               
-0000EAr 1  58           	cli
-0000EBr 1               
-0000EBr 1  6C rr rr         jmp (bios_jmp_vec)
-0000EEr 1               .endproc
-0000EEr 1               
-0000EEr 1               ; -----------------------------------------------------------------------------
-0000EEr 1               ; empty
-0000EEr 1               ;
-0000EEr 1               .proc EMPTY
-0000EEr 1  00           	BRK
-0000EFr 1  EA           	NOP
-0000F0r 1               .endproc
-0000F0r 1               
+0000B2r 1  78           	sei
+0000B3r 1  48           	pha
+0000B4r 1  A9 01        	lda #CMD_ACK_IRQ
+0000B6r 1  20 rr rr     	jsr exec_cmd
+0000B9r 1  68           	pla
+0000BAr 1  58           	cli
+0000BBr 1  60           	rts
+0000BCr 1               .endproc
+0000BCr 1               
+0000BCr 1               ;
+0000BCr 1               ; switch context
+0000BCr 1               ; A = context
+0000BCr 1               ;
+0000BCr 1               .proc SET_MMU_CONTEXT_AND_RTI
+0000BCr 1  AA           	tax						; context
+0000BDr 1  78           	sei
+0000BEr 1               @wait_cmd:
+0000BEr 1  AD 02 D0     	lda CMD_PORT
+0000C1r 1  D0 FB        	bne @wait_cmd
+0000C3r 1  8E 03 D0     	stx PARAM_PORT
+0000C6r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
+0000C8r 1  8D 02 D0     	sta CMD_PORT			; context switch
+0000CBr 1               
+0000CBr 1               @wait_completion:
+0000CBr 1  AD 02 D0     	lda CMD_PORT
+0000CEr 1  D0 FB        	bne @wait_completion
+0000D0r 1               
+0000D0r 1  7A           	ply
+0000D1r 1  FA           	plx
+0000D2r 1  68           	pla
+0000D3r 1  58           	cli
+0000D4r 1  40           	rti
+0000D5r 1               .endproc
+0000D5r 1               
+0000D5r 1               ; A = context
+0000D5r 1               ; X = target low
+0000D5r 1               ; Y = target high
+0000D5r 1               .proc SET_MMU_CONTEXT_AND_JUMP
+0000D5r 1  78           	sei
+0000D6r 1                   ; save jump target
+0000D6r 1  8E rr rr         stx bios_jmp_vec
+0000D9r 1  8C rr rr         sty bios_jmp_vec+1
+0000DCr 1               
+0000DCr 1  AA           	tax				; context
+0000DDr 1               @wait_cmd:
+0000DDr 1  AD 02 D0     	lda CMD_PORT
+0000E0r 1  D0 FB        	bne @wait_cmd
+0000E2r 1  8E 03 D0     	stx PARAM_PORT
+0000E5r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
+0000E7r 1  8D 02 D0     	sta CMD_PORT
+0000EAr 1               @wait_completion:
+0000EAr 1  AD 02 D0     	lda CMD_PORT
+0000EDr 1  D0 FB        	bne @wait_completion
+0000EFr 1               
+0000EFr 1  58           	cli
+0000F0r 1  6C rr rr         jmp (bios_jmp_vec)
+0000F3r 1               .endproc
+0000F3r 1               
+0000F3r 1               ; -----------------------------------------------------------------------------
+0000F3r 1               ; empty
+0000F3r 1               ;
+0000F3r 1               .proc EMPTY
+0000F3r 1  00           	BRK
+0000F4r 1  EA           	NOP
+0000F5r 1               .endproc
+0000F5r 1               

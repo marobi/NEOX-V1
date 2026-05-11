@@ -30,9 +30,17 @@
 
 .include "syscall.inc"
 .include "fd.inc"
+.include "process.inc"
 
 .export ksys_read
+.export ksys_console_read_blocking
 .export ksys_write
+
+.import current_pid
+.import proc_set_wait
+.import sched_yield
+.import rp_console_read_start
+.import rp_console_read_finish
 
 .import fd_lookup
 .import dev_resolve_op
@@ -114,6 +122,50 @@
 .endproc
 
 ; ------------------------------------------------------------
+; ksys_console_read_blocking
+;
+; Purpose:
+;   Submit a console read request and wait for RP completion.
+;
+; Scheduling:
+;   While the RP request is in flight, the current task yields
+;   cooperatively so other runnable tasks may execute.
+;
+; Important:
+;   WAIT_CONSOLE blocking already happened in console_read
+;   before this routine was entered.
+; ------------------------------------------------------------
+
+.proc ksys_console_read_blocking
+    jsr rp_console_read_start
+    bcs @fail
+
+@wait:
+    jsr rp_console_read_finish
+    bcc @done
+
+    ; RP request still in progress.
+    ;
+    ; Do NOT enter WAIT_CONSOLE here because the console
+    ; readiness event was already consumed before starting
+    ; the mailbox transaction.
+    cpy #E_OK
+    bne @fail
+
+    ; Cooperatively hand off CPU while RP completes.
+    jsr sched_yield
+    bra @wait
+
+@done:
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
 ; ksys_write
 ;
 ; Purpose:
@@ -178,3 +230,4 @@
     jsr dev_call
     rts
 .endproc
+

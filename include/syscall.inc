@@ -42,6 +42,7 @@ SYS_EXIT			= $00
 SYS_READ            = $03
 SYS_WRITE           = $04
 SYS_MONITOR         = $05
+SYS_YIELD           = $0B
 SYS_SLEEP           = $0E
 
 ; ------------------------------------------------------------
@@ -52,6 +53,7 @@ sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
 sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
 sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------

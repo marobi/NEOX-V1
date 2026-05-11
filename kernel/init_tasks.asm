@@ -116,13 +116,13 @@ task3_create:
 
 .proc task_console
 @loop:
-    ; try to read 1 byte
+    ; read a char from console
     jsr BIOS_GETCHAR
-    beq @loop
 	
     ; echo received character
     jsr BIOS_PUTCHAR
 	
+	; when q exit
 	cmp #'q'
 	bne @loop
 	

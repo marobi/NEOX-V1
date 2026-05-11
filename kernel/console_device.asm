@@ -22,20 +22,23 @@
 .include "process.inc"
 .include "syscall.inc"
 .include "mailbox.inc"
+.include "scheduler_defs.inc"
 
 .export console_ops
 
 .import current_pid
 .import sched_lock
 .import console_owner_pid
-.import console_wait_pid
-
-.import proc_set_blocked
 
 .import proc_set_wait
 
-.import rp_console_read
+.import sched_yield
+
+.import ksys_console_read_blocking
 .import rp_console_write
+
+.import console_read_len_lo
+.import console_read_len_hi
 
 .segment "KERN_TEXT"
 
@@ -66,9 +69,7 @@ console_ops:
 ;      - No ownership checks
 ;      - Never blocks any process
 ;
-;   2. Normal process path (sched_lock == 0)
-;      - Only console_owner_pid may read
-;      - If no data: process is BLOCKED and console_wait_pid is set
+;   2. Console blocking uses the generic wait_reason/wait_object model
 ;
 ; Input:
 ;   A/X    = requested byte count
@@ -82,16 +83,20 @@ console_ops:
 ;             Y = E_OK → process was blocked
 ;
 ; Invariants:
-;   - Only one process may block on console (console_wait_pid)
+;   - Only one process may block on console
 ;   - Monitor must not interfere with process blocking state
 ;   - RP_CONSOLE_RDY must be checked before calling rp_console_read
 ; ------------------------------------------------------------
 
 .proc console_read
-    ; Preserve requested length (A/X).
-    pha
-    phx
+    ; Save requested length once for this read call.
+    ;
+    ; The routine may block and resume through sched_yield.
+    ; After that resume, A/X are not reliable anymore.
+    sta console_read_len_lo
+    stx console_read_len_hi
 
+@retry:
     ; --------------------------------------------------------
     ; Monitor / supervisor path
     ;
@@ -106,22 +111,29 @@ console_ops:
     ; --------------------------------------------------------
     ; Normal process path
     ;
-    ; Only the accepted console owner may read input.
+    ; Only the accepted console owner may read input. If no
+    ; owner exists yet, the first normal reader becomes owner.
     ; --------------------------------------------------------
     lda console_owner_pid
 
-    ; No owner assigned → no input allowed
     cmp #$FF
+    bne @owner_known
+
+    lda current_pid
+    cmp #IDLE_PID
     beq @zero_read
 
-    ; Not the owner → no input
+    sta console_owner_pid
+    bra @owner_ok
+
+@owner_known:
     cmp current_pid
     bne @zero_read
 
+@owner_ok:
     ; Owner requesting input → check readiness
     lda RP_CONSOLE_RDY
     bne @has_data
-
     ; --------------------------------------------------------
     ; Owner + no data → block on console input
     ; --------------------------------------------------------
@@ -134,14 +146,8 @@ console_ops:
     ldy #0
     jsr proc_set_wait
 
-    ; Restore requested read length from stack before returning.
-    plx
-    pla
-
-    ; C set + Y = E_OK means "blocked, not an error".
-    ldy #E_OK
-    sec
-    rts
+    jsr sched_yield
+    bra @retry
 	
 ; ------------------------------------------------------------
 ; Monitor path: nonblocking polling only
@@ -154,16 +160,14 @@ console_ops:
 ; Data ready → perform actual read
 ; ------------------------------------------------------------
 @has_data:
-    plx
-    pla
-    jmp rp_console_read
-
+    lda console_read_len_lo
+    ldx console_read_len_hi
+    jmp ksys_console_read_blocking
+	
 ; ------------------------------------------------------------
 ; Return 0 bytes (no data or not owner)
 ; ------------------------------------------------------------
 @zero_read:
-    plx
-    pla
     lda #0
     tax
     clc

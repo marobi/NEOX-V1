@@ -36,7 +36,8 @@
 .export rp_wait_idle
 .export rp_wait_done
 .export rp_console_write
-.export rp_console_read
+.export rp_console_read_start
+.export rp_console_read_finish
 
 .importzp io_ptr
 .importzp rp_tmp
@@ -437,44 +438,5 @@
 
     ldy #EIO
     sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; rp_console_read
-;
-; Purpose:
-;   Backward-compatible synchronous console read.
-;
-; Notes:
-;   - Existing k_read can continue to tail-call this.
-;   - This wrapper still busy-waits.
-;   - It does not use sched_lock in the async part, but the
-;     wrapper itself locks scheduling to preserve old semantics.
-; ------------------------------------------------------------
-
-.proc rp_console_read
-    ; Preserve old synchronous behavior for current syscall path.
-    jsr sched_lock_enter
-
-    jsr rp_console_read_start
-    bcs @fail_locked
-
-@wait:
-    jsr rp_console_read_finish
-    bcc @done_locked
-
-    ; Y = E_OK means still busy, not failure.
-    cpy #E_OK
-    beq @wait
-
-@fail_locked:
-    jsr sched_lock_leave
-    sec
-    rts
-
-@done_locked:
-    jsr sched_lock_leave
-    clc
     rts
 .endproc
