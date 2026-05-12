@@ -172,7 +172,9 @@ syscall_table:
 .endproc
 
 .proc k_yield
-    jmp KERN_ENTRY_KSYS_YIELD
+    jsr KERN_ENTRY_KSYS_YIELD
+	clc
+	rts
 .endproc
 
 .proc k_sbrk

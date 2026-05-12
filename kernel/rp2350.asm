@@ -105,9 +105,19 @@
 ; ------------------------------------------------------------
 
 .proc rp_acquire_lock
-@wait:
+@wait_lock:
     jsr rp_try_acquire_lock
-    bcc @wait
+    bcc @wait_lock
+
+    lda RP_STATUS
+    cmp #RP_IDLE
+    beq @ok
+
+@bad:
+    bra @bad
+
+@ok:
+    sec
     rts
 .endproc
 
@@ -128,6 +138,18 @@
 ; ------------------------------------------------------------
 
 .proc rp_release_lock
+    lda RP_STATUS
+    cmp #RP_IDLE
+    beq @release
+
+@bad:
+    ; Invariant violation:
+    ; caller tried to release mailbox ownership while RP_STATUS
+    ; was not IDLE. This would allow the next caller to acquire
+    ; rp_lock while a transaction is still live or uncleared.
+    bra @bad
+
+@release:
     lda #$01
     trb rp_lock
     sec
@@ -224,31 +246,24 @@
 ; ------------------------------------------------------------
 
 .proc rp_console_write
-    ; Save requested transfer length
-    sta rp_tmp
-    stx rp_tmp+1
-
-    ; Prevent preemption while mailbox state is live
-    jsr sched_lock_enter
-
+	pha
     ; Gain exclusive ownership of shared mailbox
     jsr rp_acquire_lock
+	pla
 	
-	; wait for last command to finish
-    jsr rp_wait_idle
+	php
+	sei
 
     ; --------------------------------------------------------
     ; Fill request block in shared RAM
     ; --------------------------------------------------------
+    sta RP_ARG1L
+    stx RP_ARG1H
+
     lda io_ptr
     sta RP_ARG0L
     lda io_ptr+1
     sta RP_ARG0H
-
-    lda rp_tmp
-    sta RP_ARG1L
-    lda rp_tmp+1
-    sta RP_ARG1H
 
     stz RP_ARG2L
     stz RP_ARG2H
@@ -267,38 +282,42 @@
     lda #RP_CMD_CON_WRITE
     sta RP_DOORBELL
 
+	cli
+	
     ; --------------------------------------------------------
     ; Wait for completion
     ; --------------------------------------------------------
     jsr rp_wait_done
     bcs @fail
 
+	sei
+	
     ; Preserve result across cleanup
     lda RP_RES0L
     ldx RP_RES0H
     pha
-    txa
-    pha
+    phx
 
     ; Return interface to idle and release ownership
     stz RP_STATUS
 
     jsr rp_release_lock
-    jsr sched_lock_leave
 
     ; Restore AX result
+    plx
     pla
-    tax
-    pla
+	plp
     clc
     rts
 
 @fail:
+	phy
     stz RP_STATUS
 
     jsr rp_release_lock
-    jsr sched_lock_leave
-    sec
+    ply
+	plp
+	sec
     rts
 .endproc
 
@@ -329,33 +348,25 @@
 ; ------------------------------------------------------------
 
 .proc rp_console_read_start
-    ; Save requested transfer length
-    sta rp_tmp
-    stx rp_tmp+1
-
+	pha
     ; Own the mailbox.
     ; No sched_lock here: other tasks must continue to run while
     ; the RP completes the request.
     jsr rp_acquire_lock
-
-    ; Ensure no previous command is still visible in the mailbox.
-    jsr rp_wait_idle
-
+	pla
+	
     ; --------------------------------------------------------
     ; Fill request block in shared RAM.
     ; --------------------------------------------------------
+    ; Requested length
+    sta RP_ARG1L
+    stx RP_ARG1H
 
     ; Destination buffer pointer
     lda io_ptr
     sta RP_ARG0L
     lda io_ptr+1
     sta RP_ARG0H
-
-    ; Requested length
-    lda rp_tmp
-    sta RP_ARG1L
-    lda rp_tmp+1
-    sta RP_ARG1H
 
     ; Clear unused args/result/status detail fields
     stz RP_ARG2L
@@ -422,7 +433,8 @@
     ldx RP_RES0H
 
     ; Mark mailbox interface idle again.
-    stz RP_STATUS
+    lda #RP_IDLE
+	sta RP_STATUS
 
     ; Release mailbox ownership.
     jsr rp_release_lock
@@ -433,7 +445,8 @@
 @error:
     ; Preserve RP error in Y if you later map RP_ERR to errno.
     ; For now return generic EIO.
-    stz RP_STATUS
+    lda #RP_IDLE
+	sta RP_STATUS
     jsr rp_release_lock
 
     ldy #EIO

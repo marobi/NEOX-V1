@@ -645,17 +645,51 @@
 ;   IRQ/RTI-compatible frame.
 ;
 ; Policy:
-;   - Save current SP
-;   - Mark saved stack as RTI-resumable
-;   - Convert current RUNNING process to READY
-;   - Wake pending events
-;   - Pick next runnable process
-;   - Resume next process using its recorded resume mode
+;   - Always account the timer tick.
+;   - If sched_lock != 0, do not switch tasks.
+;   - Otherwise:
+;       save current SP
+;       mark saved stack as RTI-resumable
+;       convert current RUNNING process to READY
+;       wake pending events
+;       pick next runnable process
+;       resume next process using its recorded resume mode
+;
+; Important:
+;   sched_lock protects kernel critical sections. IRQs may still
+;   occur while sched_lock is nonzero, but task switching must
+;   not happen then.
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
-	jsr sched_account_tick
+    jsr sched_account_tick
 
+    ; --------------------------------------------------------
+    ; Scheduler locked:
+    ;
+    ; The interrupted process is inside a kernel critical
+    ; section. Save its IRQ stack state, but do not change
+    ; process state and do not select another process.
+    ;
+    ; This prevents cases where a process is switched away while
+    ; mailbox/status/lock cleanup is only half complete.
+    ; --------------------------------------------------------
+    lda sched_lock
+    beq @normal_switch
+
+    ldy current_pid
+
+    tsx
+    txa
+    sta proc_sp,y
+
+    lda #PROC_RESUME_RTI
+    sta proc_resume_mode,y
+
+    lda proc_context,y
+    jmp BIOS_CONTEXT_RTI
+
+@normal_switch:
     ; Save interrupted SP for current PID.
     ldy current_pid
     tsx
@@ -686,7 +720,7 @@
 
     ; X = selected PID, including possible IDLE fallback.
     stx current_pid
-	
+
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new

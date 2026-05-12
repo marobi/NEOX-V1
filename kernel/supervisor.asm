@@ -88,40 +88,55 @@ MONITOR_ENTRY       = $B000
 ;   Leave MICMON and return to the process that was current when
 ;   monitor was entered.
 ;
-; Scheduler model:
-;   Monitor entry froze scheduling with sched_lock_enter.
-;   Monitor exit releases that lock, but does not alter process state.
+; Critical ordering:
+;   - IRQs are disabled during the transition.
+;   - Restore the interrupted task stack before returning.
+;   - Load the target process context immediately before BIOS call.
+;   - Release sched_lock only after the return path is ready.
 ;
-; Important:
-;   Even though scheduler state is frozen, we must still restore the
-;   MMU context for current_pid before returning from monitor.
+; Do not call RP/mailbox code from here.
 ; ------------------------------------------------------------
 
 .proc leave_monitor
-    ; Release scheduler before restoring task stack.
-    jsr sched_lock_leave
+    sei
 
+    lda monitor_return_mode
+    cmp #MONITOR_RET_RTS
+    beq @return_rts
+
+@return_rti:
     ; Restore interrupted task stack pointer.
     ldx current_pid
     lda proc_sp,x
     tax
     txs
 
-    ; Return in current process context.
+    ; Load target process context.
     ldx current_pid
     lda proc_context,x
 
-    lda monitor_return_mode
-    cmp #MONITOR_RET_RTS
-    beq @return_rts
+    ; Scheduler may resume only after stack/context are ready.
+    jsr sched_lock_leave
 
-	cli
     jmp BIOS_CONTEXT_RTI
 
 @return_rts:
+    ; Restore interrupted task stack pointer.
+    ldx current_pid
+    lda proc_sp,x
+    tax
+    txs
+
+    ; Load target process context.
+    ldx current_pid
+    lda proc_context,x
+
+    ; Scheduler may resume only after stack/context are ready.
+    jsr sched_lock_leave
+
     ldx #<resume_rts_from_monitor
     ldy #>resume_rts_from_monitor
-	jmp BIOS_CONTEXT_JUMP
+    jmp BIOS_CONTEXT_JUMP
 .endproc
 
 ; ------------------------------------------------------------
@@ -131,5 +146,6 @@ MONITOR_ENTRY       = $B000
 ; ------------------------------------------------------------
 
 .proc resume_rts_from_monitor
+	cli
 	rts
 .endproc

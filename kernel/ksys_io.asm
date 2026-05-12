@@ -144,16 +144,9 @@
     jsr rp_console_read_finish
     bcc @done
 
-    ; RP request still in progress.
-    ;
-    ; Do NOT enter WAIT_CONSOLE here because the console
-    ; readiness event was already consumed before starting
-    ; the mailbox transaction.
     cpy #E_OK
     bne @fail
 
-    ; Cooperatively hand off CPU while RP completes.
-    jsr sched_yield
     bra @wait
 
 @done:
