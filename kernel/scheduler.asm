@@ -45,6 +45,8 @@
 .export proc_clear_wait
 .export proc_exit_current
 
+.import idle_loop
+
 .import sched_lock_enter
 .import sched_lock_leave
 
@@ -664,32 +666,6 @@
 .proc sched_context_switch
     jsr sched_account_tick
 
-    ; --------------------------------------------------------
-    ; Scheduler locked:
-    ;
-    ; The interrupted process is inside a kernel critical
-    ; section. Save its IRQ stack state, but do not change
-    ; process state and do not select another process.
-    ;
-    ; This prevents cases where a process is switched away while
-    ; mailbox/status/lock cleanup is only half complete.
-    ; --------------------------------------------------------
-    lda sched_lock
-    beq @normal_switch
-
-    ldy current_pid
-
-    tsx
-    txa
-    sta proc_sp,y
-
-    lda #PROC_RESUME_RTI
-    sta proc_resume_mode,y
-
-    lda proc_context,y
-    jmp BIOS_CONTEXT_RTI
-
-@normal_switch:
     ; Save interrupted SP for current PID.
     ldy current_pid
     tsx

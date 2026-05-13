@@ -15,7 +15,9 @@
 
 .setcpu "65C02"
 
-.include "../bios/bios.inc"
+.include "bios.inc"
+.include "process.inc"
+.include "scheduler_defs.inc"
 
 .export enter_monitor_irq
 .export enter_monitor_syscall
@@ -25,11 +27,15 @@
 .import proc_context
 .import proc_sp
 .import monitor_return_mode
+.import proc_state
+.import proc_resume_mode
+.import proc_set_ready
+.import sched_yield
 
 .import sched_lock_enter
 .import sched_lock_leave
 
-MONITOR_RET_RTI     = $01
+MONITOR_RET_IRQ     = $01
 MONITOR_RET_RTS     = $02
 
 MONITOR_CONTEXT     = $00
@@ -40,34 +46,95 @@ MONITOR_ENTRY       = $B000
 ; ------------------------------------------------------------
 ; enter_monitor_irq
 ;
-; Freeze scheduler and enter MICMON.
-; Return path uses BIOS_CONTEXT_RTI.
+; Purpose:
+;   Enter MICMON from IRQ context.
+;
+; Stack model:
+;   irq_entry already pushed:
+;       A, X, Y
+;
+;   Hardware IRQ already pushed:
+;       PCL, PCH, SR
+;
+;   Therefore the interrupted process stack is already an
+;   RTI-compatible saved frame.
+;
+; Policy:
+;   - Save interrupted process SP.
+;   - Mark interrupted process RTI-resumable.
+;   - RUNNING -> READY for interrupted PID.
+;   - Switch current_pid to IDLE_PID while monitor executes.
+;   - Freeze scheduler.
+;   - Enter MICMON in supervisor context.
+;
+; Important:
+;   MICMON exit resumes through sched_yield().
 ; ------------------------------------------------------------
 
 .proc enter_monitor_irq
-    lda #MONITOR_RET_RTI
-    bra enter_monitor_common
+    lda #MONITOR_RET_IRQ
+    sta monitor_return_mode
+
+    ; --------------------------------------------------------
+    ; Save interrupted process stack pointer.
+    ; --------------------------------------------------------
+    ldy current_pid
+
+    tsx
+    txa
+    sta proc_sp,y
+
+    ; --------------------------------------------------------
+    ; IRQ stack resumes through RTI.
+    ; --------------------------------------------------------
+    lda #PROC_RESUME_RTI
+    sta proc_resume_mode,y
+
+    ; --------------------------------------------------------
+    ; Interrupted RUNNING process becomes READY.
+    ; --------------------------------------------------------
+    lda proc_state,y
+    cmp #PROC_RUNNING
+    bne @state_done
+
+    tya
+    tax
+    jsr proc_set_ready
+
+@state_done:
+    ; --------------------------------------------------------
+    ; MICMON runs as supervisor/idle activity.
+    ; --------------------------------------------------------
+    lda #IDLE_PID
+    sta current_pid
+
+    ; --------------------------------------------------------
+    ; Freeze task switching while monitor is active.
+    ; --------------------------------------------------------
+    jsr sched_lock_enter
+
+    ; --------------------------------------------------------
+    ; Enter MICMON in supervisor context.
+    ; MICMON itself resets SP to $FF.
+    ; --------------------------------------------------------
+    lda #MONITOR_CONTEXT
+    ldx #<MONITOR_ENTRY
+    ldy #>MONITOR_ENTRY
+    jmp BIOS_CONTEXT_JUMP
 .endproc
 
 ; ------------------------------------------------------------
 ; enter_monitor_syscall
 ;
-; Freeze scheduler and enter MICMON.
-; Return path uses RTS trampoline.
+; Freeze scheduler and enter MICMON from syscall/user context.
+; This remains RTS-style for now.
 ; ------------------------------------------------------------
 
 .proc enter_monitor_syscall
     lda #MONITOR_RET_RTS
-    bra enter_monitor_common
-.endproc
-
-;
-;
-;
-.proc enter_monitor_common
     sta monitor_return_mode
 
-    ; Save interrupted task SP. Do not change process state.
+    ; Save current task stack pointer.
     ldy current_pid
     tsx
     txa
@@ -85,40 +152,33 @@ MONITOR_ENTRY       = $B000
 ; leave_monitor
 ;
 ; Purpose:
-;   Leave MICMON and return to the process that was current when
-;   monitor was entered.
+;   Leave MICMON and resume normal scheduling.
 ;
-; Critical ordering:
-;   - IRQs are disabled during the transition.
-;   - Restore the interrupted task stack before returning.
-;   - Load the target process context immediately before BIOS call.
-;   - Release sched_lock only after the return path is ready.
+; IRQ-entered monitor:
+;   - interrupted task was already saved during
+;     enter_monitor_irq
+;   - current_pid was switched to IDLE_PID
+;   - resume through normal sched_yield path
 ;
-; Do not call RP/mailbox code from here.
+; Syscall-entered monitor:
+;   - restore caller stack/context
+;   - return through RTS path
 ; ------------------------------------------------------------
 
 .proc leave_monitor
     sei
 
     lda monitor_return_mode
+    cmp #MONITOR_RET_IRQ
+    beq @return_scheduler
+
     cmp #MONITOR_RET_RTS
     beq @return_rts
 
-@return_rti:
-    ; Restore interrupted task stack pointer.
-    ldx current_pid
-    lda proc_sp,x
-    tax
-    txs
-
-    ; Load target process context.
-    ldx current_pid
-    lda proc_context,x
-
-    ; Scheduler may resume only after stack/context are ready.
+    ; Unknown mode -> safest fallback.
+@return_scheduler:
     jsr sched_lock_leave
-
-    jmp BIOS_CONTEXT_RTI
+    jmp sched_yield
 
 @return_rts:
     ; Restore interrupted task stack pointer.
@@ -127,11 +187,10 @@ MONITOR_ENTRY       = $B000
     tax
     txs
 
-    ; Load target process context.
+    ; Restore interrupted context.
     ldx current_pid
     lda proc_context,x
 
-    ; Scheduler may resume only after stack/context are ready.
     jsr sched_lock_leave
 
     ldx #<resume_rts_from_monitor

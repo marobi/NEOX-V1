@@ -46,6 +46,7 @@
 .import fd_init_process
 
 .import tasks_init
+.import idle_loop
 
 .import current_pid
 .import console_owner_pid
@@ -140,20 +141,7 @@
 	; enable interrupts
 	cli
 	
-    ; --------------------------------------------------------
-    ; Supervisor idle loop.
-    ;
-    ; Context 0 remains active until the first scheduler timer
-    ; IRQ arrives. irq_entry will then save the current context
-    ; and dispatch the first runnable task.
-    ;
-    ; For now this is a tight loop. Later this could become:
-    ;   - a monitor wait loop
-    ;   - a low-power wait
-    ;   - a supervisor command loop
-    ; --------------------------------------------------------
-@idle:
-    bra @idle
+	jmp idle_loop
 .endproc
 
 .proc rp_init

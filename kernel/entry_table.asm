@@ -8,15 +8,9 @@
 ;
 ; Layout:
 ;   - Located at $E000
-;   - Fixed size: 16 bytes
-;   - Filled with NOP padding after defined entries
-;
-; Entries:
-;   0: kernel_main
-;   1: enter_monitor_syscall
 ;
 ; Notes:
-;   Padding ensures that KERN_TEXT always starts at $E010,
+;   Padding ensures that KERN_TEXT always starts at $E030,
 ;   making binary dumps and disassembly match actual addresses.
 ; ============================================================
 
