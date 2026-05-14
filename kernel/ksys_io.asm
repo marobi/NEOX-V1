@@ -35,6 +35,7 @@
 .export ksys_read
 .export ksys_console_read_blocking
 .export ksys_write
+.export ksys_close
 
 .import current_pid
 .import proc_set_wait
@@ -42,84 +43,14 @@
 .import rp_console_read_start
 .import rp_console_read_finish
 
-.import fd_lookup
-.import dev_resolve_op
-.import dev_call
+.import fd_read
+.import fd_write
+.import fd_close
 
 .importzp io_ptr
 .importzp io_tmp
 
 .segment "KERN_TEXT"
-
-; ------------------------------------------------------------
-; ksys_read
-;
-; Purpose:
-;   Kernel-side implementation of read(fd, buf, len).
-;
-; Flow:
-;   1. Decode fd from rw_args.
-;   2. Resolve fd -> open object.
-;   3. Resolve open object -> device read operation.
-;   4. Decode buf/len.
-;   5. Call the resolved device read operation.
-;
-; Important:
-;   fd_lookup returns the open object index in X.
-;   dev_resolve_op must preserve X so the device op can inspect
-;   open-object state if needed.
-; ------------------------------------------------------------
-
-.proc ksys_read
-    ; Save pointer to rw_args.
-    stx io_ptr
-    sty io_ptr+1
-
-    ; Resolve fd to open object.
-    ldy #rw_args::fd
-    lda (io_ptr),y
-    jsr fd_lookup
-    bcc @fd_ok
-    rts
-
-@fd_ok:
-    ; Resolve the device READ operation for this open object.
-    lda #DEVOP_READ
-    jsr dev_resolve_op
-    bcc @op_ok
-    rts
-
-@op_ok:
-    ; Save caller buffer pointer while io_ptr still points to rw_args.
-    ldy #rw_args::buf_ptr
-    lda (io_ptr),y
-    sta io_tmp
-    iny
-    lda (io_ptr),y
-    sta io_tmp+1
-
-    ; Load requested transfer length.
-    ; Low byte is temporarily pushed while high byte goes into X.
-    ldy #rw_args::len
-    lda (io_ptr),y
-    pha
-    iny
-    lda (io_ptr),y
-    tax
-
-    ; Device/RP console layer expects io_ptr to point to the data buffer.
-    lda io_tmp
-    sta io_ptr
-    lda io_tmp+1
-    sta io_ptr+1
-
-    ; Restore low length byte into A.
-    pla
-
-    ; Call resolved device read routine.
-    jsr dev_call
-    rts
-.endproc
 
 ; ------------------------------------------------------------
 ; ksys_console_read_blocking
@@ -159,40 +90,32 @@
 .endproc
 
 ; ------------------------------------------------------------
-; ksys_write
+; ksys_read
 ;
 ; Purpose:
-;   Kernel-side implementation of write(fd, buf, len).
+;   Kernel-side syscall wrapper for read(fd, buf, len).
 ;
-; Flow:
-;   Same as ksys_read, but resolves DEVOP_WRITE.
+; Responsibility:
+;   Decode syscall argument block only.
 ;
-; Notes:
-;   Permission checks should eventually use proc_fd_flags.
-;   For now fd_lookup validates descriptor existence and the
-;   device layer dispatches based on the open object.
+; Dispatch:
+;   fd_read owns:
+;     - fd validation
+;     - fd permission checks
+;     - open-object resolution
+;     - device/file backend dispatch
 ; ------------------------------------------------------------
 
-.proc ksys_write
+.proc ksys_read
     ; Save pointer to rw_args.
     stx io_ptr
     sty io_ptr+1
 
-    ; Resolve fd to open object.
+    ; Save fd temporarily on stack.
     ldy #rw_args::fd
     lda (io_ptr),y
-    jsr fd_lookup
-    bcc @fd_ok
-    rts
+    pha
 
-@fd_ok:
-    ; Resolve the device WRITE operation for this open object.
-    lda #DEVOP_WRITE
-    jsr dev_resolve_op
-    bcc @op_ok
-    rts
-
-@op_ok:
     ; Save caller buffer pointer while io_ptr still points to rw_args.
     ldy #rw_args::buf_ptr
     lda (io_ptr),y
@@ -202,7 +125,6 @@
     sta io_tmp+1
 
     ; Load requested transfer length.
-    ; Low byte is temporarily pushed while high byte goes into X.
     ldy #rw_args::len
     lda (io_ptr),y
     pha
@@ -210,7 +132,7 @@
     lda (io_ptr),y
     tax
 
-    ; Device/RP console layer expects io_ptr to point to the data buffer.
+    ; FD/device layer expects io_ptr to point to the data buffer.
     lda io_tmp
     sta io_ptr
     lda io_tmp+1
@@ -219,8 +141,101 @@
     ; Restore low length byte into A.
     pla
 
-    ; Call resolved device write routine.
-    jsr dev_call
+    ; Restore fd into Y.
+    ply
+
+    jsr fd_read
     rts
 .endproc
 
+; ------------------------------------------------------------
+; ksys_write
+;
+; Purpose:
+;   Kernel-side syscall wrapper for write(fd, buf, len).
+;
+; Responsibility:
+;   Decode syscall argument block only.
+;
+; Dispatch:
+;   fd_write owns:
+;     - fd validation
+;     - fd permission checks
+;     - open-object resolution
+;     - device/file backend dispatch
+; ------------------------------------------------------------
+
+.proc ksys_write
+    ; Save pointer to rw_args.
+    stx io_ptr
+    sty io_ptr+1
+
+    ; Save fd temporarily on stack.
+    ldy #rw_args::fd
+    lda (io_ptr),y
+    pha
+
+    ; Save caller buffer pointer while io_ptr still points to rw_args.
+    ldy #rw_args::buf_ptr
+    lda (io_ptr),y
+    sta io_tmp
+    iny
+    lda (io_ptr),y
+    sta io_tmp+1
+
+    ; Load requested transfer length.
+    ldy #rw_args::len
+    lda (io_ptr),y
+    pha
+    iny
+    lda (io_ptr),y
+    tax
+
+    ; FD/device layer expects io_ptr to point to the data buffer.
+    lda io_tmp
+    sta io_ptr
+    lda io_tmp+1
+    sta io_ptr+1
+
+    ; Restore low length byte into A.
+    pla
+
+    ; Restore fd into Y.
+    ply
+
+    jsr fd_write
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; ksys_close
+;
+; Purpose:
+;   Kernel-side syscall wrapper for close(fd).
+;
+; Input:
+;   A = fd number
+;
+; Output:
+;   C clear = success
+;   A = 0
+;   X = 0
+;
+;   C set   = failure
+;   Y = errno
+;
+; Responsibility:
+;   Decode syscall argument only.
+;
+; Dispatch:
+;   fd_close owns:
+;     - fd validation
+;     - process fd table cleanup
+;     - open-object refcount update
+;     - backend close dispatch
+; ------------------------------------------------------------
+
+.proc ksys_close
+    jsr fd_close
+    rts
+.endproc

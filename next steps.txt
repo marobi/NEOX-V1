@@ -1,3 +1,9 @@
+1. Fix console_read length preservation across sched_yield.
+2. Add fd_read and fd_write wrappers.
+3. Move permission checks into fd_read/fd_write.
+4. Leave ksys_read/ksys_write as syscall-argument decoding only.
+
+
 1. sys_sleep using WAIT_TIMER
 2. generalized timer wake-up
 3. cooperative sys_yield later

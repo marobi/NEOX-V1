@@ -78,10 +78,6 @@ console_ops:
 ; Output:
 ;   C clear = success
 ;             A/X = bytes read (0 allowed)
-;
-;   C set   = special condition
-;             Y = E_OK → process was blocked
-;
 ; Invariants:
 ;   - Only one process may block on console
 ;   - Monitor must not interfere with process blocking state

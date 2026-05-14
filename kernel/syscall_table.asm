@@ -119,7 +119,7 @@ syscall_table:
 .endproc
 
 .proc k_close
-    jmp sys_ok_ax0
+    jmp KERN_ENTRY_KSYS_CLOSE
 .endproc
 
 .proc k_read

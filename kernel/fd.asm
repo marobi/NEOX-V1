@@ -28,7 +28,11 @@
 .export fd_close_process
 .export fd_attach
 .export fd_lookup
+.export fd_read
+.export fd_write
+.export fd_close
 
+;---------------------------------------------------
 .import current_pid
 
 .import proc_fd_obj
@@ -39,6 +43,9 @@
 .import open_flags
 .import open_dev
 
+.import dev_resolve_op
+.import dev_call
+
 .importzp fd_ptr
 .importzp fd_flags_tmp
 .importzp fd_obj_tmp
@@ -46,6 +53,60 @@
 .importzp fd_pid_tmp
 
 .segment "KERN_TEXT"
+
+; ------------------------------------------------------------
+; fd_check_perm
+;
+; Purpose:
+;   Check access permission for the current process fd.
+;
+; Input:
+;   fd_index_tmp = fd index
+;   A            = required flag mask
+;                  FD_FLAG_READ or FD_FLAG_WRITE
+;
+; Output:
+;   C clear = allowed
+;   C set   = denied
+;             Y = EBADF
+;
+; Clobbers:
+;   A, X, Y, fd_ptr, factor1, factor2, fd_flags_tmp
+; ------------------------------------------------------------
+
+.proc fd_check_perm
+    sta fd_flags_tmp
+
+    lda current_pid
+    sta factor1
+
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    clc
+    lda #<proc_fd_flags
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_flags
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda (fd_ptr),y
+    and fd_flags_tmp
+    bne @allowed
+
+    ldy #EBADF
+    sec
+    rts
+
+@allowed:
+    clc
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; fd_init_tables
@@ -256,6 +317,137 @@
     rts
 .endproc
 
+; ------------------------------------------------------------
+; fd_close
+;
+; Purpose:
+;   Close one file descriptor belonging to current_pid.
+;
+; Input:
+;   A = fd number
+;
+; Output:
+;   C clear = success
+;   A = 0
+;   X = 0
+;
+;   C set   = failure
+;   Y = errno
+;
+; Behavior:
+;   - validates fd
+;   - clears proc_fd_obj[current_pid][fd]
+;   - clears proc_fd_flags[current_pid][fd]
+;   - decrements open object refcount
+;   - if refcount reaches zero and object is a device:
+;       calls DEVOP_CLOSE
+;
+; Notes:
+;   For now, open object table entries are not reclaimed.
+;   This is intentional because STDIN/STDOUT/STDERR are static
+;   console objects installed by fd_init_tables.
+; ------------------------------------------------------------
+
+.proc fd_close
+    ; Resolve fd -> open object.
+    jsr fd_lookup
+    bcc @fd_ok
+    rts
+
+@fd_ok:
+    stx fd_obj_tmp
+
+    ; --------------------------------------------------------
+    ; Calculate:
+    ;
+    ;   offset = current_pid * MAX_FDS
+    ; --------------------------------------------------------
+
+    lda current_pid
+    sta factor1
+
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    ; --------------------------------------------------------
+    ; Clear proc_fd_obj[current_pid][fd].
+    ; fd_lookup saved fd index in fd_index_tmp.
+    ; --------------------------------------------------------
+
+    clc
+    lda #<proc_fd_obj
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda #FD_NONE
+    sta (fd_ptr),y
+
+    ; --------------------------------------------------------
+    ; Clear proc_fd_flags[current_pid][fd].
+    ; --------------------------------------------------------
+
+    clc
+    lda #<proc_fd_flags
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_flags
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda #0
+    sta (fd_ptr),y
+
+    ; --------------------------------------------------------
+    ; Decrement open object refcount.
+    ; --------------------------------------------------------
+
+    ldx fd_obj_tmp
+
+    lda open_refcnt,x
+    beq @done_ok
+
+    dec open_refcnt,x
+    lda open_refcnt,x
+    bne @done_ok
+
+    ; --------------------------------------------------------
+    ; Last reference closed.
+    ;
+    ; For now only device close is supported.
+    ; Do not clear open_type/open_dev yet; standard console
+    ; objects are static.
+    ; --------------------------------------------------------
+
+    lda open_type,x
+    cmp #OBJ_DEVICE
+    bne @done_ok
+
+    lda #DEVOP_CLOSE
+    jsr dev_resolve_op
+    bcs @done_ok
+
+    jsr dev_call
+    bcs @fail
+
+@done_ok:
+    lda #0
+    tax
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; fd_init_process
@@ -483,5 +675,189 @@
     bne @flag_loop
 
     ldx fd_pid_tmp
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_read
+;
+; Purpose:
+;   FD-layer implementation of read dispatch.
+;
+; Input:
+;   Y      = fd number
+;   io_ptr = destination buffer
+;   A/X    = requested length, low/high
+;
+; Output:
+;   C clear = success
+;             A/X = bytes read
+;
+;   C set   = failure
+;             Y = errno
+;
+; Flow:
+;   fd -> open object -> object type -> device read op
+;
+; Checks:
+;   - fd exists
+;   - fd has FD_FLAG_READ
+;   - open object is OBJ_DEVICE
+;   - device read op resolves
+; ------------------------------------------------------------
+
+.proc fd_read
+    ; Preserve requested length while resolving fd/device.
+    pha
+    phx
+
+    ; Resolve fd -> open object.
+    tya
+    jsr fd_lookup
+    bcc @fd_ok
+
+    ; Drop saved length.
+    plx
+    pla
+    sec
+    rts
+
+@fd_ok:
+    stx fd_obj_tmp
+
+    lda #FD_FLAG_READ
+    jsr fd_check_perm
+    bcc @perm_ok
+
+    plx
+    pla
+    sec
+    rts
+
+@perm_ok:
+    ; --------------------------------------------------------
+    ; For now only device objects are supported by fd_read.
+    ; --------------------------------------------------------
+
+    ldx fd_obj_tmp
+    lda open_type,x
+    cmp #OBJ_DEVICE
+    beq @device_ok
+
+    plx
+    pla
+    ldy #ENODEV
+    sec
+    rts
+
+@device_ok:
+    ; Resolve device READ operation.
+    lda #DEVOP_READ
+    jsr dev_resolve_op
+    bcc @op_ok
+
+    plx
+    pla
+    sec
+    rts
+
+@op_ok:
+    ; Restore requested length for device backend.
+    plx
+    pla
+
+    jsr dev_call
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_write
+;
+; Purpose:
+;   FD-layer implementation of write dispatch.
+;
+; Input:
+;   Y      = fd number
+;   io_ptr = source buffer
+;   A/X    = requested length, low/high
+;
+; Output:
+;   C clear = success
+;             A/X = bytes written
+;
+;   C set   = failure
+;             Y = errno
+;
+; Flow:
+;   fd -> open object -> object type -> device write op
+;
+; Checks:
+;   - fd exists
+;   - fd has FD_FLAG_WRITE
+;   - open object is OBJ_DEVICE
+;   - device write op resolves
+; ------------------------------------------------------------
+
+.proc fd_write
+    ; Preserve requested length while resolving fd/device.
+    pha
+    phx
+
+    ; Resolve fd -> open object.
+    tya
+    jsr fd_lookup
+    bcc @fd_ok
+
+    ; Drop saved length.
+    plx
+    pla
+    sec
+    rts
+
+@fd_ok:
+    stx fd_obj_tmp
+
+    lda #FD_FLAG_WRITE
+    jsr fd_check_perm
+    bcc @perm_ok
+
+    plx
+    pla
+    sec
+    rts
+
+@perm_ok:
+    ; --------------------------------------------------------
+    ; For now only device objects are supported by fd_write.
+    ; --------------------------------------------------------
+
+    ldx fd_obj_tmp
+    lda open_type,x
+    cmp #OBJ_DEVICE
+    beq @device_ok
+
+    plx
+    pla
+    ldy #ENODEV
+    sec
+    rts
+
+@device_ok:
+    ; Resolve device WRITE operation.
+    lda #DEVOP_WRITE
+    jsr dev_resolve_op
+    bcc @op_ok
+
+    plx
+    pla
+    sec
+    rts
+
+@op_ok:
+    ; Restore requested length for device backend.
+    plx
+    pla
+
+    jsr dev_call
     rts
 .endproc

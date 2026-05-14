@@ -29,6 +29,7 @@
 .import ksys_exit
 .import ksys_yield
 .import ksys_sleep
+.import ksys_close
 
 .segment "KERNEL_ENTRY"
 
@@ -45,7 +46,7 @@ kernel_entry_table:
 	jmp ksys_exit
 	jmp ksys_yield
 	jmp ksys_sleep
-	.res 3, $00
+	jmp ksys_close
 	.res 3, $00
 	.res 3, $00
 	.res 3, $00

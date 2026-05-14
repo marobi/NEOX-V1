@@ -39,6 +39,7 @@ STDERR              = 2
 ; Syscall numbers
 ; ------------------------------------------------------------
 SYS_EXIT			= $00
+SYS_CLOSE			= $02
 SYS_READ            = $03
 SYS_WRITE           = $04
 SYS_MONITOR         = $05
@@ -50,6 +51,7 @@ SYS_SLEEP           = $0E
 ; ------------------------------------------------------------
 
 sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
+sys_close           = SYSCALL_BASE + (SYS_CLOSE   * SYSCALL_ENTRY_SIZE)
 sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
