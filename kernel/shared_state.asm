@@ -103,7 +103,7 @@ rp_lock:        .res 1
 .export proc_entryH
 .export proc_flags
 .export proc_resume_mode
-
+.export proc_parent_pid
 
 current_pid:    .res 1
 
@@ -115,7 +115,25 @@ proc_entryH:    .res MAX_PROCS
 proc_flags:		.res MAX_PROCS
 proc_resume_mode:
 				.res MAX_PROCS
+
+; ------------------------------------------------------------
+; Parent PID table
+;
+; proc_parent_pid[pid] =
+;   PID of creator/owner process
+;
+; $FF = no parent / kernel-owned
+; ------------------------------------------------------------
+
+proc_parent_pid:
+    .res MAX_PROCS
+
+.export proc_signal_pending
+
+proc_signal_pending:
+    .res MAX_PROCS
 	
+;-------------------------------------------------------------
 sched_lock:     .res 1
 
 ; ------------------------------------------------------------
@@ -292,6 +310,41 @@ proc_ticks_hi:    .res MAX_PROCS
 ; console device stores it here before blocking.
 console_read_len_lo: .res 1
 console_read_len_hi: .res 1
+
+; ------------------------------------------------------------
+; Scheduler debug markers
+; ------------------------------------------------------------
+
+.export sched_debug_marker
+.export sched_debug_pid
+
+sched_debug_marker:
+    .res 1
+
+sched_debug_pid:
+    .res 1
+
+.export sched_debug_old_pid
+.export sched_debug_old_state
+
+sched_debug_old_pid:
+    .res 1
+
+sched_debug_old_state:
+    .res 1
+
+.export sched_debug_state_pid
+.export sched_debug_state_old
+.export sched_debug_state_new
+
+sched_debug_state_pid:
+    .res 1
+
+sched_debug_state_old:
+    .res 1
+
+sched_debug_state_new:
+    .res 1
 	
 ; ---------------------------------------------------------------------------------------------
 

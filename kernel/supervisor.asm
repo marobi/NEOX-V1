@@ -23,6 +23,13 @@
 .export enter_monitor_syscall
 .export leave_monitor
 
+;---------------------------------------------------
+.import sched_debug_marker
+.import sched_debug_pid
+.import sched_debug_old_state
+.import sched_debug_old_pid
+;---------------------------------------------------
+
 .import current_pid
 .import proc_context
 .import proc_sp
@@ -46,77 +53,75 @@ MONITOR_ENTRY       = $B000
 ; ------------------------------------------------------------
 ; enter_monitor_irq
 ;
-; Purpose:
-;   Enter MICMON from IRQ context.
+; Enter monitor from IRQ.
 ;
-; Stack model:
-;   irq_entry already pushed:
-;       A, X, Y
+; irq_entry has already pushed A/X/Y.
 ;
-;   Hardware IRQ already pushed:
-;       PCL, PCH, SR
+; If a normal process was interrupted, save it as RTI-resumable
+; and demote RUN -> READY.
 ;
-;   Therefore the interrupted process stack is already an
-;   RTI-compatible saved frame.
-;
-; Policy:
-;   - Save interrupted process SP.
-;   - Mark interrupted process RTI-resumable.
-;   - RUNNING -> READY for interrupted PID.
-;   - Switch current_pid to IDLE_PID while monitor executes.
-;   - Freeze scheduler.
-;   - Enter MICMON in supervisor context.
-;
-; Important:
-;   MICMON exit resumes through sched_yield().
+; If PID 0 was interrupted, do not save/demote it as a normal
+; process. PID 0 is idle/supervisor fallback.
 ; ------------------------------------------------------------
 
 .proc enter_monitor_irq
-    lda #MONITOR_RET_IRQ
-    sta monitor_return_mode
+    lda #$07
+    sta sched_debug_marker
 
-    ; --------------------------------------------------------
-    ; Save interrupted process stack pointer.
-    ; --------------------------------------------------------
+    lda current_pid
+    sta sched_debug_pid
+
+    ; Interrupted owner.
     ldy current_pid
 
+    sty sched_debug_old_pid
+    lda proc_state,y
+    sta sched_debug_old_state
+
+    ; --------------------------------------------------------
+    ; PID 0 is not a normal task.
+    ; Do not save proc_sp[0].
+    ; Do not set proc_resume_mode[0].
+    ; Do not convert PID 0 RUN -> READY.
+    ; --------------------------------------------------------
+
+    cpy #IDLE_PID
+    beq @enter_monitor
+
+    ; Save interrupted normal process stack.
     tsx
     txa
     sta proc_sp,y
 
-    ; --------------------------------------------------------
-    ; IRQ stack resumes through RTI.
-    ; --------------------------------------------------------
+    ; IRQ-created stack resumes by RTI.
     lda #PROC_RESUME_RTI
     sta proc_resume_mode,y
 
-    ; --------------------------------------------------------
-    ; Interrupted RUNNING process becomes READY.
-    ; --------------------------------------------------------
+    ; Demote interrupted normal RUN process.
     lda proc_state,y
     cmp #PROC_RUNNING
-    bne @state_done
+    bne @enter_monitor
+
+    lda #$0A
+    sta sched_debug_marker
+
+    sty sched_debug_old_pid
+    lda proc_state,y
+    sta sched_debug_old_state
 
     tya
     tax
     jsr proc_set_ready
 
-@state_done:
-    ; --------------------------------------------------------
-    ; MICMON runs as supervisor/idle activity.
-    ; --------------------------------------------------------
+@enter_monitor:
     lda #IDLE_PID
     sta current_pid
 
-    ; --------------------------------------------------------
-    ; Freeze task switching while monitor is active.
-    ; --------------------------------------------------------
+    lda #MONITOR_RET_IRQ
+    sta monitor_return_mode
+
     jsr sched_lock_enter
 
-    ; --------------------------------------------------------
-    ; Enter MICMON in supervisor context.
-    ; MICMON itself resets SP to $FF.
-    ; --------------------------------------------------------
     lda #MONITOR_CONTEXT
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
@@ -178,6 +183,13 @@ MONITOR_ENTRY       = $B000
     ; Unknown mode -> safest fallback.
 @return_scheduler:
     jsr sched_lock_leave
+; debug
+    lda #$08
+    sta sched_debug_marker
+
+    lda current_pid
+    sta sched_debug_pid
+; end debug
     jmp sched_yield
 
 @return_rts:

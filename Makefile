@@ -70,6 +70,7 @@ KERNEL_SRCS := \
 	kernel/scheduler.asm \
 	kernel/supervisor.asm \
 	kernel/idle_task.asm \
+	kernel/process_control.asm \
 	kernel/fd.asm \
 	kernel/timer.asm \
 	kernel/ksys_io.asm \

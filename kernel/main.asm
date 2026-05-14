@@ -33,6 +33,9 @@
 .export kernel_main
 .export set_brk_vector
 
+.import sched_debug_marker
+.import sched_debug_pid
+
 .import kernel_version
 
 .import irq_entry
@@ -100,6 +103,11 @@
 	sta kernel_version
 	Lda #$02				; major
 	sta kernel_version+1
+	
+	; debug
+	stz sched_debug_marker
+	stx sched_debug_pid
+	; end debug
 	
     ; --------------------------------------------------------
     ; Initialize scheduler tables and mark current execution as

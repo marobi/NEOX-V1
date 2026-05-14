@@ -16,6 +16,7 @@
 .export idle_loop
 
 .proc idle_loop
+	cli			; assure IRQ enabled
 @idle:
      bra @idle
 .endproc

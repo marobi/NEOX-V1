@@ -45,6 +45,16 @@
 .export proc_clear_wait
 .export proc_exit_current
 
+;---------------------------------------------
+.import sched_debug_marker
+.import sched_debug_pid
+.import sched_debug_old_pid
+.import sched_debug_old_state
+.import sched_debug_state_pid
+.import sched_debug_state_old
+.import sched_debug_state_new
+;---------------------------------------------
+
 .import idle_loop
 
 .import sched_lock_enter
@@ -61,6 +71,8 @@
 .import proc_entryH
 .import proc_flags
 .import proc_resume_mode
+.import proc_parent_pid
+.import proc_signal_pending
 
 .import sched_lock
 .import console_owner_pid
@@ -70,6 +82,9 @@
 
 .import wait_reason
 .import wait_object
+
+.import proc_apply_signal
+.import proc_terminate
 
 .import proc_exit_code
 
@@ -90,8 +105,26 @@
 ;   A = state
 ; ------------------------------------------------------------
 
+; ------------------------------------------------------------
+; proc_set_state
+;
+; Input:
+;   X = PID
+;   A = new state
+;
+; ------------------------------------------------------------
+
 .proc proc_set_state
+    sta sched_debug_state_new
+
+    stx sched_debug_state_pid
+
+    lda proc_state,x
+    sta sched_debug_state_old
+
+    lda sched_debug_state_new
     sta proc_state,x
+
     rts
 .endproc
 
@@ -193,39 +226,11 @@
 ;
 ; Purpose:
 ;   Terminate the currently running process.
-;
-; Current model:
-;   - no parent/child tracking yet
-;   - no zombie state yet
-;   - exit code currently ignored
-;
-; Effects:
-;   - closes all process file descriptors
-;   - clears wait state
-;   - marks process slot EMPTY
-;
-; Notes:
-;   Caller must not return to user code afterwards.
 ; ------------------------------------------------------------
 
 .proc proc_exit_current
     ldx current_pid
-
-    ; If the exiting process owns the console, release ownership.
-    ; Do not transfer ownership to whatever process runs next.
-    cpx console_owner_pid
-    bne @console_done
-
-    lda #$FF
-    sta console_owner_pid
-
-@console_done:
-    jsr fd_close_process
-    jsr proc_clear_wait
-
-    lda #PROC_EMPTY
-    jsr proc_set_state
-
+    jsr proc_terminate
     jmp sched_yield
 .endproc
 
@@ -416,7 +421,11 @@
     stz proc_entryH,x
     stz proc_flags,x
 	stz proc_resume_mode,x
-    
+	stz proc_signal_pending
+	
+    lda #$FF
+	sta proc_parent_pid,x
+	
 	lda #WAIT_NONE
     sta wait_reason,x
     stz wait_object,x
@@ -532,6 +541,15 @@
     lda (sched_ptr),y
     sta proc_entryH,x
 
+    ; --------------------------------------------------------
+    ; Record parent PID.
+    ;
+    ; PID 0/kernel-created tasks inherit PID 0 as parent.
+    ; --------------------------------------------------------
+    ldy current_pid
+    tya
+    sta proc_parent_pid,x
+	
     ; Initial task stack.
     lda #$FF
     sta proc_sp,x
@@ -608,6 +626,8 @@
     sta sched_ptr
 
 @check:
+    jsr proc_apply_signal
+
     lda proc_state,x
 
     cmp #PROC_NEW
@@ -647,27 +667,48 @@
 ;   IRQ/RTI-compatible frame.
 ;
 ; Policy:
-;   - Always account the timer tick.
-;   - If sched_lock != 0, do not switch tasks.
-;   - Otherwise:
-;       save current SP
-;       mark saved stack as RTI-resumable
-;       convert current RUNNING process to READY
-;       wake pending events
-;       pick next runnable process
-;       resume next process using its recorded resume mode
+;   - Save current SP for normal tasks only
+;   - Mark saved stack as RTI-resumable
+;   - Convert current RUNNING normal task to READY
+;   - Wake pending events
+;   - Pick next runnable process
+;   - If PID 0 is selected, enter idle_loop directly
+;   - Otherwise resume selected process by recorded resume mode
 ;
 ; Important:
-;   sched_lock protects kernel critical sections. IRQs may still
-;   occur while sched_lock is nonzero, but task switching must
-;   not happen then.
+;   PID 0 is the idle/supervisor fallback. It is not a normal
+;   schedulable process and must not be saved/resumed through
+;   proc_sp[0].
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
+    lda #$01
+    sta sched_debug_marker
+
+    lda current_pid
+    sta sched_debug_pid
+
     jsr sched_account_tick
 
-    ; Save interrupted SP for current PID.
+    ; Current interrupted owner.
     ldy current_pid
+
+    sty sched_debug_old_pid
+    lda proc_state,y
+    sta sched_debug_old_state
+
+    ; --------------------------------------------------------
+    ; PID 0 is not a normal task.
+    ;
+    ; Do not save proc_sp[0].
+    ; Do not set proc_resume_mode[0].
+    ; Do not convert PID 0 to READY.
+    ; --------------------------------------------------------
+
+    cpy #IDLE_PID
+    beq @wake_events
+
+    ; Save interrupted SP for normal task.
     tsx
     txa
     sta proc_sp,y
@@ -681,9 +722,19 @@
     cmp #PROC_RUNNING
     bne @wake_events
 
+    lda #$02
+    sta sched_debug_marker
+
+    sty sched_debug_old_pid
+    lda proc_state,y
+    sta sched_debug_old_state
+
     tya
     tax
     jsr proc_set_ready
+
+    lda proc_state,x
+    sta sched_debug_old_state
 
 @wake_events:
     jsr scheduler_tick
@@ -697,11 +748,21 @@
     ; X = selected PID, including possible IDLE fallback.
     stx current_pid
 
+    lda #$03
+    sta sched_debug_marker
+
+    txa
+    sta sched_debug_pid
+
+    ; PID 0 is entered directly, not through proc_sp[0].
+    cpx #IDLE_PID
+    beq @resume_idle
+
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new
 
-    ; Resume existing process.
+    ; Resume existing normal process.
     jsr proc_set_running
 
     lda proc_sp,x
@@ -731,7 +792,20 @@
     ldx #<first_run_entry
     ldy #>first_run_entry
     jmp BIOS_CONTEXT_JUMP
+
+@resume_idle:
+    ldx #IDLE_PID
+    jsr proc_set_running
+
+    lda #IDLE_PID
+    sta current_pid
+
+    lda #IDLE_PID
+    ldx #<idle_loop
+    ldy #>idle_loop
+    jmp BIOS_CONTEXT_JUMP
 .endproc
+
 
 ; ------------------------------------------------------------
 ; sched_yield
@@ -741,21 +815,41 @@
 ;
 ; Stack model:
 ;   This is NOT an IRQ path.
-;   The saved stack contains an RTS-compatible return frame.
-;
-; Used by:
-;   sys_yield
-;   sys_sleep after marking current process BLOCKED
-;   future blocking syscalls
+;   Normal saved stacks contain RTS-compatible return frames.
 ;
 ; Important:
-;   This routine does not wake timers or console waiters.
-;   Event wakeups belong to the IRQ scheduler path.
+;   PID 0 is the idle/supervisor fallback. It is not a normal
+;   process and must not be saved as PROC_RESUME_RTS.
 ; ------------------------------------------------------------
 
 .proc sched_yield
-    ; Save current syscall/user stack pointer.
+    sei
+
+    lda #$04
+    sta sched_debug_marker
+
+    lda current_pid
+    sta sched_debug_pid
+
+    ; Current yielding owner.
     ldy current_pid
+
+    sty sched_debug_old_pid
+    lda proc_state,y
+    sta sched_debug_old_state
+
+    ; --------------------------------------------------------
+    ; PID 0 is not a normal task.
+    ;
+    ; Do not save proc_sp[0].
+    ; Do not set proc_resume_mode[0] to RTS.
+    ; Do not convert PID 0 to READY.
+    ; --------------------------------------------------------
+
+    cpy #IDLE_PID
+    beq @wake
+
+    ; Save current syscall/user stack pointer.
     tsx
     txa
     sta proc_sp,y
@@ -764,28 +858,52 @@
     lda #PROC_RESUME_RTS
     sta proc_resume_mode,y
 
-    ; If the caller is still RUNNING, make it READY.
+    ; If caller is still RUNNING, make it READY.
     ; Blocking syscalls set PROC_BLOCKED before calling this,
-    ; so blocked tasks must remain blocked.
+    ; so they are left blocked.
     lda proc_state,y
     cmp #PROC_RUNNING
-    bne @pick
+    bne @wake
+
+    lda #$05
+    sta sched_debug_marker
+
+    sty sched_debug_old_pid
+    lda proc_state,y
+    sta sched_debug_old_state
 
     tya
     tax
     jsr proc_set_ready
 
-@pick:
+    lda proc_state,x
+    sta sched_debug_old_state
+
+@wake:
+    jsr sched_update_console_focus
+    jsr scheduler_wake_console_input
+    jsr scheduler_wake_timers
+
     jsr sched_pick_next
 
     ; X = selected PID, including possible IDLE fallback.
     stx current_pid
 
+    lda #$06
+    sta sched_debug_marker
+
+    txa
+    sta sched_debug_pid
+
+    ; PID 0 is entered directly, not through proc_sp[0].
+    cpx #IDLE_PID
+    beq @resume_idle
+
     lda proc_state,x
     cmp #PROC_NEW
     beq @start_new
 
-    ; Resume existing process.
+    ; Resume existing normal process.
     jsr proc_set_running
 
     lda proc_sp,x
@@ -814,6 +932,18 @@
     lda proc_context,x
     ldx #<first_run_entry
     ldy #>first_run_entry
+    jmp BIOS_CONTEXT_JUMP
+
+@resume_idle:
+    ldx #IDLE_PID
+    jsr proc_set_running
+
+    lda #IDLE_PID
+    sta current_pid
+
+    lda #IDLE_PID
+    ldx #<idle_loop
+    ldy #>idle_loop
     jmp BIOS_CONTEXT_JUMP
 .endproc
 

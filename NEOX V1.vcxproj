@@ -135,6 +135,7 @@
     <None Include="include\process.inc" />
     <None Include="include\scheduler.inc" />
     <None Include="include\scheduler_defs.inc" />
+    <None Include="include\signal.inc" />
     <None Include="include\supervisor.inc" />
     <None Include="include\syscall.inc" />
     <None Include="include\timer.inc" />
@@ -146,6 +147,7 @@
     <None Include="kernel\ksys_io.asm" />
     <None Include="kernel\ksys_proc.asm" />
     <None Include="kernel\main.asm" />
+    <None Include="kernel\process_control.asm" />
     <None Include="kernel\rp2350.asm" />
     <None Include="kernel\scheduler.asm" />
     <None Include="kernel\sched_lock.asm" />

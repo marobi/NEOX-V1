@@ -109,5 +109,11 @@
     <None Include="kernel\timer.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="include\signal.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="kernel\process_control.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
