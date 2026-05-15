@@ -45,6 +45,8 @@ SYS_WRITE           = $04
 SYS_MONITOR         = $05
 SYS_YIELD           = $0B
 SYS_SLEEP           = $0E
+SYS_DUP				= $0F
+SYS_DUP2			= $10
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -57,6 +59,8 @@ sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
 sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
 sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
+sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
+sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values
@@ -65,6 +69,7 @@ sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
 E_OK                = 0
 EIO                 = 3
 EINVAL              = 6
+EMFILE 				= 8        ; too many open file descriptors
 EBADF           	= 9
 ENODEV          	= 10
 ENOSYS          	= 11

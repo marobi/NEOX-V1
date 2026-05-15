@@ -36,6 +36,8 @@
 .export ksys_console_read_blocking
 .export ksys_write
 .export ksys_close
+.export ksys_dup
+.export ksys_dup2
 
 .import current_pid
 .import proc_set_wait
@@ -46,6 +48,8 @@
 .import fd_read
 .import fd_write
 .import fd_close
+.import fd_dup
+.import fd_dup2
 
 .importzp io_ptr
 .importzp io_tmp
@@ -238,4 +242,43 @@
 .proc ksys_close
     jsr fd_close
     rts
+.endproc
+
+; ------------------------------------------------------------
+; ksys_dup
+;
+; Input:
+;   A = old fd
+;
+; Output:
+;   C clear = success
+;             A = new fd
+;             X = 0
+;
+;   C set   = failure
+;             Y = errno
+; ------------------------------------------------------------
+
+.proc ksys_dup
+    jmp fd_dup
+.endproc
+
+; ------------------------------------------------------------
+; ksys_dup2
+;
+; Input:
+;   A = old fd
+;   Y = new fd
+;
+; Output:
+;   C clear = success
+;             A = new fd
+;             X = 0
+;
+;   C set   = failure
+;             Y = errno
+; ------------------------------------------------------------
+
+.proc ksys_dup2
+    jmp fd_dup2
 .endproc

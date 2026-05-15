@@ -3,10 +3,9 @@
 ; NEOX - file descriptor and open object definitions
 ;
 ; Purpose:
-;   Defines the abstraction layer between processes and
-;   devices/files. This is the first step toward a UNIX-like
-;   I/O model.
-;
+;   devices/files. 
+;   This forms the FD/open-object/device layer
+;   used by read/write/close/dup/dup2.;
 ; Model:
 ;   process fd table → open object table → device/file backend
 ; ============================================================

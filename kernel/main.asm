@@ -99,7 +99,7 @@
     ; --------------------------------------------------------
 	; set the version of the kernel
     ; --------------------------------------------------------
-	lda #$01				; minor
+	lda #$03				; minor
 	sta kernel_version
 	Lda #$02				; major
 	sta kernel_version+1
@@ -161,18 +161,13 @@
     ; --------------------------------------------------------
     stz rp_lock
 
-    stz RP_ARG0L
-    stz RP_ARG0H
-    stz RP_ARG1L
-    stz RP_ARG1H
-    stz RP_ARG2L
-    stz RP_ARG2H
-    stz RP_RES0L
-    stz RP_RES0H
-    stz RP_ERR
-    stz RP_FLAGS
-    stz RP_STATE
-    stz RP_STATUS
+	ldx #0
+@rp_clear:
+    stz RP_ARG0L,x
+	inx
+	cpx #$0C
+	bne @rp_clear
+	
 
     stz RP_DOORBELL
 	rts

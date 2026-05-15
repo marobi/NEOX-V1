@@ -111,7 +111,7 @@ no_device_ops:
 ; dev_call
 ;
 ; Input:
-;   sc_ptr = routine address
+;   dev_ptr = routine address
 ;
 ; Notes:
 ;   65C02 has no JSR (addr), so syscall code does:

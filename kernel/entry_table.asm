@@ -10,8 +10,7 @@
 ;   - Located at $E000
 ;
 ; Notes:
-;   Padding ensures that KERN_TEXT always starts at $E030,
-;   making binary dumps and disassembly match actual addresses.
+;   Padding ensures that KERN_TEXT always starts at $E060
 ; ============================================================
 
 .setcpu "65C02"
@@ -30,6 +29,8 @@
 .import ksys_yield
 .import ksys_sleep
 .import ksys_close
+.import ksys_dup
+.import ksys_dup2
 
 .segment "KERNEL_ENTRY"
 
@@ -47,6 +48,22 @@ kernel_entry_table:
 	jmp ksys_yield
 	jmp ksys_sleep
 	jmp ksys_close
+	jmp ksys_dup
+	jmp ksys_dup2
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
+	.res 3, $00
 	.res 3, $00
 	.res 3, $00
 	.res 3, $00
