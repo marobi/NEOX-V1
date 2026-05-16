@@ -29,6 +29,7 @@
 .include "kernel.inc"
 .include "mailbox.inc"
 .include "syscall.inc"
+.include "lock.inc"
 
 .export rp_try_acquire_lock
 .export rp_acquire_lock
@@ -71,15 +72,7 @@
 ; ------------------------------------------------------------
 
 .proc rp_try_acquire_lock
-    lda #$01
-    tsb rp_lock
-    beq @acquired
-
-    clc
-    rts
-
-@acquired:
-    sec
+    LOCK_TRY_ACQUIRE rp_lock
     rts
 .endproc
 
@@ -143,16 +136,10 @@
     beq @release
 
 @bad:
-    ; Invariant violation:
-    ; caller tried to release mailbox ownership while RP_STATUS
-    ; was not IDLE. This would allow the next caller to acquire
-    ; rp_lock while a transaction is still live or uncleared.
     bra @bad
 
 @release:
-    lda #$01
-    trb rp_lock
-    sec
+    LOCK_RELEASE rp_lock
     rts
 .endproc
 
@@ -246,17 +233,22 @@
 ; ------------------------------------------------------------
 
 .proc rp_console_write
-	pha
-    ; Gain exclusive ownership of shared mailbox
+    ; Preserve requested length across rp_acquire_lock.
+    pha
+    phx
+
+    ; Gain exclusive ownership of shared mailbox.
     jsr rp_acquire_lock
-	pla
-	
-	php
-	sei
+
+    ; Restore requested length.
+    plx
+    pla
 
     ; --------------------------------------------------------
-    ; Fill request block in shared RAM
+    ; Fill request block in shared RAM.
+    ; rp_lock is held, so no other mailbox client may touch this.
     ; --------------------------------------------------------
+
     sta RP_ARG1L
     stx RP_ARG1H
 
@@ -274,50 +266,56 @@
     stz RP_STATE
 
     ; --------------------------------------------------------
-    ; Signal request start
+    ; Signal request start.
+    ; Keep only this doorbell transition IRQ-critical.
     ; --------------------------------------------------------
+
+    php
+    sei
+
     lda #RP_BUSY
     sta RP_STATUS
 
     lda #RP_CMD_CON_WRITE
     sta RP_DOORBELL
 
-	cli
-	
+    plp
+
     ; --------------------------------------------------------
-    ; Wait for completion
+    ; Wait for completion.
+    ; rp_lock remains held, but IRQs are not globally disabled.
     ; --------------------------------------------------------
+
     jsr rp_wait_done
     bcs @fail
 
-	sei
-	
-    ; Preserve result across cleanup
+    ; Preserve result across cleanup/release.
     lda RP_RES0L
     ldx RP_RES0H
     pha
     phx
 
-    ; Return interface to idle and release ownership
-    stz RP_STATUS
+    lda #RP_IDLE
+    sta RP_STATUS
 
     jsr rp_release_lock
 
-    ; Restore AX result
     plx
     pla
-	plp
     clc
     rts
 
 @fail:
-	phy
-    stz RP_STATUS
+    ; Preserve errno across release.
+    phy
+
+    lda #RP_IDLE
+    sta RP_STATUS
 
     jsr rp_release_lock
+
     ply
-	plp
-	sec
+    sec
     rts
 .endproc
 
