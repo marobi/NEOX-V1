@@ -135,7 +135,7 @@ $(SYS_DIS): $(SYS_BIN) $(SYS_MAP) $(SYS_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(SYS_BIN) C000 $(SYS_MAP) $(SYS_LBL) > $@
 
 $(KRN_DIS): $(KRN_BIN) $(KRN_MAP) $(KRN_LBL) $(DISASM) | dirs
-	$(PYTHON) $(DISASM) $(KRN_BIN) E000 $(KRN_MAP) $(KRN_LBL) > $@
+	$(PYTHON) $(DISASM) $(KRN_BIN) 8000 $(KRN_MAP) $(KRN_LBL) > $@
 
 disasm: $(SYS_DIS) $(KRN_DIS)
 

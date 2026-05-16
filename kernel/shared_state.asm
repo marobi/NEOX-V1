@@ -18,8 +18,6 @@
 
 .export brk_vector
 
-.export rp_lock
-
 .export sched_lock
 
 .export console_owner_pid
@@ -58,8 +56,22 @@ brk_vector:		.res 2
 ;   block are global resources, not per-process resources.
 ; ------------------------------------------------------------
 
+.export rp_lock
+
 rp_lock:        .res 1
 
+; ============================================================
+; other lock definitions
+;	
+.export fd_lock
+.export pipe_lock
+
+fd_lock:
+    .res 1
+
+pipe_lock:
+    .res 1
+	
 ; ------------------------------------------------------------
 ; Scheduler core state
 ;

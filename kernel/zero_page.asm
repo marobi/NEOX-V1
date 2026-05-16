@@ -50,6 +50,12 @@ fd_index_tmp:  .res 1
 fd_obj_tmp:    .res 1
 fd_flags_tmp:  .res 1
 
+.exportzp fd_closeproc_pid
+.exportzp fd_closeproc_fd
+
+fd_closeproc_pid: .res 1
+fd_closeproc_fd:  .res 1
+
 ; ============================================================
 .exportzp factor1
 .exportzp factor2

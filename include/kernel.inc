@@ -6,7 +6,7 @@
 .ifndef __KERNEL_ENTRY_INC__
 __KERNEL_ENTRY_INC__ = 1
 
-KERNEL_BASE                 = $E000
+KERNEL_BASE                 = $8000
 KERNEL_ENTRY_SIZE           = 3
 
 KERN_ENTRY_MAIN             = KERNEL_BASE + (0 * KERNEL_ENTRY_SIZE)

@@ -13,11 +13,6 @@
 ;   - User code calls fixed entry addresses
 ;   - Handlers run in shared syscall code
 ;
-; Current implemented syscalls:
-;   read     -> console input via RP2350 mailbox
-;   write    -> console output via RP2350 mailbox
-;   monitor  -> explicit transfer to supervisor/MICMON
-;
 ; I/O pointer policy:
 ;   - io_ptr is used by the syscall/RP console path
 ;   - read/write fully decode the argument block first
@@ -134,13 +129,6 @@ syscall_table:
 .proc k_write
 	jmp KERN_ENTRY_KSYS_WRITE
 .endproc
-
-; ------------------------------------------------------------
-; k_monitor
-;
-; Explicit transfer to supervisor/MICMON.
-; This does not return through the syscall layer directly.
-; ------------------------------------------------------------
 
 .proc k_monitor
     jmp KERN_ENTRY_MONITOR_SYSCALL

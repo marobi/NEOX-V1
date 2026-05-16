@@ -131,6 +131,7 @@
     <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
     <None Include="include\kernel.inc" />
+    <None Include="include\lock.inc" />
     <None Include="include\mailbox.inc" />
     <None Include="include\process.inc" />
     <None Include="include\scheduler.inc" />

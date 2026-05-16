@@ -19,6 +19,7 @@
 .setcpu "65C02"
 
 .include "fd.inc"
+.include "lock.inc"
 .include "math8.inc"
 .include "scheduler_defs.inc"
 .include "syscall.inc"
@@ -32,6 +33,8 @@
 .export fd_dup
 .export fd_dup2
 ;---------------------------------------------------
+.import fd_lock
+
 .import current_pid
 
 .import proc_fd_obj
@@ -50,6 +53,9 @@
 .importzp fd_obj_tmp
 .importzp fd_index_tmp
 .importzp fd_pid_tmp
+.importzp fd_closeproc_pid
+.importzp fd_closeproc_fd
+.importzp dev_ptr
 
 .segment "KERN_TEXT"
 
@@ -103,6 +109,92 @@
     rts
 
 @allowed:
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_close_current_locked
+;
+; Internal helper.
+;
+; Purpose:
+;   Close fd for current_pid while fd_lock is already held.
+;
+; Input:
+;   A = fd
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Notes:
+;   Does not acquire/release fd_lock.
+;   Does not call backend close.
+; ------------------------------------------------------------
+
+.proc fd_close_current_locked
+    cmp #MAX_FDS
+    bcc @fd_ok
+
+    ldy #EBADF
+    sec
+    rts
+
+@fd_ok:
+    sta fd_index_tmp
+
+    lda current_pid
+    sta factor1
+
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    clc
+    lda #<proc_fd_obj
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda (fd_ptr),y
+    cmp #FD_NONE
+    bne @is_open
+
+    ldy #EBADF
+    sec
+    rts
+
+@is_open:
+    tax
+
+    lda #FD_NONE
+    sta (fd_ptr),y
+
+    clc
+    lda #<proc_fd_flags
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_flags
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda #0
+    sta (fd_ptr),y
+
+    lda open_refcnt,x
+    beq @ok
+
+    dec open_refcnt,x
+
+@ok:
     clc
     rts
 .endproc
@@ -316,10 +408,179 @@
 .endproc
 
 ; ------------------------------------------------------------
+; fd_close_pid
+;
+; Internal helper.
+;
+; Purpose:
+;   Close one fd for a specific PID.
+;
+; Input:
+;   X = PID
+;   A = fd number
+;
+; Output:
+;   C clear = success
+;             A = 0
+;             X = 0
+;
+;   C set   = failure
+;             Y = errno
+;
+; Notes:
+;   Owns fd_lock.
+;   Backend close, if any, runs outside fd_lock.
+; ------------------------------------------------------------
+
+.proc fd_close_pid
+    cpx #MAX_PROCS
+    bcc @pid_ok
+
+    ldy #EINVAL
+    sec
+    rts
+
+@pid_ok:
+    cmp #MAX_FDS
+    bcc @fd_ok
+
+    ldy #EBADF
+    sec
+    rts
+
+@fd_ok:
+    pha                         ; preserve fd across LOCK_ACQUIRE
+
+    LOCK_ACQUIRE fd_lock
+
+    pla
+
+    ; Save PID/fd while table work is active.
+    stx fd_pid_tmp
+    sta fd_index_tmp
+
+    ; offset = PID * MAX_FDS
+    txa
+    sta factor1
+
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    ; fd_ptr = proc_fd_obj + offset
+    clc
+    lda #<proc_fd_obj
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc factor2
+    sta fd_ptr+1
+
+    ; Get object.
+    ldy fd_index_tmp
+    lda (fd_ptr),y
+    cmp #FD_NONE
+    bne @is_open
+
+    LOCK_RELEASE fd_lock
+
+    ldy #EBADF
+    sec
+    rts
+
+@is_open:
+    tax                         ; X = open object
+
+    ; Clear proc_fd_obj[PID][fd].
+    lda #FD_NONE
+    sta (fd_ptr),y
+
+    ; Clear proc_fd_flags[PID][fd].
+    clc
+    lda #<proc_fd_flags
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_flags
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda #0
+    sta (fd_ptr),y
+
+    ; Decrement refcount.
+    lda open_refcnt,x
+    beq @done_locked
+
+    dec open_refcnt,x
+    lda open_refcnt,x
+    bne @done_locked
+
+    ; Last reference. Check whether backend close is needed.
+    lda open_type,x
+    cmp #OBJ_DEVICE
+    beq @close_device
+
+@done_locked:
+    LOCK_RELEASE fd_lock
+
+    lda #0
+    tax
+    clc
+    rts
+
+@close_device:
+    ; Resolve close op while fd_lock is still held, then snapshot
+    ; dev_ptr as an RTS target before releasing fd_lock.
+    lda #DEVOP_CLOSE
+    jsr dev_resolve_op
+    bcc @close_op_ok
+
+    LOCK_RELEASE fd_lock
+
+    lda #0
+    tax
+    clc
+    rts
+
+@close_op_ok:
+    ; Push dev_ptr - 1 as RTS target.
+    lda dev_ptr
+    beq @target_low_zero
+
+    lda dev_ptr+1
+    pha
+
+    lda dev_ptr
+    sec
+    sbc #1
+    pha
+
+    bra @target_ready
+
+@target_low_zero:
+    lda dev_ptr+1
+    sec
+    sbc #1
+    pha
+
+    lda #$ff
+    pha
+
+@target_ready:
+    LOCK_RELEASE fd_lock
+
+    rts                         ; tail-call device close backend
+.endproc
+
+; ------------------------------------------------------------
 ; fd_close
 ;
 ; Purpose:
-;   Close one file descriptor belonging to current_pid.
+;   Close one file descriptor for current_pid.
 ;
 ; Input:
 ;   A = fd number
@@ -331,350 +592,41 @@
 ;
 ;   C set   = failure
 ;             Y = errno
-;
-; Behavior:
-;   - validates fd
-;   - clears proc_fd_obj[current_pid][fd]
-;   - clears proc_fd_flags[current_pid][fd]
-;   - decrements open object refcount
-;   - if refcount reaches zero and object is a device:
-;       calls DEVOP_CLOSE
-;
-; Notes:
-;   - FD table/refcount mutation is non-preemptible.
-;   - The open object and fd index are kept on the process stack.
-;   - Device close is called after leaving the critical section.
-;   - Do not use fd_pid_tmp/fd_index_tmp/fd_obj_tmp as live
-;     storage across JSR boundaries.
 ; ------------------------------------------------------------
 
 .proc fd_close
-    php
-    sei
-
-    ; Resolve fd -> open object.
-    ; fd_lookup returns:
-    ;   C clear
-    ;   X = open object
-    ;   fd_index_tmp = fd index
-    jsr fd_lookup
-    bcc @fd_ok
-
-    plp
-    sec
-    rts
-
-@fd_ok:
-    ; Preserve:
-    ;   X = open object
-    ;   fd_index_tmp = fd index
-    phx
-
-    ldy fd_index_tmp
-    phy
-
-    ; --------------------------------------------------------
-    ; Calculate:
-    ;
-    ;   offset = current_pid * MAX_FDS
-    ; --------------------------------------------------------
-
-    lda current_pid
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
-
-    ; Restore fd index into Y.
-    ply
-
-    ; --------------------------------------------------------
-    ; Clear proc_fd_obj[current_pid][fd].
-    ; --------------------------------------------------------
-
-    clc
-    lda #<proc_fd_obj
-    adc factor1
-    sta fd_ptr
-
-    lda #>proc_fd_obj
-    adc factor2
-    sta fd_ptr+1
-
-    lda #FD_NONE
-    sta (fd_ptr),y
-
-    ; --------------------------------------------------------
-    ; Clear proc_fd_flags[current_pid][fd].
-    ; --------------------------------------------------------
-
-    clc
-    lda #<proc_fd_flags
-    adc factor1
-    sta fd_ptr
-
-    lda #>proc_fd_flags
-    adc factor2
-    sta fd_ptr+1
-
-    lda #0
-    sta (fd_ptr),y
-
-    ; --------------------------------------------------------
-    ; Decrement open object refcount.
-    ; --------------------------------------------------------
-
-    plx                         ; X = open object
-
-    lda open_refcnt,x
-    beq @done_ok_locked
-
-    dec open_refcnt,x
-    lda open_refcnt,x
-    bne @done_ok_locked
-
-    ; --------------------------------------------------------
-    ; Last reference closed.
-    ;
-    ; For now only device close is supported.
-    ; Device close is called after leaving the critical section.
-    ; X still contains the open object index.
-    ; --------------------------------------------------------
-
-    lda open_type,x
-    cmp #OBJ_DEVICE
-    beq @close_device
-
-@done_ok_locked:
-    plp
-
-@done_ok:
-    lda #0
-    tax
-    clc
-    rts
-
-@close_device:
-    ; Leave critical section before backend close.
-    ; Current console close is non-blocking, but this is the
-    ; safer model for later devices/files.
-    plp
-
-    lda #DEVOP_CLOSE
-    jsr dev_resolve_op
-    bcs @done_ok
-
-    jsr dev_call
-    bcs @fail
-
-    lda #0
-    tax
-    clc
-    rts
-
-@fail:
-    sec
-    rts
+    ldx current_pid
+    jmp fd_close_pid
 .endproc
 
 ; ------------------------------------------------------------
 ; fd_init_process
 ;
 ; Purpose:
-;   Initialize fd table for a new process.
-;
-; Input:
-;   X = pid
-;
-; Behavior:
-;   - clears fd table
-;   - attaches:
-;       fd 0 → stdin (READ)
-;       fd 1 → stdout (WRITE)
-;       fd 2 → stderr (WRITE)
-;
-; Notes:
-;   Uses fd_attach to ensure consistent refcounting.
-; ------------------------------------------------------------
-
-.proc fd_init_process
-    ; --------------------------------------------------------
-    ; Clear proc_fd_obj[pid][*]
-    ; --------------------------------------------------------
-    lda #<proc_fd_obj
-    sta fd_ptr
-    lda #>proc_fd_obj
-    sta fd_ptr+1
-
-    txa
-    beq @obj_base_done
-    tay
-
-@obj_base_loop:
-    clc
-    lda fd_ptr
-    adc #<MAX_FDS
-    sta fd_ptr
-
-    lda fd_ptr+1
-    adc #>MAX_FDS
-    sta fd_ptr+1
-
-    dey
-    bne @obj_base_loop
-
-@obj_base_done:
-    ldy #0
-    lda #FD_NONE
-
-@clear_obj:
-    sta (fd_ptr),y
-    iny
-    cpy #MAX_FDS
-    bne @clear_obj
-
-    ; --------------------------------------------------------
-    ; Clear proc_fd_flags[pid][*]
-    ; --------------------------------------------------------
-    lda #<proc_fd_flags
-    sta fd_ptr
-    lda #>proc_fd_flags
-    sta fd_ptr+1
-
-    txa
-    beq @flags_base_done
-    tay
-
-@flags_base_loop:
-    clc
-    lda fd_ptr
-    adc #<MAX_FDS
-    sta fd_ptr
-
-    lda fd_ptr+1
-    adc #>MAX_FDS
-    sta fd_ptr+1
-
-    dey
-    bne @flags_base_loop
-
-@flags_base_done:
-    ldy #0
-    lda #0
-
-@clear_flags:
-    sta (fd_ptr),y
-    iny
-    cpy #MAX_FDS
-    bne @clear_flags
-
-    ; --------------------------------------------------------
-    ; Attach standard descriptors
-    ; --------------------------------------------------------
-
-    ; fd 0 → stdin (READ)
-    lda #FD_FLAG_READ
-    sta fd_flags_tmp
-    ldy #STDIN
-    lda #STDIN
-    jsr fd_attach
-
-    ; fd 1 → stdout (WRITE)
-    lda #FD_FLAG_WRITE
-    sta fd_flags_tmp
-    ldy #STDOUT
-    lda #STDOUT
-    jsr fd_attach
-
-    ; fd 2 → stderr (WRITE)
-    lda #FD_FLAG_WRITE
-    sta fd_flags_tmp
-    ldy #STDERR
-    lda #STDERR
-    jsr fd_attach
-
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; fd_close_process
-;
-; Purpose:
-;   Close all file descriptors owned by one process.
+;   Initialize standard descriptors for a newly created process.
 ;
 ; Input:
 ;   X = PID
 ;
-; Output:
-;   C clear = success
-;
-;   C set   = failure
-;             Y = errno
-;
-; Behavior:
-;   For each fd in proc_fd_obj[PID]:
-;     - if fd is open:
-;         clear proc_fd_obj[PID][fd]
-;         clear proc_fd_flags[PID][fd]
-;         decrement open_refcnt[object]
-;         if refcount becomes zero and object is a device:
-;             call DEVOP_CLOSE
-;
 ; Notes:
-;   - This closes descriptors for the PID passed in X, not current_pid.
-;   - FD table/refcount mutation is protected with php/sei/plp.
-;   - Device close calls are made after leaving the critical section.
-;   - This routine uses the stack to remember PID/fd/object across
-;     subroutine calls instead of using shared tmp-vars as live storage.
+;   May run while scheduler is active.
+;   Target PID must not be runnable yet.
+;   Owns fd_lock while clearing/attaching descriptors.
 ; ------------------------------------------------------------
 
-.proc fd_close_process
-    ; Save target PID.
-    phx
-
-    ; Validate PID.
+.proc fd_init_process
     cpx #MAX_PROCS
     bcc @pid_ok
 
-    plx
     ldy #EINVAL
     sec
     rts
 
 @pid_ok:
-    ; fd index = 0
-    ldy #0
+    LOCK_ACQUIRE fd_lock
 
-@loop:
-    cpy #MAX_FDS
-    bne @check_fd
-
-    ; Done.
-    plx                     ; discard saved PID
-    clc
-    rts
-
-@check_fd:
-    ; Stack currently:
-    ;   saved PID
-    ;
-    ; Save fd index while we calculate pointers.
-    phy
-
-    php
-    sei
-
-    ; Get target PID from stack without disturbing it:
-    ; stack top = saved fd index
-    ; below     = saved PID
-    ;
-    ; Pull temporarily, then restore.
-    ply                     ; Y = fd index
-    plx                     ; X = PID
-    phx                     ; restore saved PID
-    phy                     ; restore fd index
+    ; Save PID because fd_attach uses scratch internally.
+    stx fd_pid_tmp
 
     ; offset = PID * MAX_FDS
     txa
@@ -685,7 +637,7 @@
 
     jsr mul8u
 
-    ; Build proc_fd_obj[PID] pointer.
+    ; Clear proc_fd_obj[pid][*].
     clc
     lda #<proc_fd_obj
     adc factor1
@@ -695,30 +647,16 @@
     adc factor2
     sta fd_ptr+1
 
-    ; Restore fd index for table access.
-    ply                     ; Y = fd index
-
-    lda (fd_ptr),y
-    cmp #FD_NONE
-    bne @is_open
-
-    ; Closed fd; nothing to do.
-    plp
-
-    iny
-    bra @loop
-
-@is_open:
-    ; A = open object.
-    ; Save fd index and open object on stack.
-    pha                     ; open object
-    phy                     ; fd index
-
-    ; Clear proc_fd_obj[PID][fd].
+    ldy #0
     lda #FD_NONE
-    sta (fd_ptr),y
 
-    ; Build proc_fd_flags[PID] pointer.
+@clear_obj:
+    sta (fd_ptr),y
+    iny
+    cpy #MAX_FDS
+    bne @clear_obj
+
+    ; Clear proc_fd_flags[pid][*].
     clc
     lda #<proc_fd_flags
     adc factor1
@@ -728,71 +666,157 @@
     adc factor2
     sta fd_ptr+1
 
-    ; Restore fd index for flag clear, then save again.
-    ply                     ; Y = fd index
-    phy
-
+    ldy #0
     lda #0
+
+@clear_flags:
     sta (fd_ptr),y
-
-    ; Restore object into X.
-    ply                     ; Y = fd index
-    pla                     ; A = open object
-    tax
-
-    ; Save next fd index on stack before possible device close path.
     iny
-    phy                     ; next fd index
+    cpy #MAX_FDS
+    bne @clear_flags
 
-    ; Decrement refcount.
-    lda open_refcnt,x
-    beq @finish_locked
+    ; Attach standard descriptors.
 
-    dec open_refcnt,x
-    lda open_refcnt,x
-    bne @finish_locked
+    ldx fd_pid_tmp
+    lda #FD_FLAG_READ
+    sta fd_flags_tmp
+    ldy #STDIN
+    lda #STDIN
+    jsr fd_attach
 
-    ; Last reference: if device, close backend after leaving critical section.
-    lda open_type,x
-    cmp #OBJ_DEVICE
-    beq @close_device
+    ldx fd_pid_tmp
+    lda #FD_FLAG_WRITE
+    sta fd_flags_tmp
+    ldy #STDOUT
+    lda #STDOUT
+    jsr fd_attach
 
-@finish_locked:
-    plp
+    ldx fd_pid_tmp
+    lda #FD_FLAG_WRITE
+    sta fd_flags_tmp
+    ldy #STDERR
+    lda #STDERR
+    jsr fd_attach
 
-    ; Restore next fd index.
-    ply
-    bra @loop
+    LOCK_RELEASE fd_lock
 
-@close_device:
-    ; Need object index after leaving critical section.
-    phx                     ; object
-    plp
+    clc
+    rts
+.endproc
 
-    ; Restore object for device dispatch.
-    plx
+; ------------------------------------------------------------
+; fd_close_process
+;
+; Purpose:
+;   Close all FDs belonging to PID X.
+;
+; Input:
+;   X = PID
+;
+; Notes:
+;   Uses fd_close_pid so all close/refcount behavior is shared.
+;   EBADF is ignored because closed slots are expected.
+; ------------------------------------------------------------
 
-    lda #DEVOP_CLOSE
-    jsr dev_resolve_op
-    bcs @after_device_close
+.proc fd_close_process
+    cpx #MAX_PROCS
+    bcc @pid_ok
 
-    jsr dev_call
-    bcs @device_close_fail
+    ldy #EINVAL
+    sec
+    rts
 
-@after_device_close:
-    ; Restore next fd index and continue.
-    ply
-    bra @loop
+@pid_ok:
+    stx fd_closeproc_pid
+    stz fd_closeproc_fd
 
-@device_close_fail:
-    ; Drop next fd index before returning error.
-    ply
+@loop:
+    lda fd_closeproc_fd
+    cmp #MAX_FDS
+    beq @done
 
-    ; Drop saved PID.
-    plx
+    ldx fd_closeproc_pid
+    lda fd_closeproc_fd
+    jsr fd_close_pid
+    bcc @next
+
+    cpy #EBADF
+    beq @next
 
     sec
     rts
+
+@next:
+    inc fd_closeproc_fd
+    bra @loop
+
+@done:
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_tail_call_device_locked
+;
+; Internal helper.
+;
+; Purpose:
+;   Tail-call the device routine currently stored in dev_ptr.
+;
+; Input:
+;   fd_lock is held
+;   dev_ptr = target device routine
+;   stack contains:
+;       saved X length
+;       saved A length
+;       caller return address
+;
+; Output:
+;   Does not return to fd_read/fd_write.
+;   Device routine RTS returns to fd_read/fd_write caller.
+;
+; Notes:
+;   LOCK_RELEASE clobbers A, so A is preserved in Y.
+;   dev_ptr is snapshotted onto the stack before fd_lock release.
+;   Uses RTS tail-call, not RTI.
+; ------------------------------------------------------------
+
+.proc fd_tail_call_device_locked
+    ; Restore requested length for backend.
+    plx                         ; X = length high
+    pla                         ; A = length low
+    tay                         ; preserve length low across LOCK_RELEASE
+
+    ; Push dev_ptr - 1 as RTS target while fd_lock is still held.
+    lda dev_ptr
+    beq @target_low_zero
+
+@target_low_nonzero:
+    lda dev_ptr+1
+    pha
+
+    lda dev_ptr
+    sec
+    sbc #1
+    pha
+
+    bra @target_ready
+
+@target_low_zero:
+    lda dev_ptr+1
+    sec
+    sbc #1
+    pha
+
+    lda #$ff
+    pha
+
+@target_ready:
+    LOCK_RELEASE fd_lock
+
+    tya                         ; restore A = length low
+
+    rts                         ; tail-call device backend
 .endproc
 
 ; ------------------------------------------------------------
@@ -822,28 +846,27 @@
 ;   - FD table lookup, permission check, object check, and device
 ;     vector resolution are protected.
 ;   - We do not call the device backend with JSR from inside this
-;     routine. We tail-jump through dev_call_tail.
+;     routine. We tail-jump through dev_call.
 ;   - Device routine RTS returns to fd_read's caller.
 ;   - Device backend may enable IRQ before blocking/yielding.
 ; ------------------------------------------------------------
 
 .proc fd_read
-    php
-    sei
-
-    ; Preserve requested length while resolving fd/device.
+    ; Preserve requested length.
     pha
     phx
+
+    LOCK_ACQUIRE fd_lock
 
     ; Resolve fd -> open object.
     tya
     jsr fd_lookup
     bcc @fd_ok
 
-    ; Drop saved length and restore caller interrupt state.
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     sec
     rts
 
@@ -855,58 +878,44 @@
     jsr fd_check_perm
     bcc @perm_ok
 
-    ; Drop saved object and saved length.
-    plx
+    plx                         ; discard open object
+
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     sec
     rts
 
 @perm_ok:
-    ; Restore open object into X.
-    plx
+    plx                         ; X = open object
 
-    ; For now only device objects are supported by fd_read.
     lda open_type,x
     cmp #OBJ_DEVICE
     beq @device_ok
 
-    ; Drop saved length.
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     ldy #ENODEV
     sec
     rts
 
 @device_ok:
-    ; Resolve device READ operation.
     lda #DEVOP_READ
     jsr dev_resolve_op
     bcc @op_ok
 
-    ; Drop saved length.
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     sec
     rts
 
 @op_ok:
-    ; Restore requested length for backend.
-    plx
-    pla
-
-    ; Restore original interrupt state before entering device code.
-    ;
-    ; There is a small window between PLP and JMP. That is acceptable
-    ; for now because dev_call_tail immediately jumps through dev_ptr.
-    ; If this ever becomes a real race, move the vector to stack/local
-    ; storage or require device backends to enter with IRQ disabled.
-    plp
-
-    jmp dev_call
+    jmp fd_tail_call_device_locked
 .endproc
 
 ; ------------------------------------------------------------
@@ -936,28 +945,27 @@
 ;   - FD table lookup, permission check, object check, and device
 ;     vector resolution are protected.
 ;   - We do not call the device backend with JSR from inside this
-;     routine. We tail-jump through dev_call_tail.
+;     routine. We tail-jump through dev_call.
 ;   - Device routine RTS returns to fd_write's caller.
 ;   - Device backend may enable IRQ before blocking/yielding.
 ; ------------------------------------------------------------
 
 .proc fd_write
-    php
-    sei
-
-    ; Preserve requested length while resolving fd/device.
+    ; Preserve requested length.
     pha
     phx
+
+    LOCK_ACQUIRE fd_lock
 
     ; Resolve fd -> open object.
     tya
     jsr fd_lookup
     bcc @fd_ok
 
-    ; Drop saved length and restore caller interrupt state.
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     sec
     rts
 
@@ -969,53 +977,44 @@
     jsr fd_check_perm
     bcc @perm_ok
 
-    ; Drop saved object and saved length.
-    plx
+    plx                         ; discard open object
+
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     sec
     rts
 
 @perm_ok:
-    ; Restore open object into X.
-    plx
+    plx                         ; X = open object
 
-    ; For now only device objects are supported by fd_write.
     lda open_type,x
     cmp #OBJ_DEVICE
     beq @device_ok
 
-    ; Drop saved length.
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     ldy #ENODEV
     sec
     rts
 
 @device_ok:
-    ; Resolve device WRITE operation.
     lda #DEVOP_WRITE
     jsr dev_resolve_op
     bcc @op_ok
 
-    ; Drop saved length.
+    LOCK_RELEASE fd_lock
+
     plx
     pla
-    plp
     sec
     rts
 
 @op_ok:
-    ; Restore requested length for backend.
-    plx
-    pla
-
-    ; Restore original interrupt state before entering device code.
-    plp
-
-    jmp dev_call
+    jmp fd_tail_call_device_locked
 .endproc
 
 ; ------------------------------------------------------------
@@ -1119,9 +1118,6 @@
 ; ------------------------------------------------------------
 ; fd_dup
 ;
-; Purpose:
-;   Duplicate one fd into the lowest free fd slot of current_pid.
-;
 ; Input:
 ;   A = old fd
 ;
@@ -1134,67 +1130,74 @@
 ;             Y = errno
 ;
 ; Notes:
-;   - FD table manipulation is non-preemptible.
-;   - The old open object is saved on the stack.
-;   - The new fd is saved with PHY across fd_attach.
-;   - Do not use fd_pid_tmp/fd_index_tmp as live storage across JSR.
+;
 ; ------------------------------------------------------------
 
 .proc fd_dup
-    php
-    sei
+    pha                         ; preserve oldfd across LOCK_ACQUIRE
+
+    LOCK_ACQUIRE fd_lock
+
+    pla                         ; A = oldfd
 
     ; Resolve old fd -> open object.
     jsr fd_lookup
     bcc @old_ok
 
-    plp
+    LOCK_RELEASE fd_lock
+
     sec
     rts
 
 @old_ok:
-    ; Save old open object on stack.
-    txa
-    pha
+    ; X = old open object.
+    phx                         ; stack: old object
 
-    ; Copy old fd flags into fd_flags_tmp.
+    ; Copy flags from old fd.
     jsr fd_get_flags_current
     sta fd_flags_tmp
 
-    ; Find lowest free fd for current process.
+    ; Find lowest free fd.
     jsr fd_find_free_current
     bcc @slot_ok
 
-    ; Drop saved old object.
-    pla
+    plx                         ; discard old object
 
-    plp
+    LOCK_RELEASE fd_lock
+
     sec
     rts
 
 @slot_ok:
     ; Y = new fd.
-    ; A stack top = old open object.
+    ;
+    ; Preserve new fd on stack. Do not use fd_pid_tmp:
+    ; fd_attach overwrites it.
+    phy                         ; stack: old object, new fd
 
     ; Restore old object into A.
-    pla
+    ply                         ; Y = new fd
+    plx                         ; X = old object
 
-    ; Save new fd across fd_attach.
-    phy
+    txa                         ; A = old object
+    ldx current_pid             ; X = PID
 
-    ; Attach new fd to same open object.
-    ldx current_pid
-    ; Y still contains new fd.
-    ; A contains old open object.
+    ; Preserve new fd for return.
+    phy                         ; stack: new fd
+
+    ; Attach:
+    ;   X = current_pid
+    ;   Y = new fd
+    ;   A = old object
     jsr fd_attach
 
-    ; Restore new fd and return it in A.
-    ply
-    tya
+    ; Recover new fd return value.
+    ply                         ; Y = new fd
 
+    LOCK_RELEASE fd_lock
+
+    tya                         ; A = new fd
     ldx #0
-
-    plp
     clc
     rts
 .endproc
@@ -1202,8 +1205,17 @@
 ; ------------------------------------------------------------
 ; fd_dup2
 ;
-; Purpose:
-;   Duplicate oldfd into exactly newfd.
+; Input:
+;   A = old fd
+;   Y = new fd
+;
+; Output:
+;   C clear = success, A = new fd, X = 0
+;   C set   = failure, Y = errno
+; ------------------------------------------------------------
+
+; ------------------------------------------------------------
+; fd_dup2
 ;
 ; Input:
 ;   A = old fd
@@ -1217,31 +1229,14 @@
 ;   C set   = failure
 ;             Y = errno
 ;
-; Semantics:
-;   if oldfd invalid:
-;       fail EBADF
-;
-;   if newfd >= MAX_FDS:
-;       fail EBADF
-;
-;   if oldfd == newfd:
-;       return newfd
-;
-;   if newfd already open:
-;       close(newfd)
-;
-;   newfd references the same open object as oldfd.
-;   newfd receives the same per-fd flags as oldfd.
-;
 ; Notes:
-;   - Uses PHY/PLY/PHX/PLX instead of shared temp variables
-;     for live values across subroutine calls.
-;   - FD table mutation is made non-preemptible.
-;   - fd_flags_tmp is only written immediately before fd_attach.
+;   - Validates newfd before taking fd_lock.
+;   - Validates oldfd before closing/replacing newfd.
+;   - dup2(oldfd, oldfd) returns oldfd without changing refcounts.
+;   - fd_close_current_locked is used because fd_lock is already held.
 ; ------------------------------------------------------------
 
 .proc fd_dup2
-    ; Validate newfd range before entering critical section.
     cpy #MAX_FDS
     bcc @newfd_ok
 
@@ -1250,145 +1245,99 @@
     rts
 
 @newfd_ok:
-    php
-    sei
+    pha                         ; preserve oldfd
+    phy                         ; preserve newfd
 
-    ; Save requested newfd on stack.
+    LOCK_ACQUIRE fd_lock
+
+    ply                         ; Y = newfd
+    pla                         ; A = oldfd
+
+    ; Preserve newfd across fd_lookup.
+    ; fd_lookup returns errno in Y on failure, so this saved byte
+    ; must be discarded with PLA, not PLY, on the failure path.
     phy
 
-    ; Resolve oldfd -> open object.
+    ; Resolve old fd -> open object.
     jsr fd_lookup
     bcc @old_ok
 
-    ; Drop saved newfd without clobbering Y errno.
-    pla
+    pla                         ; discard saved newfd
+                                ; preserve Y = errno from fd_lookup
 
-    plp
+    LOCK_RELEASE fd_lock
+
     sec
     rts
 
 @old_ok:
-    ; fd_lookup:
-    ;   X            = old open object
-    ;   fd_index_tmp = old fd
-    ;   stack top    = requested newfd
+    ; X = old object
+    ; fd_index_tmp = old fd
+    ; stack top = saved newfd
 
-    ply                     ; Y = newfd
+    ply                         ; Y = newfd
 
-    ; dup2(oldfd, oldfd) returns oldfd unchanged.
+    ; dup2(fd, fd) succeeds and changes nothing.
     cpy fd_index_tmp
     bne @different
 
+    LOCK_RELEASE fd_lock
+
     tya
     ldx #0
-
-    plp
     clc
     rts
 
 @different:
-    ; Save old open object and newfd while fetching old flags.
-    phx                     ; old open object
-    phy                     ; newfd
+    ; Preserve old object and newfd.
+    phx                         ; old object
+    phy                         ; newfd
 
-    ; fd_index_tmp still refers to oldfd here.
+    ; Copy descriptor flags from old fd.
+    ; fd_index_tmp still contains old fd here.
     jsr fd_get_flags_current
+    sta fd_flags_tmp
 
-    ; Stack:
-    ;   top:    newfd
-    ;           old open object
-    ;
-    ; A = old fd flags
-    pha                     ; old fd flags
+    ; Close target newfd if it is open.
+    ; EBADF from closing target means it was already closed, which is OK.
+    ply                         ; Y = newfd
+    phy                         ; keep newfd for attach/return
 
-    ; Restore into registers:
-    ;   A = flags
-    ;   X = old open object
-    ;   Y = newfd
-    pla                     ; A = flags
-    ply                     ; Y = newfd
-    plx                     ; X = old open object
-
-    ; --------------------------------------------------------
-    ; If newfd is already open, close it first.
-    ;
-    ; Preserve:
-    ;   A = old flags
-    ;   X = old object
-    ;   Y = newfd
-    ; --------------------------------------------------------
-
-    pha                     ; old flags
-    phx                     ; old object
-    phy                     ; newfd
-
-    tya
-    jsr fd_lookup
-    bcs @target_already_closed
-
-    ; Target fd is open. Restore values, then close target fd.
-    ply                     ; Y = newfd
-    plx                     ; X = old object
-    pla                     ; A = old flags
-
-    ; Preserve values across fd_close.
-    pha                     ; old flags
-    phx                     ; old object
-    phy                     ; newfd
-
-    tya
-    jsr fd_close
+    tya                         ; A = newfd
+    jsr fd_close_current_locked
     bcc @target_closed_ok
 
-    ; fd_close failed.
-    ; Drop saved newfd/object/flags without clobbering Y errno.
-    pla
-    pla
-    pla
+    cpy #EBADF
+    beq @target_closed_ok
 
-    plp
+    ; Real close failure.
+    ply                         ; discard newfd
+    plx                         ; discard old object
+
+    LOCK_RELEASE fd_lock
+
     sec
     rts
 
 @target_closed_ok:
-    ply                     ; Y = newfd
-    plx                     ; X = old object
-    pla                     ; A = old flags
-    bra @attach
+    ply                         ; Y = newfd
+    plx                         ; X = old object
 
-@target_already_closed:
-    ; fd_lookup failed for newfd, which is fine: target is closed.
-    ; Restore saved values.
-    ply                     ; Y = newfd
-    plx                     ; X = old object
-    pla                     ; A = old flags
+    ; Attach newfd to the old object.
+    txa                         ; A = old object
+    ldx current_pid             ; X = PID
 
-@attach:
-    ; A = old flags
-    ; X = old open object
-    ; Y = newfd
+    phy                         ; preserve newfd across fd_attach
 
-    ; fd_attach expects fd_flags_tmp to contain copied flags.
-    sta fd_flags_tmp
-
-    ; Move old object to A for fd_attach.
-    txa
-
-    ; Save newfd across fd_attach. Do not rely on Y survival.
-    phy
-
-    ldx current_pid
-    ; Y = newfd
-    ; A = old open object
     jsr fd_attach
 
-    ; Return newfd in A.
-    ply
-    tya
+    ply                         ; Y = newfd
 
+    LOCK_RELEASE fd_lock
+
+    tya                         ; A = newfd
     ldx #0
-
-    plp
     clc
     rts
 .endproc
+

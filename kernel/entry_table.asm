@@ -10,7 +10,7 @@
 ;   - Located at $E000
 ;
 ; Notes:
-;   Padding ensures that KERN_TEXT always starts at $E060
+;   Padding ensures that KERN_TEXT always starts at $8060
 ; ============================================================
 
 .setcpu "65C02"

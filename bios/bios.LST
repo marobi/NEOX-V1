@@ -74,20 +74,28 @@ Current file: bios.asm
 000000r 2               ; Syscall numbers
 000000r 2               ; ------------------------------------------------------------
 000000r 2               SYS_EXIT			= $00
+000000r 2               SYS_CLOSE			= $02
 000000r 2               SYS_READ            = $03
 000000r 2               SYS_WRITE           = $04
 000000r 2               SYS_MONITOR         = $05
+000000r 2               SYS_YIELD           = $0B
 000000r 2               SYS_SLEEP           = $0E
+000000r 2               SYS_DUP				= $0F
+000000r 2               SYS_DUP2			= $10
 000000r 2               
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Fixed syscall entry addresses
 000000r 2               ; ------------------------------------------------------------
 000000r 2               
 000000r 2               sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_close           = SYSCALL_BASE + (SYS_CLOSE   * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
 000000r 2               
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Common errno values
@@ -96,6 +104,7 @@ Current file: bios.asm
 000000r 2               E_OK                = 0
 000000r 2               EIO                 = 3
 000000r 2               EINVAL              = 6
+000000r 2               EMFILE 				= 8        ; too many open file descriptors
 000000r 2               EBADF           	= 9
 000000r 2               ENODEV          	= 10
 000000r 2               ENOSYS          	= 11

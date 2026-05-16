@@ -42,11 +42,11 @@ RP_DOORBELL         = $D010
 ; Shared RAM request/result block
 ;
 ; Why here:
-;   $80C0 is in shared page 8, so all contexts see the same
+;   $E000 is in shared page 8, so all contexts see the same
 ;   mailbox request block.
 ; ------------------------------------------------------------
 
-RP_REQ_BASE         = $80C0
+RP_REQ_BASE         = $E000
 
 ; ------------------------------------------------------------
 ; Request / result block layout

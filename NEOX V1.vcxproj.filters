@@ -115,5 +115,8 @@
     <None Include="kernel\process_control.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="include\lock.inc">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
