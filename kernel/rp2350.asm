@@ -426,28 +426,33 @@
     rts
 
 @done:
-    ; Fetch result before clearing RP_STATUS.
+    ; Preserve result across status cleanup and lock release.
     lda RP_RES0L
     ldx RP_RES0H
+    pha
+    phx
 
-    ; Mark mailbox interface idle again.
     lda #RP_IDLE
-	sta RP_STATUS
+    sta RP_STATUS
 
-    ; Release mailbox ownership.
     jsr rp_release_lock
 
+    plx
+    pla
     clc
     rts
 
 @error:
-    ; Preserve RP error in Y if you later map RP_ERR to errno.
-    ; For now return generic EIO.
+    ; Preserve errno across cleanup/release.
+    ldy #EIO
+    phy
+
     lda #RP_IDLE
-	sta RP_STATUS
+    sta RP_STATUS
+
     jsr rp_release_lock
 
-    ldy #EIO
+    ply
     sec
     rts
 .endproc

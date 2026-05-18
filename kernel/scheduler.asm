@@ -559,6 +559,17 @@
 	sta wait_reason,x
 	stz wait_object,x
     
+    ; Initial pending signal.
+    stz proc_signal_pending,x
+
+    ; Initial exit code.
+    lda #EXIT_OK
+    sta proc_exit_code,x
+
+    ; Initial resume mode.
+    lda #PROC_RESUME_RTS
+    sta proc_resume_mode,x
+
 	; Initial process flags.
     lda #PROC_FLAG_NONE
     sta proc_flags,x

@@ -9,23 +9,26 @@
 ;   - PID 0 is the idle process, initialized by scheduler/main.
 ;   - Monitor is not a process.
 ;   - Normal tasks are allocated from PID 1 upward.
+;   - User process code lives in USER_TEXT, not KERN_TEXT.
 ; ============================================================
 
 .setcpu "65C02"
 
-.include "syscall.inc"
 .include "scheduler_defs.inc"
-.include "bios.inc"
 
 .export tasks_init
-.export task1
-.export task2
 
 .import scheduler_create_process
 
-.import test_ctr1
-.import test_ctr2
-.import test_turn
+; ------------------------------------------------------------
+; Static test user image entry points
+;
+; These addresses must match the user image linker script.
+; ------------------------------------------------------------
+
+USER_TASK1_ENTRY = $2000
+USER_TASK2_ENTRY = $2400
+USER_TASK3_ENTRY = $2800
 
 .segment "KERN_TEXT"
 
@@ -41,459 +44,93 @@
 task1_create:
     .byte $01
     .byte $00
-    .word task1
+    .word USER_TASK1_ENTRY
 
 task2_create:
     .byte $02
     .byte $00
-    .word task2
+    .word USER_TASK2_ENTRY
 
 task3_create:
     .byte $03
     .byte $00
-    .word task3
+    .word USER_TASK3_ENTRY
 	
-; ------------------------------------------------------------
-; tasks_init
-;
-; Purpose:
-;   Populate the process table with:
-;     PID 1 = task1
-;     PID 2 = task2
-;
-; PID 0 is not created here. It is the idle process.
-; ------------------------------------------------------------
+; ============================================================
+; init_tasks.asm
+; NEOX - boot user process creation from user image table
+; ============================================================
+
+.setcpu "65C02"
+
+.include "scheduler_defs.inc"
+
+.export tasks_init
+
+.import init_task_count
+.import init_task_ptr
+
+.import scheduler_create_process
+
+.segment "KERN_TEXT"
+
+USER_IMAGE_TABLE = $2000
+
+USER_MAGIC0      = USER_IMAGE_TABLE + 0
+USER_MAGIC1      = USER_IMAGE_TABLE + 1
+USER_VERSION     = USER_IMAGE_TABLE + 2
+USER_TASK_COUNT  = USER_IMAGE_TABLE + 3
+USER_TASK_TABLE  = USER_IMAGE_TABLE + 4
+
+USER_ENTRY_SIZE  = 4
 
 .proc tasks_init
-    stz test_ctr1
-    stz test_ctr2
-    stz test_turn
+    ; Validate magic.
+    lda USER_MAGIC0
+    cmp #'N'
+    bne @bad_user_image
 
-    ldx #<task1_create
-    ldy #>task1_create
+    lda USER_MAGIC1
+    cmp #'X'
+    bne @bad_user_image
+
+    ; Validate version.
+    lda USER_VERSION
+    cmp #$01
+    bne @bad_user_image
+
+    lda USER_TASK_COUNT
+    beq @done
+
+    sta init_task_count
+
+    lda #<USER_TASK_TABLE
+    sta init_task_ptr
+    lda #>USER_TASK_TABLE
+    sta init_task_ptr+1
+
+@loop:
+    ldx init_task_ptr
+    ldy init_task_ptr+1
     jsr scheduler_create_process
 
-    ldx #<task2_create
-    ldy #>task2_create
-    jsr scheduler_create_process
+    clc
+    lda init_task_ptr
+    adc #USER_ENTRY_SIZE
+    sta init_task_ptr
 
-    ldx #<task3_create
-    ldy #>task3_create
-    jmp scheduler_create_process
+    lda init_task_ptr+1
+    adc #0
+    sta init_task_ptr+1
+
+    dec init_task_count
+    bne @loop
+
+@done:
+    clc
+    rts
+
+@bad_user_image:
+    ; For now, trap hard. Later print a boot error.
+    bra @bad_user_image
 .endproc
-
-.if 0
-; ------------------------------------------------------------
-; task1
-; ------------------------------------------------------------
-
-.proc task1
-	lda #5
-	jsr sys_sleep
-@loop:
-    inc test_ctr1
-    lda #$01
-    sta test_turn
-	lda #13
-	jsr sys_sleep
-    bra @loop
-.endproc
-.endif
-
-; ------------------------------------------------------------
-; task2
-; ------------------------------------------------------------
-
-.proc task2
-@loop:
-    inc test_ctr2
-    lda #$02
-    sta test_turn
-	lda #48
-	jsr sys_sleep
-    bra @loop
-.endproc
-
-; ------------------------------------------------------------
-; task3
-; ------------------------------------------------------------
-
-.proc task3
-@loop:
-    ; read a char from console
-    jsr BIOS_GETCHAR
-	
-    ; echo received character
-    jsr BIOS_PUTCHAR
-	
-	; when q exit
-	cmp #'q'
-	bne @loop
-	
-	jmp sys_exit
-.endproc
-
-; ------------------------------------------------------------
-; task1
-;
-; FD dup/dup2 edge-case regression test.
-;
-; Initial expected FD state:
-;   0:r  1:w  2:w  -
-;
-; Tests:
-;   dup2(1,1)  -> returns 1, no refcount change
-;   dup(3)     -> EBADF
-;   dup2(3,1)  -> EBADF, fd 1 still valid
-;   dup2(1,4)  -> EBADF, fd 1 still valid
-;
-; Final expected FD state:
-;   0:r  1:w  2:w  -
-; ------------------------------------------------------------
-
-.proc task1
-    lda #<task1_msg_start
-    ldx #>task1_msg_start
-    ldy #task1_msg_start_len
-    jsr task1_write_stdout
-
-    ; --------------------------------------------------------
-    ; Test 1: dup2(1,1)
-    ; --------------------------------------------------------
-
-    lda #1
-    ldy #1
-    jsr task1_dup2_fd
-    bcc @dup2_same_returned
-
-    lda #<task1_msg_dup2_same_failed
-    ldx #>task1_msg_dup2_same_failed
-    ldy #task1_msg_dup2_same_failed_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup2_same_returned:
-    cmp #1
-    beq @dup2_same_ok
-
-    lda #<task1_msg_dup2_same_wrong_fd
-    ldx #>task1_msg_dup2_same_wrong_fd
-    ldy #task1_msg_dup2_same_wrong_fd_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup2_same_ok:
-    lda #<task1_msg_dup2_same_ok
-    ldx #>task1_msg_dup2_same_ok
-    ldy #task1_msg_dup2_same_ok_len
-    jsr task1_write_stdout
-
-    ; fd 1 must still work.
-    lda #<task1_msg_fd1_after_dup2_same
-    ldx #>task1_msg_fd1_after_dup2_same
-    ldy #task1_msg_fd1_after_dup2_same_len
-    jsr task1_write_stdout
-    bcc @fd1_after_dup2_same_ok
-
-    lda #<task1_msg_fd1_after_dup2_same_failed
-    ldx #>task1_msg_fd1_after_dup2_same_failed
-    ldy #task1_msg_fd1_after_dup2_same_failed_len
-    jsr task1_write_stderr
-    jmp @tests_done
-
-@fd1_after_dup2_same_ok:
-
-    ; --------------------------------------------------------
-    ; Test 2: dup(3), where fd 3 is closed
-    ; --------------------------------------------------------
-
-    lda #3
-    jsr task1_dup_fd
-    bcs @dup_closed_failed_as_expected
-
-    lda #<task1_msg_dup_closed_bug
-    ldx #>task1_msg_dup_closed_bug
-    ldy #task1_msg_dup_closed_bug_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup_closed_failed_as_expected:
-    cpy #EBADF
-    beq @dup_closed_ok
-
-    lda #<task1_msg_dup_closed_wrong_errno
-    ldx #>task1_msg_dup_closed_wrong_errno
-    ldy #task1_msg_dup_closed_wrong_errno_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup_closed_ok:
-    lda #<task1_msg_dup_closed_ok
-    ldx #>task1_msg_dup_closed_ok
-    ldy #task1_msg_dup_closed_ok_len
-    jsr task1_write_stdout
-
-    ; --------------------------------------------------------
-    ; Test 3: dup2(3,1), old fd closed
-    ; --------------------------------------------------------
-
-    lda #3
-    ldy #1
-    jsr task1_dup2_fd
-    bcs @dup2_old_closed_failed_as_expected
-
-    lda #<task1_msg_dup2_old_closed_bug
-    ldx #>task1_msg_dup2_old_closed_bug
-    ldy #task1_msg_dup2_old_closed_bug_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup2_old_closed_failed_as_expected:
-    cpy #EBADF
-    beq @dup2_old_closed_ok
-
-    lda #<task1_msg_dup2_old_closed_wrong_errno
-    ldx #>task1_msg_dup2_old_closed_wrong_errno
-    ldy #task1_msg_dup2_old_closed_wrong_errno_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup2_old_closed_ok:
-    lda #<task1_msg_dup2_old_closed_ok
-    ldx #>task1_msg_dup2_old_closed_ok
-    ldy #task1_msg_dup2_old_closed_ok_len
-    jsr task1_write_stdout
-
-    ; fd 1 must still work after failed dup2.
-    lda #<task1_msg_fd1_after_failed_dup2_old
-    ldx #>task1_msg_fd1_after_failed_dup2_old
-    ldy #task1_msg_fd1_after_failed_dup2_old_len
-    jsr task1_write_stdout
-    bcc @fd1_after_failed_dup2_old_ok
-
-    lda #<task1_msg_fd1_after_failed_dup2_old_failed
-    ldx #>task1_msg_fd1_after_failed_dup2_old_failed
-    ldy #task1_msg_fd1_after_failed_dup2_old_failed_len
-    jsr task1_write_stderr
-    jmp @tests_done
-
-@fd1_after_failed_dup2_old_ok:
-
-    ; --------------------------------------------------------
-    ; Test 4: dup2(1,4), new fd out of range
-    ; MAX_FDS = 4, valid fds are 0..3.
-    ; --------------------------------------------------------
-
-    lda #1
-    ldy #4
-    jsr task1_dup2_fd
-    bcs @dup2_new_range_failed_as_expected
-
-    lda #<task1_msg_dup2_new_range_bug
-    ldx #>task1_msg_dup2_new_range_bug
-    ldy #task1_msg_dup2_new_range_bug_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup2_new_range_failed_as_expected:
-    cpy #EBADF
-    beq @dup2_new_range_ok
-
-    lda #<task1_msg_dup2_new_range_wrong_errno
-    ldx #>task1_msg_dup2_new_range_wrong_errno
-    ldy #task1_msg_dup2_new_range_wrong_errno_len
-    jsr task1_write_stdout
-    jmp @tests_done
-
-@dup2_new_range_ok:
-    lda #<task1_msg_dup2_new_range_ok
-    ldx #>task1_msg_dup2_new_range_ok
-    ldy #task1_msg_dup2_new_range_ok_len
-    jsr task1_write_stdout
-
-    ; fd 1 must still work after failed range dup2.
-    lda #<task1_msg_fd1_after_failed_dup2_range
-    ldx #>task1_msg_fd1_after_failed_dup2_range
-    ldy #task1_msg_fd1_after_failed_dup2_range_len
-    jsr task1_write_stdout
-    bcc @all_ok
-
-    lda #<task1_msg_fd1_after_failed_dup2_range_failed
-    ldx #>task1_msg_fd1_after_failed_dup2_range_failed
-    ldy #task1_msg_fd1_after_failed_dup2_range_failed_len
-    jsr task1_write_stderr
-    jmp @tests_done
-
-@all_ok:
-    lda #<task1_msg_all_ok
-    ldx #>task1_msg_all_ok
-    ldy #task1_msg_all_ok_len
-    jsr task1_write_stdout
-
-@tests_done:
-    jsr sys_yield
-    jmp @tests_done
-.endproc
-
-; ------------------------------------------------------------
-; task1_write_stdout
-;
-; Input:
-;   A/X = string pointer
-;   Y   = length
-; ------------------------------------------------------------
-
-.proc task1_write_stdout
-    sta task1_rw_args + rw_args::buf_ptr
-    stx task1_rw_args + rw_args::buf_ptr + 1
-
-    sty task1_rw_args + rw_args::len
-    stz task1_rw_args + rw_args::len + 1
-
-    lda #1
-    sta task1_rw_args + rw_args::fd
-
-    ldx #<task1_rw_args
-    ldy #>task1_rw_args
-    jmp sys_write
-.endproc
-
-; ------------------------------------------------------------
-; task1_write_stderr
-;
-; Input:
-;   A/X = string pointer
-;   Y   = length
-; ------------------------------------------------------------
-
-.proc task1_write_stderr
-    sta task1_rw_args + rw_args::buf_ptr
-    stx task1_rw_args + rw_args::buf_ptr + 1
-
-    sty task1_rw_args + rw_args::len
-    stz task1_rw_args + rw_args::len + 1
-
-    lda #2
-    sta task1_rw_args + rw_args::fd
-
-    ldx #<task1_rw_args
-    ldy #>task1_rw_args
-    jmp sys_write
-.endproc
-
-; ------------------------------------------------------------
-; task1_dup_fd
-;
-; Input:
-;   A = old fd
-;
-; Output:
-;   C clear = success, A = new fd
-;   C set   = failure, Y = errno
-; ------------------------------------------------------------
-
-.proc task1_dup_fd
-    jmp sys_dup
-.endproc
-
-; ------------------------------------------------------------
-; task1_dup2_fd
-;
-; Input:
-;   A = old fd
-;   Y = new fd
-;
-; Output:
-;   C clear = success, A = new fd
-;   C set   = failure, Y = errno
-; ------------------------------------------------------------
-
-.proc task1_dup2_fd
-    jmp sys_dup2
-.endproc
-
-;.segment "USER_DATA"
-
-task1_rw_args:
-    .tag rw_args
-
-task1_msg_start:
-    .byte "T1: dup edge test start", 13
-task1_msg_start_len = * - task1_msg_start
-
-task1_msg_dup2_same_ok:
-    .byte "T1: dup2(1,1) returned 1 - OK", 13
-task1_msg_dup2_same_ok_len = * - task1_msg_dup2_same_ok
-
-task1_msg_dup2_same_failed:
-    .byte "T1: BUG - dup2(1,1) failed", 13
-task1_msg_dup2_same_failed_len = * - task1_msg_dup2_same_failed
-
-task1_msg_dup2_same_wrong_fd:
-    .byte "T1: BUG - dup2(1,1) returned wrong fd", 13
-task1_msg_dup2_same_wrong_fd_len = * - task1_msg_dup2_same_wrong_fd
-
-task1_msg_fd1_after_dup2_same:
-    .byte "T1: fd 1 works after dup2(1,1)", 13
-task1_msg_fd1_after_dup2_same_len = * - task1_msg_fd1_after_dup2_same
-
-task1_msg_fd1_after_dup2_same_failed:
-    .byte "T1: BUG - fd 1 failed after dup2(1,1)", 13
-task1_msg_fd1_after_dup2_same_failed_len = * - task1_msg_fd1_after_dup2_same_failed
-
-task1_msg_dup_closed_ok:
-    .byte "T1: dup(3) failed EBADF - OK", 13
-task1_msg_dup_closed_ok_len = * - task1_msg_dup_closed_ok
-
-task1_msg_dup_closed_bug:
-    .byte "T1: BUG - dup(3) succeeded", 13
-task1_msg_dup_closed_bug_len = * - task1_msg_dup_closed_bug
-
-task1_msg_dup_closed_wrong_errno:
-    .byte "T1: BUG - dup(3) wrong errno", 13
-task1_msg_dup_closed_wrong_errno_len = * - task1_msg_dup_closed_wrong_errno
-
-task1_msg_dup2_old_closed_ok:
-    .byte "T1: dup2(3,1) failed EBADF - OK", 13
-task1_msg_dup2_old_closed_ok_len = * - task1_msg_dup2_old_closed_ok
-
-task1_msg_dup2_old_closed_bug:
-    .byte "T1: BUG - dup2(3,1) succeeded", 13
-task1_msg_dup2_old_closed_bug_len = * - task1_msg_dup2_old_closed_bug
-
-task1_msg_dup2_old_closed_wrong_errno:
-    .byte "T1: BUG - dup2(3,1) wrong errno", 13
-task1_msg_dup2_old_closed_wrong_errno_len = * - task1_msg_dup2_old_closed_wrong_errno
-
-task1_msg_fd1_after_failed_dup2_old:
-    .byte "T1: fd 1 works after failed dup2(3,1)", 13
-task1_msg_fd1_after_failed_dup2_old_len = * - task1_msg_fd1_after_failed_dup2_old
-
-task1_msg_fd1_after_failed_dup2_old_failed:
-    .byte "T1: BUG - fd 1 failed after failed dup2(3,1)", 13
-task1_msg_fd1_after_failed_dup2_old_failed_len = * - task1_msg_fd1_after_failed_dup2_old_failed
-
-task1_msg_dup2_new_range_ok:
-    .byte "T1: dup2(1,4) failed EBADF - OK", 13
-task1_msg_dup2_new_range_ok_len = * - task1_msg_dup2_new_range_ok
-
-task1_msg_dup2_new_range_bug:
-    .byte "T1: BUG - dup2(1,4) succeeded", 13
-task1_msg_dup2_new_range_bug_len = * - task1_msg_dup2_new_range_bug
-
-task1_msg_dup2_new_range_wrong_errno:
-    .byte "T1: BUG - dup2(1,4) wrong errno", 13
-task1_msg_dup2_new_range_wrong_errno_len = * - task1_msg_dup2_new_range_wrong_errno
-
-task1_msg_fd1_after_failed_dup2_range:
-    .byte "T1: fd 1 works after failed dup2(1,4)", 13
-task1_msg_fd1_after_failed_dup2_range_len = * - task1_msg_fd1_after_failed_dup2_range
-
-task1_msg_fd1_after_failed_dup2_range_failed:
-    .byte "T1: BUG - fd 1 failed after failed dup2(1,4)", 13
-task1_msg_fd1_after_failed_dup2_range_failed_len = * - task1_msg_fd1_after_failed_dup2_range_failed
-
-task1_msg_all_ok:
-    .byte "T1: dup edge tests complete - OK", 13
-task1_msg_all_ok_len = * - task1_msg_all_ok
-

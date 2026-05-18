@@ -158,6 +158,11 @@
     <None Include="kernel\timer.asm" />
     <None Include="kernel\zero_page.asm" />
     <None Include="README.md" />
+    <None Include="user\task1.asm" />
+    <None Include="user\task2.asm" />
+    <None Include="user\task3.asm" />
+    <None Include="user\user_entry.asm" />
+    <None Include="user\user_space.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

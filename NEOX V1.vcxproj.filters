@@ -118,5 +118,20 @@
     <None Include="include\lock.inc">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="user\task1.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\task2.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\task3.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\user_entry.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\user_space.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

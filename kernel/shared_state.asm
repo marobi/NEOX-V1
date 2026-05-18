@@ -24,14 +24,6 @@
 
 .export monitor_return_mode
 
-; ------------------------------------------------------------
-;
-; ------------------------------------------------------------
-
-.export test_ctr1
-.export test_ctr2
-.export test_turn
-
 .segment "KERN_BSS"
 
 ; ------------------------------------------------------------
@@ -324,6 +316,19 @@ console_read_len_lo: .res 1
 console_read_len_hi: .res 1
 
 ; ------------------------------------------------------------
+;
+; ------------------------------------------------------------
+
+.export init_task_count
+.export init_task_ptr
+
+init_task_count:
+    .res 1
+
+init_task_ptr:
+    .res 2
+	
+; ------------------------------------------------------------
 ; Scheduler debug markers
 ; ------------------------------------------------------------
 
@@ -357,33 +362,3 @@ sched_debug_state_old:
 
 sched_debug_state_new:
     .res 1
-	
-; ---------------------------------------------------------------------------------------------
-
-; ------------------------------------------------------------
-; Shared scheduler test state
-;
-; Purpose:
-;   Visible indicators used to confirm that timer-driven context
-;   switching between task contexts is working.
-;
-; Semantics:
-;   test_ctr1:
-;       Incremented by task1 (context 1)
-;
-;   test_ctr2:
-;       Incremented by task2 (context 2)
-;
-;   test_turn:
-;       Last task to run:
-;         $01 -> task1
-;         $02 -> task2
-;
-; Notes:
-;   These values must be shared so supervisor context 0 and
-;   MICMON can inspect them regardless of which task is active.
-; ------------------------------------------------------------
-
-test_ctr1:      .res 1
-test_ctr2:      .res 1
-test_turn:      .res 1

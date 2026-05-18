@@ -8,6 +8,7 @@ BIN2ROM     := bin2rom
 
 GETADDRSYS  := ./build/getaddress_syscall
 GETADDRKRN  := ./build/getaddress_kernel
+GETADDRUSR  := ./build/getaddress_user
 
 PYTHON      := python3
 DISASM      := ./build/disasm6502.py
@@ -27,9 +28,11 @@ OUTDIR      := out
 
 SYS_TARGET  := neox_syscall
 KRN_TARGET  := neox_kernel
+USR_TARGET  := neox_user
 
 SYS_CFG     := ./build/neox_syscall.cfg
 KRN_CFG     := ./build/neox_kernel.cfg
+USR_CFG     := ./build/neox_user.cfg
 
 SYS_BIN     := $(OUTDIR)/$(SYS_TARGET).bin
 SYS_ROM     := $(OUTDIR)/$(SYS_TARGET).rom
@@ -44,6 +47,13 @@ KRN_MAP     := $(OUTDIR)/$(KRN_TARGET).map
 KRN_LBL     := $(OUTDIR)/$(KRN_TARGET).lbl
 KRN_LST     := $(OUTDIR)/$(KRN_TARGET).lst
 KRN_DIS     := $(OUTDIR)/$(KRN_TARGET).dis
+
+USR_BIN     := $(OUTDIR)/$(USR_TARGET).bin
+USR_ROM     := $(OUTDIR)/$(USR_TARGET).rom
+USR_MAP     := $(OUTDIR)/$(USR_TARGET).map
+USR_LBL     := $(OUTDIR)/$(USR_TARGET).lbl
+USR_LST     := $(OUTDIR)/$(USR_TARGET).lst
+USR_DIS     := $(OUTDIR)/$(USR_TARGET).dis
 
 # optional install path
 BASE_DIR    := /cygdrive/c/Users/rien/OneDrive/source/repos
@@ -80,9 +90,11 @@ KERNEL_SRCS := \
 	kernel/rp2350.asm \
 	kernel/init_tasks.asm
 
+USER_SRCS := \
+	user/user_space.asm
+
 # Optional user library objects
-USERLIB_SRCS := \
-	user/lib/console_io.asm
+USERLIB_SRCS := 
 
 # -------------------------------------------------
 # Derived objects / listings
@@ -90,10 +102,12 @@ USERLIB_SRCS := \
 
 SYS_OBJS      := $(SYSCALL_SRCS:%.asm=$(OUTDIR)/%.o)
 KRN_OBJS      := $(KERNEL_SRCS:%.asm=$(OUTDIR)/%.o)
+USR_OBJS      := $(USER_SRCS:%.asm=$(OUTDIR)/%.o)
 USERLIB_OBJS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.o)
 
 SYS_PART_LSTS := $(SYSCALL_SRCS:%.asm=$(OUTDIR)/%.lst)
 KRN_PART_LSTS := $(KERNEL_SRCS:%.asm=$(OUTDIR)/%.lst)
+USR_PART_LSTS := $(USER_SRCS:%.asm=$(OUTDIR)/%.lst)
 USERLIB_LSTS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.lst)
 
 # -------------------------------------------------
@@ -101,10 +115,11 @@ USERLIB_LSTS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.lst)
 # -------------------------------------------------
 
 .PHONY: all clean distclean install print dirs listings disasm
-all: $(SYS_ROM) $(KRN_ROM) $(SYS_DIS) $(KRN_DIS)
+all: $(SYS_ROM) $(KRN_ROM) $(USR_ROM) $(SYS_DIS) $(KRN_DIS) $(USR_DIS)
 
 SYS_DEPS      := $(SYSCALL_SRCS:%.asm=$(OUTDIR)/%.d)
 KRN_DEPS      := $(KERNEL_SRCS:%.asm=$(OUTDIR)/%.d)
+USR_DEPS      := $(USER_SRCS:%.asm=$(OUTDIR)/%.d)
 USERLIB_DEPS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.d)
 
 # -------------------------------------------------
@@ -117,6 +132,9 @@ $(SYS_ROM): $(SYS_BIN)
 $(KRN_ROM): $(KRN_BIN)
 	$(BIN2ROM) -B $(shell $(GETADDRKRN)) -o $@ $<
 
+$(USR_ROM): $(USR_BIN)
+	$(BIN2ROM) -B $(shell $(GETADDRUSR)) -o $@ $<
+
 # -------------------------------------------------
 # Link rules
 # -------------------------------------------------
@@ -124,8 +142,11 @@ $(KRN_ROM): $(KRN_BIN)
 $(SYS_BIN): $(SYS_OBJS) $(SYS_CFG) | dirs
 	$(LD) -C $(SYS_CFG) -vm -m $(SYS_MAP) -Ln $(SYS_LBL) -o $@ $(SYS_OBJS)
 
-$(KRN_BIN): $(KRN_OBJS) $(USERLIB_OBJS) $(KRN_CFG) | dirs
-	$(LD) -C $(KRN_CFG) -vm -m $(KRN_MAP) -Ln $(KRN_LBL) -o $@ $(KRN_OBJS) $(USERLIB_OBJS)
+$(KRN_BIN): $(KRN_OBJS) $(KRN_CFG) | dirs
+	$(LD) -C $(KRN_CFG) -vm -m $(KRN_MAP) -Ln $(KRN_LBL) -o $@ $(KRN_OBJS)
+
+$(USR_BIN): $(USR_OBJS) $(USR_CFG) | dirs
+	$(LD) -C $(USR_CFG) -vm -m $(USR_MAP) -Ln $(USR_LBL) -o $@ $(USR_OBJS)
 
 # -------------------------------------------------
 # Python disassembly output
@@ -136,6 +157,9 @@ $(SYS_DIS): $(SYS_BIN) $(SYS_MAP) $(SYS_LBL) $(DISASM) | dirs
 
 $(KRN_DIS): $(KRN_BIN) $(KRN_MAP) $(KRN_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(KRN_BIN) 8000 $(KRN_MAP) $(KRN_LBL) > $@
+
+$(USR_DIS): $(USR_BIN) $(USR_MAP) $(USR_LBL) $(DISASM) | dirs
+	$(PYTHON) $(DISASM) $(USR_BIN) 2000 $(USR_MAP) $(USR_LBL) > $@
 
 disasm: $(SYS_DIS) $(KRN_DIS)
 
@@ -168,10 +192,13 @@ $(OUTDIR)/user/lib/%.o: user/lib/%.asm | dirs
 $(SYS_LST): $(SYS_PART_LSTS)
 	$(CAT) $^ > $@
 
-$(KRN_LST): $(KRN_PART_LSTS) $(USERLIB_LSTS)
+$(KRN_LST): $(KRN_PART_LSTS)
 	$(CAT) $^ > $@
 
-listings: $(SYS_LST) $(KRN_LST)
+$(USR_LST): $(USR_PART_LSTS)
+	$(CAT) $^ > $@
+
+listings: $(SYS_LST) $(KRN_LST) $(USR_LIST)
 
 # -------------------------------------------------
 # Directories
@@ -190,6 +217,7 @@ dirs:
 install: $(SYS_ROM) $(KRN_ROM)
 	$(CP) $(SYS_ROM) $(INSTALL_DIR)
 	$(CP) $(KRN_ROM) $(INSTALL_DIR)
+	$(CP) $(USR_ROM) $(INSTALL_DIR)
 
 # -------------------------------------------------
 # Utilities
@@ -210,6 +238,13 @@ print:
 	@echo "Kernel  LST:  $(KRN_LST)"
 	@echo "Kernel  DIS:  $(KRN_DIS)"
 	@echo
+	@echo "User    BIN:  $(USR_BIN)"
+	@echo "User    ROM:  $(USR_ROM)"
+	@echo "User    MAP:  $(USR_MAP)"
+	@echo "User    LBL:  $(USR_LBL)"
+	@echo "User    LST:  $(USR_LST)"
+	@echo "User    DIS:  $(USR_DIS)"
+	@echo
 	@echo "Syscall objects:"
 	@printf "  %s\n" $(SYS_OBJS)
 	@echo "Kernel objects:"
@@ -227,8 +262,9 @@ print:
 	@echo "Disassembler:        $(DISASM)"
 	@echo "Get address syscall: $(GETADDRSYS)"
 	@echo "Get address kernel:  $(GETADDRKRN)"
+	@echo "Get address user:    $(GETADDRUSR)"
 	@echo "Dependency files:"
-	@printf "  %s\n" $(SYS_DEPS) $(KRN_DEPS) $(USERLIB_DEPS)
+	@printf "  %s\n" $(SYS_DEPS) $(KRN_DEPS) $(USR_DEPS) $(USERLIB_DEPS)
 	
 clean:
 	$(RMDIR) $(OUTDIR)
@@ -237,4 +273,5 @@ distclean: clean
 
 -include $(SYS_DEPS)
 -include $(KRN_DEPS)
+-include $(USR_DEPS)
 -include $(USERLIB_DEPS)
