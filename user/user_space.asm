@@ -5,8 +5,6 @@
 
 .setcpu "65C02"
 
-.segment "USER_TEXT"
-
 .include "user_entry.asm"
 
 .include "task1.asm"

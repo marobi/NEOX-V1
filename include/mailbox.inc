@@ -10,13 +10,11 @@
 ; Architecture:
 ;   - Logical pages 0..7 are private per context
 ;   - Logical pages 8..F are shared across all contexts
-;   - Therefore the request/result block must NOT live in low
-;     RAM such as $02C0, because that would be private
-;   - MMIO control registers live in shared I/O page D
+;   - MMIO control registers live in shared I/O page
 ;
 ; Design:
 ;   - RP_REQ_BASE points at a shared RAM block
-;   - RP_DOORBELL / RP_STATUS are MMIO registers in page D
+;   - RP_DOORBELL is MMIO register
 ;   - The mailbox is a global system resource
 ;
 ; Notes:
@@ -27,26 +25,7 @@
 .ifndef __MAILBOX_INC__
 __MAILBOX_INC__ = 1
 
-; ------------------------------------------------------------
-; RP2350 mailbox control registers (MMIO)
-;
-; Layout:
-;   Page D is shared I/O space
-;   $D000-$D004 are already used by BIOS
-;   OS-owned mailbox control starts at $D010
-; ------------------------------------------------------------
-
-RP_DOORBELL         = $D010
-
-; ------------------------------------------------------------
-; Shared RAM request/result block
-;
-; Why here:
-;   $E000 is in shared page 8, so all contexts see the same
-;   mailbox request block.
-; ------------------------------------------------------------
-
-RP_REQ_BASE         = $E000
+.include "config.inc"
 
 ; ------------------------------------------------------------
 ; Request / result block layout
@@ -120,8 +99,8 @@ RP_FLAG_NONE        = $00
 ; ------------------------------------------------------------
 ; RP_IRQ_SOURCE values
 ; ------------------------------------------------------------
-RP_IRQ_SRC_NONE    = $00
-RP_IRQ_SRC_TIMER   = $01
-RP_IRQ_SRC_MONITOR = $02
+RP_IRQ_SRC_NONE     = $00
+RP_IRQ_SRC_TIMER    = $01
+RP_IRQ_SRC_MONITOR  = $02
 
 .endif

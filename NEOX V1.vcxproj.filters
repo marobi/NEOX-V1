@@ -133,5 +133,8 @@
     <None Include="user\user_space.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="include\config.inc">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

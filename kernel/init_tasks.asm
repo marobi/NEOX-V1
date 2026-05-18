@@ -14,58 +14,12 @@
 
 .setcpu "65C02"
 
+.include "config.inc"
 .include "scheduler_defs.inc"
 
 .export tasks_init
 
 .import scheduler_create_process
-
-; ------------------------------------------------------------
-; Static test user image entry points
-;
-; These addresses must match the user image linker script.
-; ------------------------------------------------------------
-
-USER_TASK1_ENTRY = $2000
-USER_TASK2_ENTRY = $2400
-USER_TASK3_ENTRY = $2800
-
-.segment "KERN_TEXT"
-
-; ------------------------------------------------------------
-; Process-create control blocks
-;
-; Layout from proc_create_args:
-;   context   .byte
-;   reserved  .byte
-;   entry     .word
-; ------------------------------------------------------------
-
-task1_create:
-    .byte $01
-    .byte $00
-    .word USER_TASK1_ENTRY
-
-task2_create:
-    .byte $02
-    .byte $00
-    .word USER_TASK2_ENTRY
-
-task3_create:
-    .byte $03
-    .byte $00
-    .word USER_TASK3_ENTRY
-	
-; ============================================================
-; init_tasks.asm
-; NEOX - boot user process creation from user image table
-; ============================================================
-
-.setcpu "65C02"
-
-.include "scheduler_defs.inc"
-
-.export tasks_init
 
 .import init_task_count
 .import init_task_ptr
@@ -73,8 +27,6 @@ task3_create:
 .import scheduler_create_process
 
 .segment "KERN_TEXT"
-
-USER_IMAGE_TABLE = $2000
 
 USER_MAGIC0      = USER_IMAGE_TABLE + 0
 USER_MAGIC1      = USER_IMAGE_TABLE + 1

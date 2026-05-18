@@ -6,7 +6,7 @@
 .ifndef __SCHEDULER_DEFS_INC__
 __SCHEDULER_DEFS_INC__ = 1
 
-MAX_PROCS       = 4
+.include "config.inc"
 
 IDLE_PID        = 0
 FIRST_TASK_PID  = 1

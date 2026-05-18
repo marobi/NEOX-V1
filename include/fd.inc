@@ -13,12 +13,7 @@
 .ifndef __FD_INC__
 __FD_INC__ = 1
 
-; ------------------------------------------------------------
-; Limits
-; ------------------------------------------------------------
-
-MAX_FDS     = 4          ; per-process descriptor count
-OPEN_MAX    = 8          ; system-wide open object slots
+.include "config.inc"
 
 ; ------------------------------------------------------------
 ; FD values

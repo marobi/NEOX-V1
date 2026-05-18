@@ -7,7 +7,7 @@
 
 .export user_image_header
 
-.segment "USER_TEXT"
+.segment "USER_ENTRY"
 
 user_image_header:
     .byte "N", "X"         ; magic: NEOX User

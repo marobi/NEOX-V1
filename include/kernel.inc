@@ -6,7 +6,8 @@
 .ifndef __KERNEL_ENTRY_INC__
 __KERNEL_ENTRY_INC__ = 1
 
-KERNEL_BASE                 = $8000
+.include "config.inc"
+
 KERNEL_ENTRY_SIZE           = 3
 
 KERN_ENTRY_MAIN             = KERNEL_BASE + (0 * KERNEL_ENTRY_SIZE)

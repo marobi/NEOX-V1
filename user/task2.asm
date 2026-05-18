@@ -23,7 +23,7 @@
     bra @loop
 .endproc
 
-.segment "USER_DATA"
+.segment "USER_BSS"
 
 test_ctr2:
 	.res 1

@@ -128,6 +128,7 @@
     <None Include="bios\bios.inc" />
     <None Include="bios\getaddress" />
     <None Include="bios\Makefile" />
+    <None Include="include\config.inc" />
     <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
     <None Include="include\kernel.inc" />
