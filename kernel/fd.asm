@@ -32,6 +32,14 @@
 .export fd_close
 .export fd_dup
 .export fd_dup2
+
+.export fd_alloc_open_locked
+.export fd_free_open_locked
+.export fd_init_open_locked
+.export fd_alloc_fd_current_locked
+.export fd_attach_current_locked
+.export fd_detach_current_locked
+
 ;---------------------------------------------------
 .import fd_lock
 
@@ -57,7 +65,164 @@
 .importzp fd_closeproc_fd
 .importzp dev_ptr
 
+.import pipe_read
+.import pipe_write
+.import pipe_close_endpoint
+
+.importzp io_ptr
+.importzp pipe_ptr
+
 .segment "KERN_TEXT"
+
+; ------------------------------------------------------------
+; fd_alloc_open_locked
+;
+; Caller:
+;   fd_lock held
+;
+; Output:
+;   C clear = success, X = open object index
+;   C set   = failure, Y = ENOMEM
+; ------------------------------------------------------------
+
+.proc fd_alloc_open_locked
+    ldx #0
+
+@scan:
+    cpx #OPEN_MAX
+    beq @full
+
+    lda open_type,x
+    bne @next
+
+    lda open_refcnt,x
+    bne @next
+
+    clc
+    rts
+
+@next:
+    inx
+    bra @scan
+
+@full:
+    ldy #ENOMEM
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_free_open_locked
+;
+; Caller:
+;   fd_lock held
+;
+; Input:
+;   X = open object index
+;
+; Output:
+;   C clear
+; ------------------------------------------------------------
+
+.proc fd_free_open_locked
+    stz open_type,x
+    stz open_refcnt,x
+    stz open_flags,x
+    stz open_dev,x
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_init_open_locked
+;
+; Caller:
+;   fd_lock held
+;
+; Input:
+;   X = open object index
+;   A = open object type
+;   Y = open object flags
+;
+; Output:
+;   C clear
+;
+; Notes:
+;   Refcount remains 0 until an FD is attached.
+; ------------------------------------------------------------
+
+.proc fd_init_open_locked
+    sta open_type,x
+    tya
+    sta open_flags,x
+    stz open_refcnt,x
+    stz open_dev,x
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_alloc_fd_current_locked
+;
+; Caller:
+;   fd_lock held
+;
+; Output:
+;   C clear = success, Y = fd
+;   C set   = failure, Y = EMFILE
+; ------------------------------------------------------------
+
+.proc fd_alloc_fd_current_locked
+    jmp fd_find_free_current
+.endproc
+
+; ------------------------------------------------------------
+; fd_attach_current_locked
+;
+; Caller:
+;   fd_lock held
+;
+; Input:
+;   X = open object index
+;   Y = fd
+;   A = fd flags
+;
+; Output:
+;   C clear
+;
+; Notes:
+;   Uses fd_attach, which increments open_refcnt.
+; ------------------------------------------------------------
+
+.proc fd_attach_current_locked
+    sta fd_flags_tmp
+    txa
+    ldx current_pid
+    jmp fd_attach
+.endproc
+
+; ------------------------------------------------------------
+; fd_detach_current_locked
+;
+; Caller:
+;   fd_lock held
+;
+; Input:
+;   A = fd
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Notes:
+;   Rollback helper only.
+;   It clears current_pid's fd slot and decrements open_refcnt.
+;   It does not run backend close effects.
+; ------------------------------------------------------------
+
+.proc fd_detach_current_locked
+    jmp fd_close_current_locked
+.endproc
 
 ; ------------------------------------------------------------
 ; fd_check_perm
@@ -521,12 +686,32 @@
 
     ; Last reference. Check whether backend close is needed.
     lda open_type,x
+    cmp #OBJ_PIPE
+    beq @close_pipe
+
     cmp #OBJ_DEVICE
     beq @close_device
 
+    ; Unknown/simple object type: free generic open slot.
+    jsr fd_free_open_locked
+    bra @done_locked
+
+@close_pipe:
+    ; X = open object.
+    ; pipe_close_endpoint acquires pipe_lock internally.
+    ; fd_lock -> pipe_lock order is used here and this path must not block.
+    phx
+
+    txa
+    jsr pipe_close_endpoint
+
+    plx
+    jsr fd_free_open_locked
+
+    bra @done_locked
+
 @done_locked:
     LOCK_RELEASE fd_lock
-
     lda #0
     tax
     clc
@@ -831,8 +1016,6 @@
 ;   A/X    = requested length, low/high
 ;
 ; Output:
-;   Device backend returns directly to fd_read caller:
-;
 ;   C clear = success
 ;             A/X = bytes read
 ;
@@ -840,15 +1023,13 @@
 ;             Y = errno
 ;
 ; Flow:
-;   fd -> open object -> permission -> object type -> device op
+;   fd -> open object -> permission -> object type -> backend
 ;
 ; Notes:
-;   - FD table lookup, permission check, object check, and device
-;     vector resolution are protected.
-;   - We do not call the device backend with JSR from inside this
-;     routine. We tail-jump through dev_call.
-;   - Device routine RTS returns to fd_read's caller.
-;   - Device backend may enable IRQ before blocking/yielding.
+;   - FD lookup and permission check are protected by fd_lock.
+;   - Device backend is tail-called through dev_ptr.
+;   - Pipe backend is called after fd_lock is released.
+;   - pipe_ptr is a dedicated ZP pointer for pipe byte transfer.
 ; ------------------------------------------------------------
 
 .proc fd_read
@@ -891,6 +1072,9 @@
     plx                         ; X = open object
 
     lda open_type,x
+    cmp #OBJ_PIPE
+    beq @pipe_ok
+
     cmp #OBJ_DEVICE
     beq @device_ok
 
@@ -901,6 +1085,28 @@
     ldy #ENODEV
     sec
     rts
+
+@pipe_ok:
+    ; Save open object above saved length.
+    txa
+    pha
+
+    LOCK_RELEASE fd_lock
+
+    ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
+    lda io_ptr
+    sta pipe_ptr
+    lda io_ptr+1
+    sta pipe_ptr+1
+
+    ; Restore pipe backend arguments.
+    pla
+    tay                         ; Y = open object
+
+    plx                         ; X = length high
+    pla                         ; A = length low
+
+    jmp pipe_read
 
 @device_ok:
     lda #DEVOP_READ
@@ -930,8 +1136,6 @@
 ;   A/X    = requested length, low/high
 ;
 ; Output:
-;   Device backend returns directly to fd_write caller:
-;
 ;   C clear = success
 ;             A/X = bytes written
 ;
@@ -939,15 +1143,13 @@
 ;             Y = errno
 ;
 ; Flow:
-;   fd -> open object -> permission -> object type -> device op
+;   fd -> open object -> permission -> object type -> backend
 ;
 ; Notes:
-;   - FD table lookup, permission check, object check, and device
-;     vector resolution are protected.
-;   - We do not call the device backend with JSR from inside this
-;     routine. We tail-jump through dev_call.
-;   - Device routine RTS returns to fd_write's caller.
-;   - Device backend may enable IRQ before blocking/yielding.
+;   - FD lookup and permission check are protected by fd_lock.
+;   - Device backend is tail-called through dev_ptr.
+;   - Pipe backend is called after fd_lock is released.
+;   - pipe_ptr is a dedicated ZP pointer for pipe byte transfer.
 ; ------------------------------------------------------------
 
 .proc fd_write
@@ -990,6 +1192,9 @@
     plx                         ; X = open object
 
     lda open_type,x
+    cmp #OBJ_PIPE
+    beq @pipe_ok
+
     cmp #OBJ_DEVICE
     beq @device_ok
 
@@ -1000,6 +1205,28 @@
     ldy #ENODEV
     sec
     rts
+
+@pipe_ok:
+    ; Save open object above saved length.
+    txa
+    pha
+
+    LOCK_RELEASE fd_lock
+
+    ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
+    lda io_ptr
+    sta pipe_ptr
+    lda io_ptr+1
+    sta pipe_ptr+1
+
+    ; Restore pipe backend arguments.
+    pla
+    tay                         ; Y = open object
+
+    plx                         ; X = length high
+    pla                         ; A = length low
+
+    jmp pipe_write
 
 @device_ok:
     lda #DEVOP_WRITE

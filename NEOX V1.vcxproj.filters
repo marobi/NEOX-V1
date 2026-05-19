@@ -136,5 +136,11 @@
     <None Include="include\config.inc">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="include\pipe.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="kernel\pipe.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

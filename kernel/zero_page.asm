@@ -8,6 +8,13 @@
 .segment "ZEROPAGE"
 
 ; ============================================================
+.exportzp factor1
+.exportzp factor2
+
+factor1:       .res 1
+factor2:       .res 1
+
+; ============================================================
 .exportzp proc_ptr
 proc_ptr:     	.res 2
 
@@ -56,9 +63,8 @@ fd_flags_tmp:  .res 1
 fd_closeproc_pid: .res 1
 fd_closeproc_fd:  .res 1
 
-; ============================================================
-.exportzp factor1
-.exportzp factor2
+.exportzp pipe_ptr
+.exportzp pipe_buf_ptr
 
-factor1:       .res 1
-factor2:       .res 1
+pipe_ptr:       .res 2
+pipe_buf_ptr:   .res 2

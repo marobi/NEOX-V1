@@ -12,7 +12,7 @@ __CONFIG_INC__ = 1
 ; Limits
 ; ------------------------------------------------------------
 
-MAX_FDS     = 4          ; per-process descriptor count
+MAX_FDS     = 6          ; per-process descriptor count
 OPEN_MAX    = 8          ; system-wide open object slots
 
 ; ------------------------------------------------------------
@@ -27,6 +27,12 @@ MAX_PROCS   = 4
 
 MAX_TIMER   = 8
 
+;
+;
+;
+
+MAX_PIPES       = 8
+PIPE_BUF_SIZE   = 64
 ; ============================================================
 ;
 ; ============================================================

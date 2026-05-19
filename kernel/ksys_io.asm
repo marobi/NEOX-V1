@@ -38,6 +38,7 @@
 .export ksys_close
 .export ksys_dup
 .export ksys_dup2
+.export ksys_pipe
 
 .import current_pid
 .import proc_set_wait
@@ -50,6 +51,7 @@
 .import fd_close
 .import fd_dup
 .import fd_dup2
+.import pipe_create
 
 .importzp io_ptr
 .importzp io_tmp
@@ -281,4 +283,25 @@
 
 .proc ksys_dup2
     jmp fd_dup2
+.endproc
+
+; ------------------------------------------------------------
+; ksys_pipe
+;
+; Purpose:
+;   Create anonymous pipe for current process.
+;
+; Return:
+;   C clear = success
+;             A = read fd
+;             X = write fd
+;
+;   C set   = failure
+;             Y = errno
+; ------------------------------------------------------------
+
+.import pipe_state
+
+.proc ksys_pipe
+    jmp pipe_create
 .endproc

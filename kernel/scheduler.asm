@@ -28,7 +28,6 @@
 
 .export scheduler_init
 .export scheduler_set_current_context
-.export scheduler_create_process
 .export sched_pick_next
 .export sched_context_switch
 .export sched_yield
@@ -230,7 +229,12 @@
 
 .proc proc_exit_current
     ldx current_pid
+    cpx #IDLE_PID
+    beq @yield
+
     jsr proc_terminate
+
+@yield:
     jmp sched_yield
 .endproc
 
@@ -465,131 +469,6 @@
 .proc scheduler_set_current_context
     ldx current_pid
     sta proc_context,x
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; find_free_pid
-;
-; Return:
-;   C set   = found, X = free pid
-;   C clear = none available
-; ------------------------------------------------------------
-
-.proc find_free_pid
-    ldx #$01
-
-@scan:
-    lda proc_state,x
-    beq @found
-
-    inx
-    cpx #MAX_PROCS
-    bne @scan
-
-    clc
-    rts
-
-@found:
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; scheduler_create_process
-;
-; Inputs:
-;   X/Y = pointer to proc_create_args
-;
-; Return:
-;   C clear = success, A = allocated pid
-;   C set   = failure
-;
-; Notes:
-;   - PID is allocated by the system.
-;   - context 0 defines monitor.
-;   - state is written last so partially initialized slots are
-;     never visible as runnable.
-; ------------------------------------------------------------
-
-.proc scheduler_create_process
-    stx sched_ptr
-    sty sched_ptr+1
-
-    ; Context 0 is reserved for idle/supervisor/monitor.
-    ; Normal processes must not be created in context 0.
-    ldy #proc_create_args::context
-    lda (sched_ptr),y
-    beq @fail
-
-    jsr find_free_pid
-    bcc @fail
-
-    jsr sched_lock_enter
-
-    ; Save MMU context id.
-    ldy #proc_create_args::context
-    lda (sched_ptr),y
-    sta proc_context,x
-
-    ; Save first-run entry address.
-    ldy #proc_create_args::entry
-    lda (sched_ptr),y
-    sta proc_entryL,x
-
-    iny
-    lda (sched_ptr),y
-    sta proc_entryH,x
-
-    ; --------------------------------------------------------
-    ; Record parent PID.
-    ;
-    ; PID 0/kernel-created tasks inherit PID 0 as parent.
-    ; --------------------------------------------------------
-    ldy current_pid
-    tya
-    sta proc_parent_pid,x
-	
-    ; Initial task stack.
-    lda #$FF
-    sta proc_sp,x
-
-	; Initial wait state
-	lda #WAIT_NONE
-	sta wait_reason,x
-	stz wait_object,x
-    
-    ; Initial pending signal.
-    stz proc_signal_pending,x
-
-    ; Initial exit code.
-    lda #EXIT_OK
-    sta proc_exit_code,x
-
-    ; Initial resume mode.
-    lda #PROC_RESUME_RTS
-    sta proc_resume_mode,x
-
-	; Initial process flags.
-    lda #PROC_FLAG_NONE
-    sta proc_flags,x
-
-	; Initialise FD list
-	jsr fd_init_process
-    
-    ; Publish process last.
-    lda #PROC_NEW
-    jsr proc_set_state
-
-	; free scheduler
-	jsr sched_lock_leave
-	
-    txa
-    clc
-    rts
-
-@fail:
-    sec
     rts
 .endproc
 

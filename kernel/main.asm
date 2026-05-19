@@ -48,6 +48,8 @@
 .import fd_init_tables
 .import fd_init_process
 
+.import pipe_init_tables
+
 .import tasks_init
 .import idle_loop
 
@@ -116,9 +118,10 @@
     jsr scheduler_init
 	    
     ; --------------------------------------------------------
-    ; Initialize fd table/objects
+    ; Initialize fd/pipe table/objects
     ; --------------------------------------------------------
 	jsr fd_init_tables
+	jsr pipe_init_tables
 
 	ldx #IDLE_PID
 	jsr fd_init_process

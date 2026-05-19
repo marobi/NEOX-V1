@@ -159,9 +159,7 @@ syscall_table:
 .endproc
 
 .proc k_pipe
-    ldy #4
-    sec
-    rts
+    jmp KERN_ENTRY_KSYS_PIPE
 .endproc
 
 .proc k_yield

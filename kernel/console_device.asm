@@ -26,9 +26,14 @@
 
 .export console_ops
 
+.export console_monitor_enter
+.export console_monitor_exit
+
 .import current_pid
 .import sched_lock
 .import console_owner_pid
+
+.import monitor_active
 
 .import proc_set_wait
 
@@ -57,6 +62,33 @@ console_ops:
     .word console_write
     .word console_ioctl
     .word console_close
+
+; ------------------------------------------------------------
+;
+; ------------------------------------------------------------
+.proc console_monitor_enter
+    lda #$01
+    sta monitor_active
+
+    ; discard task-visible pending input
+    stz RP_CONSOLE_RDY
+
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+;
+; ------------------------------------------------------------
+.proc console_monitor_exit
+    ; discard monitor extra keys / stale ready state
+    stz RP_CONSOLE_RDY
+
+    stz monitor_active
+
+    clc
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; console_read

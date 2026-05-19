@@ -134,6 +134,7 @@
     <None Include="include\kernel.inc" />
     <None Include="include\lock.inc" />
     <None Include="include\mailbox.inc" />
+    <None Include="include\pipe.inc" />
     <None Include="include\process.inc" />
     <None Include="include\scheduler.inc" />
     <None Include="include\scheduler_defs.inc" />
@@ -149,6 +150,7 @@
     <None Include="kernel\ksys_io.asm" />
     <None Include="kernel\ksys_proc.asm" />
     <None Include="kernel\main.asm" />
+    <None Include="kernel\pipe.asm" />
     <None Include="kernel\process_control.asm" />
     <None Include="kernel\rp2350.asm" />
     <None Include="kernel\scheduler.asm" />

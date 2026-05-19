@@ -82,6 +82,7 @@ KERNEL_SRCS := \
 	kernel/idle_task.asm \
 	kernel/process_control.asm \
 	kernel/fd.asm \
+	kernel/pipe.asm \
 	kernel/timer.asm \
 	kernel/ksys_io.asm \
 	kernel/ksys_proc.asm \

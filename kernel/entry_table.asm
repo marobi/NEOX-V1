@@ -31,6 +31,7 @@
 .import ksys_close
 .import ksys_dup
 .import ksys_dup2
+.import ksys_pipe
 
 .segment "KERNEL_ENTRY"
 
@@ -50,7 +51,7 @@ kernel_entry_table:
 	jmp ksys_close
 	jmp ksys_dup
 	jmp ksys_dup2
-	.res 3, $00
+	jmp ksys_pipe
 	.res 3, $00
 	.res 3, $00
 	.res 3, $00

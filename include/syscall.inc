@@ -40,6 +40,7 @@ SYS_CLOSE			= $02
 SYS_READ            = $03
 SYS_WRITE           = $04
 SYS_MONITOR         = $05
+SYS_PIPE			= $0A
 SYS_YIELD           = $0B
 SYS_SLEEP           = $0E
 SYS_DUP				= $0F
@@ -54,6 +55,7 @@ sys_close           = SYSCALL_BASE + (SYS_CLOSE   * SYSCALL_ENTRY_SIZE)
 sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+sys_pipe            = SYSCALL_BASE + (SYS_PIPE    * SYSCALL_ENTRY_SIZE)
 sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
 sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
 sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
@@ -66,11 +68,13 @@ sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
 E_OK                = 0
 EIO                 = 3
 EINVAL              = 6
-EMFILE 				= 8        ; too many open file descriptors
-EBADF           	= 9
-ENODEV          	= 10
-ENOSYS          	= 11
-EAGAIN              = 12
+EMFILE              = 8        ; too many open file descriptors
+EBADF               = 9
+ENODEV              = 10
+ENOSYS              = 11
+EAGAIN              = 12       ; operation would block / try again
+ENOMEM              = 13       ; no free kernel memory/object/table slot
+EPIPE               = 14       ; write on pipe with no readers
 
 ; ------------------------------------------------------------
 ; Common read/write argument block

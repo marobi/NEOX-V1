@@ -13,28 +13,22 @@
 .include "process.inc"
 .include "fd.inc"
 .include "timer.inc"
-
-.export kernel_version
-
-.export brk_vector
-
-.export sched_lock
-
-.export console_owner_pid
-
-.export monitor_return_mode
+.include "pipe.inc"
 
 .segment "KERN_BSS"
 
 ; ------------------------------------------------------------
 ;
 ; ------------------------------------------------------------
+.export kernel_version
+.export brk_vector
+
 kernel_version:	.res 2
+brk_vector:		.res 2
 
 ; ------------------------------------------------------------
 ;
 ; ------------------------------------------------------------
-brk_vector:		.res 2
 
 ; ------------------------------------------------------------
 ; RP2350 mailbox serialization lock
@@ -56,12 +50,8 @@ rp_lock:        .res 1
 ; other lock definitions
 ;	
 .export fd_lock
-.export pipe_lock
 
 fd_lock:
-    .res 1
-
-pipe_lock:
     .res 1
 	
 ; ------------------------------------------------------------
@@ -99,7 +89,6 @@ pipe_lock:
 ; ------------------------------------------------------------
 
 .export current_pid
-
 .export proc_state
 .export proc_context
 .export proc_sp
@@ -110,7 +99,6 @@ pipe_lock:
 .export proc_parent_pid
 
 current_pid:    .res 1
-
 proc_state:     .res MAX_PROCS
 proc_context:   .res MAX_PROCS
 proc_sp:        .res MAX_PROCS
@@ -137,7 +125,14 @@ proc_parent_pid:
 proc_signal_pending:
     .res MAX_PROCS
 	
-;-------------------------------------------------------------
+; ------------------------------------------------------------
+;
+; ------------------------------------------------------------
+.export sched_lock
+.export console_owner_pid
+.export monitor_return_mode
+.export monitor_active
+
 sched_lock:     .res 1
 
 ; ------------------------------------------------------------
@@ -155,7 +150,7 @@ console_owner_pid:   .res 1
 
 monitor_return_mode: .res 1
 
-; ---------------------------------------------------------------------------------------------
+monitor_active:		 .res 1
 
 ; ------------------------------------------------------------
 ; Per-process file descriptor tables
@@ -241,13 +236,6 @@ proc_exit_code:
     .res MAX_PROCS
 
 
-.export system_ticks_lo
-.export system_ticks_hi
-
-.export timer_pid
-.export timer_until_lo
-.export timer_until_hi
-
 ; ------------------------------------------------------------
 ; Global scheduler tick counter
 ;
@@ -256,6 +244,9 @@ proc_exit_code:
 ; 16-bit:
 ;   ~21.8 minutes at 50 Hz.
 ; ------------------------------------------------------------
+
+.export system_ticks_lo
+.export system_ticks_hi
 
 system_ticks_lo:   .res 1
 system_ticks_hi:   .res 1
@@ -275,6 +266,10 @@ system_ticks_hi:   .res 1
 ;   wait_object[pid] stores the timer slot index while the
 ;   process is blocked on WAIT_TIMER.
 ; ------------------------------------------------------------
+
+.export timer_pid
+.export timer_until_lo
+.export timer_until_hi
 
 timer_pid:
     .res MAX_TIMER
@@ -305,13 +300,6 @@ proc_ticks_hi:    .res MAX_PROCS
 .export console_read_len_lo
 .export console_read_len_hi
 
-.segment "KERN_BSS"
-
-; Requested console read length for the active console read.
-;
-; console_read may block and resume through sched_yield. The
-; original A/X length is not reliable after that resume, so the
-; console device stores it here before blocking.
 console_read_len_lo: .res 1
 console_read_len_hi: .res 1
 
@@ -327,7 +315,47 @@ init_task_count:
 
 init_task_ptr:
     .res 2
-	
+
+; ------------------------------------------------------------
+;
+; ------------------------------------------------------------
+
+.export pipe_lock
+.export pipe_state
+.export pipe_head
+.export pipe_tail
+.export pipe_count
+.export pipe_readers
+.export pipe_writers
+.export pipe_buf
+
+.export open_pipe
+.export open_pipe_mode
+
+; ============================================================
+; Pipe state
+;
+; pipe_lock is a shared-memory lock byte.
+; Do not place it in zero page.
+; ============================================================
+
+pipe_lock:          .res 1
+
+pipe_state:         .res MAX_PIPES
+pipe_head:          .res MAX_PIPES
+pipe_tail:          .res MAX_PIPES
+pipe_count:         .res MAX_PIPES
+pipe_readers:       .res MAX_PIPES
+pipe_writers:       .res MAX_PIPES
+
+; PIPE_MAX * PIPE_BUF_SIZE = 8 * 64 = 512 bytes
+pipe_buf:           .res MAX_PIPES * PIPE_BUF_SIZE
+
+; Per-open-object pipe endpoint metadata.
+; Indexed by open object number.
+open_pipe:          .res OPEN_MAX
+open_pipe_mode:     .res OPEN_MAX
+
 ; ------------------------------------------------------------
 ; Scheduler debug markers
 ; ------------------------------------------------------------

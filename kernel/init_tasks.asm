@@ -19,7 +19,7 @@
 
 .export tasks_init
 
-.import scheduler_create_process
+.import proc_create
 
 .import init_task_count
 .import init_task_ptr
@@ -64,7 +64,7 @@ USER_ENTRY_SIZE  = 4
 @loop:
     ldx init_task_ptr
     ldy init_task_ptr+1
-    jsr scheduler_create_process
+    jsr proc_create
 
     clc
     lda init_task_ptr

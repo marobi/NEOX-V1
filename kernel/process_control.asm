@@ -9,25 +9,161 @@
 .include "process.inc"
 .include "signal.inc"
 
+.export proc_find_free_pid
+.export proc_create
 .export proc_terminate
 .export proc_send_signal
 .export proc_apply_signal
 
-.import sched_debug_marker
-.import sched_debug_pid
-
+.import sched_lock_enter
+.import sched_lock_leave
+.import fd_init_process
 .import fd_close_process
-.import wait_reason
-.import wait_object
+
+.import current_pid
+.import proc_state
+.import proc_context
+.import proc_sp
+.import proc_entryL
+.import proc_entryH
+.import proc_flags
+.import proc_resume_mode
+.import proc_parent_pid
+.import proc_signal_pending
 .import proc_exit_code
 
-.import proc_state
-.import proc_signal_pending
+.import wait_reason
+.import wait_object
 
 .import proc_set_state
-.import proc_clear_wait
+
+.importzp sched_ptr
 
 .segment "KERN_TEXT"
+
+; ------------------------------------------------------------
+; proc_find_free_pid
+;
+; Return:
+;   C set   = found, X = free pid
+;   C clear = none available
+;
+; Notes:
+;   PID 0 is reserved for idle/supervisor fallback.
+; ------------------------------------------------------------
+
+.proc proc_find_free_pid
+    ldx #$01
+
+@scan:
+    lda proc_state,x
+    beq @found
+
+    inx
+    cpx #MAX_PROCS
+    bne @scan
+
+    clc
+    rts
+
+@found:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; proc_create
+;
+; Inputs:
+;   X/Y = pointer to proc_create_args
+;
+; Return:
+;   C clear = success
+;             A = allocated PID
+;
+;   C set   = failure
+;
+; Notes:
+;   - PID is allocated by the kernel.
+;   - context 0 is reserved for idle/supervisor/monitor.
+;   - state is written last so partially initialized slots are
+;     never visible as runnable.
+; ------------------------------------------------------------
+
+.proc proc_create
+    stx sched_ptr
+    sty sched_ptr+1
+
+    ; Context 0 is reserved for idle/supervisor/monitor.
+    ; Normal processes must not be created in context 0.
+    ldy #proc_create_args::context
+    lda (sched_ptr),y
+    beq @fail
+
+    jsr proc_find_free_pid
+    bcc @fail
+
+    jsr sched_lock_enter
+
+    ; Save MMU context id.
+    ldy #proc_create_args::context
+    lda (sched_ptr),y
+    sta proc_context,x
+
+    ; Save first-run entry address.
+    ldy #proc_create_args::entry
+    lda (sched_ptr),y
+    sta proc_entryL,x
+
+    iny
+    lda (sched_ptr),y
+    sta proc_entryH,x
+
+    ; Record parent PID.
+    lda current_pid
+    sta proc_parent_pid,x
+
+    ; Initial task stack.
+    lda #$FF
+    sta proc_sp,x
+
+    ; Initial wait state.
+    lda #WAIT_NONE
+    sta wait_reason,x
+    stz wait_object,x
+
+    ; Initial pending signal.
+    stz proc_signal_pending,x
+
+    ; Initial exit code.
+    lda #EXIT_OK
+    sta proc_exit_code,x
+
+    ; Initial resume mode.
+    lda #PROC_RESUME_RTS
+    sta proc_resume_mode,x
+
+    ; Initial process flags.
+    lda #PROC_FLAG_NONE
+    sta proc_flags,x
+
+    ; Initialise FD list.
+    jsr fd_init_process
+
+    ; Publish process last.
+    lda #PROC_NEW
+    jsr proc_set_state
+
+    jsr sched_lock_leave
+
+    txa
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; proc_terminate
@@ -49,40 +185,64 @@
 ;   - marks process EMPTY
 ; ------------------------------------------------------------
 
+; ------------------------------------------------------------
+; proc_terminate
+;
+; Input:
+;   X = PID to terminate
+;   A = exit code
+;
+; Notes:
+;   - PID 0 must never be terminated.
+;   - fd_close_process clobbers X.
+;   - Preserve target PID with PHX/PLX.
+;   - Mark PROC_EMPTY last.
+; ------------------------------------------------------------
+
 .proc proc_terminate
     cpx #IDLE_PID
-    beq @fail
+    beq @done
 
     cpx #MAX_PROCS
-    bcs @fail
+    bcs @done
 
-    ldy proc_state,x
-    cpy #PROC_EMPTY
-    beq @fail
-
-    ; Save exit code.
+    ; Store exit code while X still contains target PID.
     sta proc_exit_code,x
 
-    ; Close process-owned file descriptors.
+    ; fd_close_process clobbers X.
+    phx
     jsr fd_close_process
+    plx
 
     ; Clear wait state.
     lda #WAIT_NONE
     sta wait_reason,x
     stz wait_object,x
 
-    ; Clear pending process-control signal.
+    ; Clear pending signal state.
     stz proc_signal_pending,x
 
-    ; Mark slot unused.
+    ; Clear execution/context fields.
+    lda #$FF
+    ; Mark parent invalid for an empty slot.
+    sta proc_parent_pid,x
+    sta proc_context,x
+    
+	stz proc_sp,x
+    stz proc_entryL,x
+    stz proc_entryH,x
+    stz proc_flags,x
+    stz proc_resume_mode,x
+
+    ; Mark parent invalid for an empty slot.
+    lda #$FF
+    sta proc_parent_pid,x
+
+    ; Mark process empty last.
     lda #PROC_EMPTY
-    jsr proc_set_state
+    sta proc_state,x
 
-    clc
-    rts
-
-@fail:
-    sec
+@done:
     rts
 .endproc
 
@@ -135,11 +295,6 @@
 .proc proc_apply_signal
     lda proc_signal_pending,x
     beq @done
-
-; debug
-    lda #$09
-    sta sched_debug_marker
-; end debug
 
     stz proc_signal_pending,x
 

@@ -39,6 +39,9 @@
 .import proc_set_ready
 .import sched_yield
 
+.import console_monitor_enter
+.import console_monitor_exit
+
 .import sched_lock_enter
 .import sched_lock_leave
 
@@ -122,6 +125,8 @@ MONITOR_ENTRY       = $B000
 
     jsr sched_lock_enter
 
+	jsr console_monitor_enter
+	
     lda #MONITOR_CONTEXT
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
@@ -147,6 +152,8 @@ MONITOR_ENTRY       = $B000
 
     jsr sched_lock_enter
 
+	jsr console_monitor_enter
+	
     lda #MONITOR_CONTEXT
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
@@ -173,6 +180,8 @@ MONITOR_ENTRY       = $B000
 .proc leave_monitor
     sei
 
+	jsr console_monitor_exit
+	
     lda monitor_return_mode
     cmp #MONITOR_RET_IRQ
     beq @return_scheduler
@@ -204,7 +213,7 @@ MONITOR_ENTRY       = $B000
     lda proc_context,x
 
     jsr sched_lock_leave
-
+	
     ldx #<resume_rts_from_monitor
     ldy #>resume_rts_from_monitor
     jmp BIOS_CONTEXT_JUMP
