@@ -39,6 +39,9 @@
 .export fd_alloc_fd_current_locked
 .export fd_attach_current_locked
 .export fd_detach_current_locked
+.export fd_check_free_pid_fd_locked
+.export fd_attach_pid_fd_read_locked
+.export fd_attach_pid_fd_write_locked
 
 ;---------------------------------------------------
 .import fd_lock
@@ -222,6 +225,159 @@
 
 .proc fd_detach_current_locked
     jmp fd_close_current_locked
+.endproc
+
+; ------------------------------------------------------------
+; fd_check_free_pid_fd_locked
+;
+; Input:
+;   X = PID
+;   Y = fd
+;
+; Output:
+;   C clear = fd slot is free
+;   C set   = failure, Y = errno
+;
+; Requirements:
+;   Caller holds fd_lock.
+; ------------------------------------------------------------
+
+.proc fd_check_free_pid_fd_locked
+    cpx #MAX_PROCS
+    bcc @pid_ok
+
+    ldy #EINVAL
+    sec
+    rts
+
+@pid_ok:
+    cpy #MAX_FDS
+    bcc @fd_ok
+
+    ldy #EBADF
+    sec
+    rts
+
+@fd_ok:
+    stx fd_pid_tmp
+    sty fd_index_tmp
+
+    ; offset = PID * MAX_FDS
+    txa
+    sta factor1
+
+    lda #MAX_FDS
+    sta factor2
+
+    jsr mul8u
+
+    ; fd_ptr = proc_fd_obj + offset
+    clc
+    lda #<proc_fd_obj
+    adc factor1
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc factor2
+    sta fd_ptr+1
+
+    ldy fd_index_tmp
+    lda (fd_ptr),y
+    cmp #FD_NONE
+    beq @free
+
+    ldy #EMFILE
+    sec
+    rts
+
+@free:
+    ldx fd_pid_tmp
+    ldy fd_index_tmp
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_attach_pid_fd_read_locked
+;
+; Input:
+;   A = PID
+;   X = open object
+;   Y = fd
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Requirements:
+;   Caller holds fd_lock.
+; ------------------------------------------------------------
+
+.proc fd_attach_pid_fd_read_locked
+    pha
+    lda #FD_FLAG_READ
+    sta fd_flags_tmp
+    pla
+    jmp fd_attach_pid_fd_mode_locked
+.endproc
+
+; ------------------------------------------------------------
+; fd_attach_pid_fd_write_locked
+;
+; Input:
+;   A = PID
+;   X = open object
+;   Y = fd
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Requirements:
+;   Caller holds fd_lock.
+; ------------------------------------------------------------
+
+.proc fd_attach_pid_fd_write_locked
+    pha
+    lda #FD_FLAG_WRITE
+    sta fd_flags_tmp
+    pla
+    jmp fd_attach_pid_fd_mode_locked
+.endproc
+
+; ------------------------------------------------------------
+; fd_attach_pid_fd_mode_locked
+;
+; Internal helper.
+;
+; Input:
+;   A            = PID
+;   X            = open object
+;   Y            = fd
+;   fd_flags_tmp = FD_FLAG_READ or FD_FLAG_WRITE
+;
+; Requirements:
+;   Caller holds fd_lock.
+; ------------------------------------------------------------
+
+.proc fd_attach_pid_fd_mode_locked
+    sta fd_pid_tmp
+    stx fd_obj_tmp
+    sty fd_index_tmp
+
+    ldx fd_pid_tmp
+    ldy fd_index_tmp
+    jsr fd_check_free_pid_fd_locked
+    bcc @free
+
+    sec
+    rts
+
+@free:
+    ldx fd_pid_tmp
+    ldy fd_index_tmp
+    lda fd_obj_tmp
+    jmp fd_attach
 .endproc
 
 ; ------------------------------------------------------------

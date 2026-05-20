@@ -356,6 +356,18 @@ pipe_buf:           .res MAX_PIPES * PIPE_BUF_SIZE
 open_pipe:          .res OPEN_MAX
 open_pipe_mode:     .res OPEN_MAX
 
+;
+;
+;
+.export sched_ticks_lo
+.export sched_ticks_hi
+
+sched_ticks_lo:
+    .res 1
+
+sched_ticks_hi:
+    .res 1
+
 ; ------------------------------------------------------------
 ; Scheduler debug markers
 ; ------------------------------------------------------------

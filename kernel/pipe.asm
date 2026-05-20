@@ -29,6 +29,7 @@
 .export pipe_close_endpoint
 
 .export pipe_create
+.export pipe_create_between_fd
 
 .import fd_lock
 .import current_pid
@@ -39,6 +40,9 @@
 .import fd_attach_current_locked
 .import fd_detach_current_locked
 .import fd_init_open_locked
+.import fd_check_free_pid_fd_locked
+.import fd_attach_pid_fd_read_locked
+.import fd_attach_pid_fd_write_locked
 
 .import pipe_lock
 .import pipe_state
@@ -474,6 +478,316 @@
     pla                         ; pipe index
     pla                         ; read fd
     pla                         ; write fd
+
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; pipe_create_between_fd
+;
+; Kernel-only static wiring helper.
+;
+; Input:
+;   A = reader PID
+;   X = writer PID
+;   Y = fd number to install in both processes
+;
+; Example:
+;   A = 2
+;   X = 1
+;   Y = 3
+;
+; Result:
+;   PID 2 fd 3 = read endpoint
+;   PID 1 fd 3 = write endpoint
+;
+; Return:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Notes:
+;   - Not a syscall.
+;   - Caller should use this during kernel/static task setup.
+;   - Same PID is rejected because this helper uses one common fd.
+;     Use normal pipe_create for same-process pipes.
+; ------------------------------------------------------------
+
+.proc pipe_create_between_fd
+    ; Stack frame:
+    ;   $0101,x = errno
+    ;   $0102,x = pipe index
+    ;   $0103,x = write open object
+    ;   $0104,x = read open object
+    ;   $0105,x = common fd
+    ;   $0106,x = writer PID
+    ;   $0107,x = reader PID
+
+    pha                         ; reader PID
+    phx                         ; writer PID
+    phy                         ; common fd
+
+    lda #PIPE_NONE
+    pha                         ; read open object
+
+    lda #PIPE_NONE
+    pha                         ; write open object
+
+    lda #PIPE_NONE
+    pha                         ; pipe index
+
+    lda #EIO
+    pha                         ; errno
+
+    ; Reject same PID for this fixed-fd helper.
+    tsx
+    lda $0107,x                 ; reader PID
+    cmp $0106,x                 ; writer PID
+    bne @pids_ok
+
+    lda #EINVAL
+    sta $0101,x
+    jmp @fail_frame
+
+@pids_ok:
+    LOCK_ACQUIRE fd_lock
+
+    ; --------------------------------------------------------
+    ; Validate reader fd is free.
+    ; --------------------------------------------------------
+
+    tsx
+    ldy $0105,x                 ; common fd
+    lda $0107,x                 ; reader PID
+    tax
+    jsr fd_check_free_pid_fd_locked
+    bcc @reader_fd_free
+
+    tya
+    tsx
+    sta $0101,x
+    jmp @fail_fd_locked
+
+@reader_fd_free:
+    ; --------------------------------------------------------
+    ; Validate writer fd is free.
+    ; --------------------------------------------------------
+
+    tsx
+    ldy $0105,x                 ; common fd
+    lda $0106,x                 ; writer PID
+    tax
+    jsr fd_check_free_pid_fd_locked
+    bcc @writer_fd_free
+
+    tya
+    tsx
+    sta $0101,x
+    jmp @fail_fd_locked
+
+@writer_fd_free:
+    ; --------------------------------------------------------
+    ; Allocate and initialize read endpoint open object.
+    ; --------------------------------------------------------
+
+    jsr fd_alloc_open_locked
+    bcc @read_obj_ok
+
+    tya
+    tsx
+    sta $0101,x
+    jmp @fail_fd_locked
+
+@read_obj_ok:
+    txa                         ; A = read open object
+    tsx
+    sta $0104,x
+
+    lda $0104,x
+    tax                         ; X = read open object
+    lda #OBJ_PIPE
+    ldy #FD_FLAG_READ
+    jsr fd_init_open_locked
+
+    ; --------------------------------------------------------
+    ; Allocate and initialize write endpoint open object.
+    ; --------------------------------------------------------
+
+    jsr fd_alloc_open_locked
+    bcc @write_obj_ok
+
+    tya
+    tsx
+    sta $0101,x
+
+    lda $0104,x                 ; read open object
+    tax
+    jsr fd_free_open_locked
+
+    jmp @fail_fd_locked
+
+@write_obj_ok:
+    txa                         ; A = write open object
+    tsx
+    sta $0103,x
+
+    lda $0103,x
+    tax                         ; X = write open object
+    lda #OBJ_PIPE
+    ldy #FD_FLAG_WRITE
+    jsr fd_init_open_locked
+
+    ; --------------------------------------------------------
+    ; Allocate pipe and initialize endpoint metadata.
+    ; --------------------------------------------------------
+
+    LOCK_ACQUIRE pipe_lock
+
+    jsr pipe_alloc_locked
+    bcc @pipe_ok
+
+    LOCK_RELEASE pipe_lock
+
+    tya
+    tsx
+    sta $0101,x
+
+    lda $0104,x                 ; read open object
+    tax
+    jsr fd_free_open_locked
+
+    tsx
+    lda $0103,x                 ; write open object
+    tax
+    jsr fd_free_open_locked
+
+    jmp @fail_fd_locked
+
+@pipe_ok:
+    tsx
+    sta $0102,x                 ; pipe index returned in A
+
+    ; read endpoint metadata:
+    ;   A = read open object
+    ;   X = pipe index
+    ;   Y = PIPE_END_READ
+
+    lda $0104,x                 ; read open object
+    pha
+
+    lda $0102,x                 ; pipe index
+    tax
+
+    pla                         ; A = read open object
+    ldy #PIPE_END_READ
+    jsr pipe_endpoint_init_locked
+
+    ; write endpoint metadata:
+    ;   A = write open object
+    ;   X = pipe index
+    ;   Y = PIPE_END_WRITE
+
+    tsx
+    lda $0103,x                 ; write open object
+    pha
+
+    lda $0102,x                 ; pipe index
+    tax
+
+    pla                         ; A = write open object
+    ldy #PIPE_END_WRITE
+    jsr pipe_endpoint_init_locked
+
+    LOCK_RELEASE pipe_lock
+
+    ; --------------------------------------------------------
+    ; Attach read endpoint to reader PID/fd.
+    ;
+    ; Input to fd_attach_pid_fd_read_locked:
+    ;   A = PID
+    ;   X = open object
+    ;   Y = fd
+    ; --------------------------------------------------------
+
+    tsx
+    ldy $0105,x                 ; common fd
+
+    lda $0104,x                 ; read open object
+    pha
+
+    lda $0107,x                 ; reader PID
+    plx                         ; X = read open object
+
+    jsr fd_attach_pid_fd_read_locked
+    bcc @read_attach_ok
+
+    ; Should be unreachable because fd_lock is still held and the
+    ; fd slot was prechecked.
+    tya
+    tsx
+    sta $0101,x
+    jmp @fail_fd_locked
+
+@read_attach_ok:
+    ; --------------------------------------------------------
+    ; Attach write endpoint to writer PID/fd.
+    ;
+    ; Input to fd_attach_pid_fd_write_locked:
+    ;   A = PID
+    ;   X = open object
+    ;   Y = fd
+    ; --------------------------------------------------------
+
+    tsx
+    ldy $0105,x                 ; common fd
+
+    lda $0103,x                 ; write open object
+    pha
+
+    lda $0106,x                 ; writer PID
+    plx                         ; X = write open object
+
+    jsr fd_attach_pid_fd_write_locked
+    bcc @write_attach_ok
+
+    ; Should be unreachable because fd_lock is still held and the
+    ; fd slot was prechecked.
+    tya
+    tsx
+    sta $0101,x
+    jmp @fail_fd_locked
+
+@write_attach_ok:
+    LOCK_RELEASE fd_lock
+
+    ; Drop stack frame.
+    pla                         ; errno
+    pla                         ; pipe index
+    pla                         ; write open object
+    pla                         ; read open object
+    pla                         ; common fd
+    pla                         ; writer PID
+    pla                         ; reader PID
+
+    clc
+    rts
+
+@fail_fd_locked:
+    LOCK_RELEASE fd_lock
+
+@fail_frame:
+    tsx
+    lda $0101,x
+    tay
+
+    ; Drop stack frame.
+    pla                         ; errno
+    pla                         ; pipe index
+    pla                         ; write open object
+    pla                         ; read open object
+    pla                         ; common fd
+    pla                         ; writer PID
+    pla                         ; reader PID
 
     sec
     rts

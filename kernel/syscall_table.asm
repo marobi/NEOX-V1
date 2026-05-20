@@ -42,6 +42,7 @@
 .export k_sleep
 .export k_dup
 .export k_dup2
+.export k_ticks
 
 .segment "SYSCALL_STUBS"
 
@@ -68,6 +69,7 @@
 ;	14 -> k_sleep
 ;	15 -> k_dup
 ;	16 -> k_dup2
+;   17 -> k_ticks
 ; ------------------------------------------------------------
 
 syscall_table:
@@ -87,7 +89,8 @@ syscall_table:
     jmp k_ioctl
 	jmp k_sleep
     jmp k_dup
-    jmp k_dup2     ; 16
+    jmp k_dup2
+	jmp k_ticks
 
 .segment "KERN_TEXT"
 
@@ -190,4 +193,8 @@ syscall_table:
 
 .proc k_dup2
     jmp KERN_ENTRY_KSYS_DUP2
+.endproc
+
+.proc k_ticks
+    jmp KERN_ENTRY_KSYS_TICKS
 .endproc

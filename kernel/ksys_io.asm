@@ -39,6 +39,10 @@
 .export ksys_dup
 .export ksys_dup2
 .export ksys_pipe
+.export ksys_ticks
+
+.import sched_ticks_lo
+.import sched_ticks_hi
 
 .import current_pid
 .import proc_set_wait
@@ -304,4 +308,28 @@
 
 .proc ksys_pipe
     jmp pipe_create
+.endproc
+
+; ------------------------------------------------------------
+; ksys_ticks
+;
+; Return:
+;   C clear
+;   A = scheduler ticks low
+;   X = scheduler ticks high
+;
+; Notes:
+;   Uses a high-low-high stable read so an IRQ increment between
+;   byte reads cannot return a torn 16-bit value.
+; ------------------------------------------------------------
+
+.proc ksys_ticks
+@retry:
+    ldx sched_ticks_hi
+    lda sched_ticks_lo
+    cpx sched_ticks_hi
+    bne @retry
+
+    clc
+    rts
 .endproc

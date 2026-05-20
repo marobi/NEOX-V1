@@ -45,6 +45,7 @@ SYS_YIELD           = $0B
 SYS_SLEEP           = $0E
 SYS_DUP				= $0F
 SYS_DUP2			= $10
+SYS_TICKS           = $11
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -60,6 +61,7 @@ sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
 sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
 sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
 sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
+sys_ticks           = SYSCALL_BASE + (SYS_TICKS   * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values

@@ -45,6 +45,10 @@
 .export proc_exit_current
 
 ;---------------------------------------------
+
+.import sched_ticks_lo
+.import sched_ticks_hi
+
 .import sched_debug_marker
 .import sched_debug_pid
 .import sched_debug_old_pid
@@ -252,6 +256,9 @@
 ;   X
 ; ------------------------------------------------------------
 .proc proc_accounting_init
+    stz sched_ticks_lo
+    stz sched_ticks_hi
+
     ldx #MAX_PROCS - 1
 
 @clear_proc:
@@ -278,6 +285,12 @@
 ;   X
 ; ------------------------------------------------------------
 .proc sched_account_tick
+    inc sched_ticks_lo
+    bne @proc_tick
+
+    inc sched_ticks_hi
+
+@proc_tick:
     ldx current_pid
 
     inc proc_ticks_lo,x

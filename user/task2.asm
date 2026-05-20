@@ -1,6 +1,7 @@
 ; ============================================================
 ; task2.asm
-; NEOX test task 2
+; NEOX - inter-process pipe ping/pong responder
+; ca65 / W65C02
 ; ============================================================
 
 .setcpu "65C02"
@@ -9,23 +10,186 @@
 
 .export user_task2_entry
 
+T2_RX_FD = 3          ; Task 1 -> Task 2
+T2_TX_FD = 4          ; Task 2 -> Task 1
+
+.segment "USER_DATA"
+
+t2_pong_byte:
+    .byte "Q"
+
+t2_rx_byte:
+    .res 1
+
+t2_msg_start:
+    .byte "T2 PINGPONG START", 13
+
+t2_msg_fail:
+    .byte "T2 PINGPONG FAIL", 13
+
+t2_wr_stdout_args:
+    .byte STDOUT
+    .byte 0
+    .word 0
+    .word 0
+
+t2_read_args:
+    .byte T2_RX_FD
+    .byte 0
+    .word t2_rx_byte
+    .word 1
+
+t2_write_args:
+    .byte T2_TX_FD
+    .byte 0
+    .word t2_pong_byte
+    .word 1
+
 .segment "USER_TEXT"
-	
-.proc user_task2_entry
-@loop:
-    inc test_ctr2
-    lda #$02
-    sta test_turn
 
-    lda #48
-    jsr sys_sleep
+; ------------------------------------------------------------
+; t2_print_msg
+;
+; Input:
+;   A/X = string pointer
+;   Y   = length including CR
+; ------------------------------------------------------------
 
-    bra @loop
+.proc t2_print_msg
+    sta t2_wr_stdout_args + rw_args::buf_ptr
+    stx t2_wr_stdout_args + rw_args::buf_ptr + 1
+
+    tya
+    sta t2_wr_stdout_args + rw_args::len
+    stz t2_wr_stdout_args + rw_args::len + 1
+
+    ldx #<t2_wr_stdout_args
+    ldy #>t2_wr_stdout_args
+    jsr sys_write
+    rts
 .endproc
 
-.segment "USER_BSS"
+.proc t2_print_start
+    lda #<t2_msg_start
+    ldx #>t2_msg_start
+    ldy #18
+    jmp t2_print_msg
+.endproc
 
-test_ctr2:
-	.res 1
-test_turn:
-	.res 1
+.proc t2_print_fail
+    lda #<t2_msg_fail
+    ldx #>t2_msg_fail
+    ldy #18
+    jmp t2_print_msg
+.endproc
+
+; ------------------------------------------------------------
+; t2_read_ping
+;
+; Nonblocking pipe read.
+; EAGAIN yields to the scheduler, then retries.
+; ------------------------------------------------------------
+
+.proc t2_read_ping
+@again:
+    ldx #<t2_read_args
+    ldy #>t2_read_args
+    jsr sys_read
+    bcc @ok
+
+    cpy #EAGAIN
+    beq @wait
+
+    sec
+    rts
+
+@wait:
+    jsr sys_yield
+    bra @again
+
+@ok:
+    cmp #1
+    beq :+
+    sec
+    rts
+:
+    cpx #0
+    beq :+
+    sec
+    rts
+:
+    lda t2_rx_byte
+    cmp #'P'
+    beq :+
+    sec
+    rts
+:
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t2_write_pong
+;
+; Nonblocking pipe write.
+; EAGAIN yields to the scheduler, then retries.
+; ------------------------------------------------------------
+
+.proc t2_write_pong
+@again:
+    ldx #<t2_write_args
+    ldy #>t2_write_args
+    jsr sys_write
+    bcc @ok
+
+    cpy #EAGAIN
+    beq @wait
+
+    sec
+    rts
+
+@wait:
+    jsr sys_yield
+    bra @again
+
+@ok:
+    cmp #1
+    beq :+
+    sec
+    rts
+:
+    cpx #0
+    beq :+
+    sec
+    rts
+:
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; user_task2_entry
+; ------------------------------------------------------------
+
+.proc user_task2_entry
+    jsr t2_print_start
+
+@loop:
+    jsr t2_read_ping
+    bcc :+
+    jmp @fail
+:
+    jsr t2_write_pong
+    bcc :+
+    jmp @fail
+:
+    bra @loop
+
+@fail:
+    jsr t2_print_fail
+
+@idle:
+    lda #100
+    jsr sys_sleep
+    bra @idle
+.endproc

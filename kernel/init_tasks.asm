@@ -15,6 +15,7 @@
 .setcpu "65C02"
 
 .include "config.inc"
+.include "kernel.inc"
 .include "scheduler_defs.inc"
 
 .export tasks_init
@@ -23,8 +24,6 @@
 
 .import init_task_count
 .import init_task_ptr
-
-.import scheduler_create_process
 
 .segment "KERN_TEXT"
 
@@ -78,6 +77,48 @@ USER_ENTRY_SIZE  = 4
     dec init_task_count
     bne @loop
 
+    ; Only wire static inter-process test pipe when PID 1 and PID 2 exist.
+    lda USER_TASK_COUNT
+    cmp #2
+    bcc @done
+
+    ; --------------------------------------------------------
+    ; Static ping-pong pipes.
+    ;
+    ; Pipe A:
+    ;   PID 1 fd 3 = write
+    ;   PID 2 fd 3 = read
+    ;
+    ; Pipe B:
+    ;   PID 2 fd 4 = write
+    ;   PID 1 fd 4 = read
+    ; --------------------------------------------------------
+
+    lda USER_TASK_COUNT
+    cmp #2
+    bcc @done
+
+    ; Pipe A: Task 1 -> Task 2
+    lda #2          ; reader PID
+    ldx #1          ; writer PID
+    ldy #3          ; fd number in both processes
+    jsr KERN_ENTRY_PIPE_CREATE_BETWEEN_FD
+    bcc :+
+
+@pipe_a_setup_failed:
+    bra @pipe_a_setup_failed
+:
+
+    ; Pipe B: Task 2 -> Task 1
+    lda #1          ; reader PID
+    ldx #2          ; writer PID
+    ldy #4          ; fd number in both processes
+    jsr KERN_ENTRY_PIPE_CREATE_BETWEEN_FD
+    bcc @done
+
+@pipe_b_setup_failed:
+    bra @pipe_b_setup_failed	
+	
 @done:
     clc
     rts
