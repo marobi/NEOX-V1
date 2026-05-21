@@ -79,7 +79,8 @@
 
 .import sched_lock
 .import console_owner_pid
-.import monitor_return_mode
+.import monitor_pending
+.import supervisor_try_enter_pending
 
 .importzp sched_ptr
 
@@ -99,14 +100,6 @@
 .import proc_ticks_hi
 
 .segment "KERN_TEXT"
-
-; ------------------------------------------------------------
-; proc_set_state
-;
-; Input:
-;   X = pid
-;   A = state
-; ------------------------------------------------------------
 
 ; ------------------------------------------------------------
 ; proc_set_state
@@ -423,7 +416,7 @@
 	
     stz current_pid
     stz sched_lock
-    stz monitor_return_mode
+    stz monitor_pending
 
     lda #$FF
     sta console_owner_pid
@@ -726,6 +719,13 @@
 ; ------------------------------------------------------------
 
 .proc sched_yield
+    ; Cooperative monitor safe point.
+    ;
+    ; irq_entry only sets monitor_pending. Actual monitor entry
+    ; happens here, outside IRQ context, after supervisor checks
+    ; subsystem locks.
+    jsr supervisor_try_enter_pending
+
     sei
 
     lda #$04

@@ -11,8 +11,8 @@
 .exportzp factor1
 .exportzp factor2
 
-factor1:       .res 1
-factor2:       .res 1
+factor1:        .res 1
+factor2:        .res 1
 
 ; ============================================================
 .exportzp proc_ptr
@@ -41,27 +41,14 @@ sched_ptr:	  	.res 2
 sched_count:  	.res 2
 
 ; ============================================================
+
 .exportzp dev_ptr
 dev_ptr:      	.res 2
 
 ; ============================================================
+
 .exportzp fd_ptr
-.exportzp fd_pid_tmp
-.exportzp fd_index_tmp
-.exportzp fd_obj_tmp
-.exportzp fd_flags_tmp
-
 fd_ptr:        .res 2
-fd_pid_tmp:    .res 1
-fd_index_tmp:  .res 1
-fd_obj_tmp:    .res 1
-fd_flags_tmp:  .res 1
-
-.exportzp fd_closeproc_pid
-.exportzp fd_closeproc_fd
-
-fd_closeproc_pid: .res 1
-fd_closeproc_fd:  .res 1
 
 .exportzp pipe_ptr
 .exportzp pipe_buf_ptr

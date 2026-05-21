@@ -134,7 +134,7 @@ syscall_table:
 .endproc
 
 .proc k_monitor
-    jmp KERN_ENTRY_MONITOR_SYSCALL
+    jmp KERN_ENTRY_MONITOR
 .endproc
 
 .proc k_exec

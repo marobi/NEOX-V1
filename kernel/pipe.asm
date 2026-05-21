@@ -59,6 +59,33 @@
 .importzp pipe_ptr
 .importzp pipe_buf_ptr
 
+.segment "KERN_BSS"
+
+; ------------------------------------------------------------
+; Pipe-private scratch
+;
+; These variables are protected by pipe_lock.
+;
+; Rules:
+;   - valid only while pipe_lock is held
+;   - never live across sched_yield
+;   - never live across a call into another backend subsystem
+;   - pipe_read / pipe_write are nonblocking primitives
+;
+; This intentionally matches the fd.asm style: subsystem-private
+; scratch under a subsystem lock, instead of stack-frame state.
+; ------------------------------------------------------------
+
+pipe_obj:           .res 1      ; open object index
+pipe_idx:           .res 1      ; pipe table index
+pipe_mode:          .res 1      ; PIPE_END_READ / PIPE_END_WRITE
+
+pipe_req_lo:        .res 1      ; requested byte count low
+pipe_req_hi:        .res 1      ; requested byte count high
+
+pipe_done_lo:       .res 1      ; completed byte count low
+pipe_done_hi:       .res 1      ; completed byte count high
+
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
@@ -69,7 +96,7 @@
 ;   A = byte offset within pipe buffer
 ;
 ; Output:
-;   pipe_buf_ptr = pipe_buf + X * 64 + offset
+;   pipe_buf_ptr = pipe_buf + X * PIPE_BUF_SIZE + offset
 ;
 ; Requires:
 ;   PIPE_BUF_SIZE = 64
@@ -79,21 +106,18 @@
 ;
 ; Preserves:
 ;   X
+;
+; Notes:
+;   The low-byte carry is handled explicitly so pipe_buf does
+;   not need to be page-aligned.
 ; ------------------------------------------------------------
 
 .proc pipe_set_buf_ptr
-    ; Save inputs.
-    pha                         ; offset
-    phx                         ; pipe index
+    pha                         ; save offset
+    phx                         ; save pipe index
 
-    ; --------------------------------------------------------
-    ; Low base:
-    ;   low = <pipe_buf + ((pipe_index & 3) * 64)
-    ;
-    ; The low-byte carry must be preserved because pipe_buf
-    ; may not be page-aligned.
-    ; --------------------------------------------------------
-
+    ; Low byte:
+    ;   <pipe_buf + ((pipe_idx & 3) * 64)
     txa
     and #$03
     asl
@@ -106,24 +130,16 @@
     adc #<pipe_buf
     sta pipe_buf_ptr
 
-    ; Save carry from low-byte base add in Y.
+    ; Preserve carry from low-byte base calculation in Y.
     ldy #$00
     bcc @no_low_carry
     iny
 
 @no_low_carry:
-    ; --------------------------------------------------------
-    ; High base:
-    ;   high = >pipe_buf + (pipe_index / 4) + low_carry
-    ;
-    ; For 64-byte buffers, every 4 pipes crosses one page:
-    ;   pipe 0..3 -> +0 pages
-    ;   pipe 4..7 -> +1 page
-    ;   pipe 8..11 -> +2 pages
-    ; --------------------------------------------------------
-
+    ; High byte:
+    ;   >pipe_buf + (pipe_idx / 4) + low_carry
     pla                         ; A = pipe index
-    pha                         ; keep pipe index for PLX later
+    pha                         ; keep for PLX
 
     lsr
     lsr
@@ -131,14 +147,13 @@
     adc #>pipe_buf
 
     cpy #$00
-    beq @store_high_base
+    beq @store_high
     ina
 
-@store_high_base:
+@store_high:
     sta pipe_buf_ptr+1
 
-    ; Restore original X.
-    plx
+    plx                         ; restore pipe index
 
     ; Add byte offset.
     pla                         ; A = offset
@@ -906,23 +921,33 @@
 ; ------------------------------------------------------------
 ; pipe_close_endpoint
 ;
+; Close pipe endpoint effects.
+;
 ; Input:
 ;   A = open object index
 ;
 ; Return:
 ;   C clear
 ;
+; Locking:
+;   pipe_lock protects pipe-private scratch and pipe tables.
+;
 ; Notes:
-;   Reentrant: no module-global scratch.
+;   - This does not touch proc_fd_obj/proc_fd_flags.
+;   - FD layer owns refcounts and open-object lifetime.
+;   - This is still nonblocking. Wake calls can be added later
+;     when syscall-layer blocking is implemented.
+;
+; Clobbers:
+;   A, X, Y, flags
 ; ------------------------------------------------------------
 
 .proc pipe_close_endpoint
-    pha                         ; save open object
+    sta pipe_obj
 
     LOCK_ACQUIRE pipe_lock
 
-    pla
-    tax                         ; X = open object
+    ldx pipe_obj
 
     lda open_pipe,x
     cmp #PIPE_NONE
@@ -933,23 +958,25 @@
     rts
 
 @have_pipe:
-    pha                         ; save pipe index
+    sta pipe_idx
 
     lda open_pipe_mode,x
-    pha                         ; save endpoint mode
+    sta pipe_mode
 
+    ; Detach open object from pipe metadata.
     lda #PIPE_NONE
     sta open_pipe,x
     stz open_pipe_mode,x
 
-    pla                         ; A = endpoint mode
-    plx                         ; X = pipe index
+    ldx pipe_idx
 
+    lda pipe_mode
     cmp #PIPE_END_READ
     bne @check_write
 
     lda pipe_readers,x
     beq @maybe_free
+
     dec pipe_readers,x
     bra @maybe_free
 
@@ -959,6 +986,7 @@
 
     lda pipe_writers,x
     beq @maybe_free
+
     dec pipe_writers,x
 
 @maybe_free:
@@ -971,6 +999,7 @@
 
 @done:
     LOCK_RELEASE pipe_lock
+
     clc
     rts
 .endproc
@@ -981,9 +1010,9 @@
 ; Read from a pipe endpoint.
 ;
 ; Input:
-;   Y            = open object index
-;   pipe_ptr     = destination buffer
-;   A/X          = requested length, low/high
+;   Y        = open object index
+;   pipe_ptr = destination buffer
+;   A/X      = requested length, low/high
 ;
 ; Return:
 ;   C clear:
@@ -993,53 +1022,59 @@
 ;   C set:
 ;       Y = errno
 ;
-; Notes:
-;   - Reentrant: no module-global call-frame scratch.
-;   - Uses CPU stack for call-frame state.
-;   - Uses pipe_ptr only for user buffer access.
-;   - Uses pipe_buf_ptr only as computed pipe-buffer pointer.
-;   - Nonblocking:
-;       empty + writers present -> EAGAIN
-;       empty + no writers      -> EOF / 0 bytes
-;   - Does not yield.
+; Nonblocking semantics:
+;   empty + writers present -> EAGAIN
+;   empty + no writers      -> EOF / 0 bytes
 ;
-; Stack frame after setup:
-;   $0101,S = done count
-;   $0102,S = requested length high
-;   $0103,S = requested length low
-;   $0104,S = open object, later replaced by pipe index
+; Locking:
+;   pipe_lock protects pipe-private scratch and pipe tables.
+;
+; Important:
+;   pipe-private scratch must not be written before pipe_lock
+;   is acquired. A preemptive IRQ could otherwise allow another
+;   process to enter pipe_read/pipe_write and overwrite the same
+;   scratch before this call owns the pipe subsystem.
 ;
 ; Clobbers:
 ;   A, X, Y, flags
 ; ------------------------------------------------------------
 
 .proc pipe_read
-    ; Zero-length read succeeds immediately.
+    ; Zero-length read succeeds immediately. This check uses only
+    ; the incoming registers and does not touch shared scratch.
     cpx #$00
-    bne @have_len
+    bne @save_inputs
 
     cmp #$00
-    bne @have_len
+    bne @save_inputs
 
     lda #$00
     tax
     clc
     rts
 
-@have_len:
-    ; Build stack frame.
-    phy                         ; open object
+@save_inputs:
+    ; Preserve call inputs across LOCK_ACQUIRE.
+    ; LOCK_ACQUIRE clobbers A/flags, and the subsystem scratch
+    ; cannot be used until pipe_lock is held.
     pha                         ; requested length low
     phx                         ; requested length high
-    lda #$00
-    pha                         ; done count
+    phy                         ; open object
 
     LOCK_ACQUIRE pipe_lock
 
-    ; X = open object.
-    tsx
-    lda $0104,x
-    tax
+    ; Now it is safe to populate pipe-private scratch.
+    ply
+    sty pipe_obj
+
+    plx
+    stx pipe_req_hi
+
+    pla
+    sta pipe_req_lo
+
+    ; Validate endpoint mode.
+    ldx pipe_obj
 
     lda open_pipe_mode,x
     cmp #PIPE_END_READ
@@ -1048,6 +1083,7 @@
     jmp @err_ebadf_locked
 
 @mode_ok:
+    ; Resolve open object -> pipe index.
     lda open_pipe,x
     cmp #PIPE_NONE
     bne @pipe_ok
@@ -1055,9 +1091,7 @@
     jmp @err_ebadf_locked
 
 @pipe_ok:
-    ; Replace saved open object with pipe index.
-    tsx
-    sta $0104,x
+    sta pipe_idx
     tax                         ; X = pipe index
 
     lda pipe_state,x
@@ -1067,63 +1101,59 @@
     jmp @err_ebadf_locked
 
 @state_ok:
+    ; Empty pipe:
+    ;   writers present -> EAGAIN
+    ;   no writers      -> EOF
     lda pipe_count,x
-    bne @read_loop
+    bne @can_read
 
     lda pipe_writers,x
     bne @err_eagain_locked
 
-    ; EOF: empty pipe and no writers.
     LOCK_RELEASE pipe_lock
-
-    ; Drop stack frame.
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; pipe index/open object
 
     lda #$00
     tax
     clc
     rts
 
+@can_read:
+    stz pipe_done_lo
+    stz pipe_done_hi
+
 @read_loop:
-    ; Stop if requested length reached.
-    tsx
-    lda $0102,x                 ; req high
+    ; Stop when requested length has been reached.
+    ;
+    ; If req_hi != 0, the pipe buffer will empty first because
+    ; PIPE_BUF_SIZE is currently 64 bytes.
+    lda pipe_req_hi
     bne @check_available
 
-    lda $0101,x                 ; done
-    cmp $0103,x                 ; req low
+    lda pipe_done_lo
+    cmp pipe_req_lo
     beq @done
 
 @check_available:
-    ; X = pipe index.
-    tsx
-    lda $0104,x
-    tax
+    ldx pipe_idx
 
     lda pipe_count,x
     beq @done
 
-    ; Compute pipe buffer pointer:
-    ;   pipe_buf_ptr = pipe_buf + pipe_index * PIPE_BUF_SIZE + tail
+    ; Compute source pointer:
+    ;   pipe_buf_ptr = pipe buffer base + tail
     lda pipe_tail,x
     jsr pipe_set_buf_ptr
 
-    ; Load from pipe buffer and store to user buffer[done].
-    lda (pipe_buf_ptr)
+    ; Copy one byte from pipe buffer to user buffer[done].
+    ldy #$00
+    lda (pipe_buf_ptr),y
 
-    tsx
-    ldy $0101,x                 ; done
+    ldy pipe_done_lo
     sta (pipe_ptr),y
 
-    ; X = pipe index.
-    tsx
-    lda $0104,x
-    tax
+    ; Advance tail.
+    ldx pipe_idx
 
-    ; tail = (tail + 1) & (PIPE_BUF_SIZE - 1)
     lda pipe_tail,x
     ina
     and #(PIPE_BUF_SIZE - 1)
@@ -1132,36 +1162,32 @@
     dec pipe_count,x
 
     ; done++
-    tsx
-    inc $0101,x
+    inc pipe_done_lo
+    bne @read_loop
 
+    inc pipe_done_hi
     bra @read_loop
 
 @done:
-    ; Preserve return byte count in X while dropping frame.
-    tsx
-    lda $0101,x
-    tax
+    ; Save return value across LOCK_RELEASE.
+    ; After releasing pipe_lock, pipe_done_* is no longer protected.
+    lda pipe_done_lo
+    pha
+
+    lda pipe_done_hi
+    pha
 
     LOCK_RELEASE pipe_lock
 
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; pipe index/open object
+    pla
+    tax                         ; X = bytes read high
 
-    txa                         ; A = bytes read
-    ldx #$00                    ; high byte = 0
+    pla                         ; A = bytes read low
     clc
     rts
 
 @err_ebadf_locked:
     LOCK_RELEASE pipe_lock
-
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; open object / pipe index
 
     ldy #EBADF
     sec
@@ -1169,11 +1195,6 @@
 
 @err_eagain_locked:
     LOCK_RELEASE pipe_lock
-
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; open object / pipe index
 
     ldy #EAGAIN
     sec
@@ -1186,66 +1207,72 @@
 ; Write to a pipe endpoint.
 ;
 ; Input:
-;   Y            = open object index
-;   pipe_ptr     = source buffer
-;   A/X          = requested length, low/high
+;   Y        = open object index
+;   pipe_ptr = source buffer
+;   A/X      = requested length, low/high
 ;
 ; Return:
 ;   C clear:
 ;       A/X = bytes written
-;       short write is possible when the pipe fills
+;       short write is possible when pipe fills after progress
 ;
 ;   C set:
 ;       Y = errno
 ;
-; Notes:
-;   - Reentrant: no module-global call-frame scratch.
-;   - Uses CPU stack for call-frame state.
-;   - Uses pipe_ptr only for user buffer access.
-;   - Uses pipe_buf_ptr only as computed pipe-buffer pointer.
-;   - Nonblocking:
-;       full + zero bytes written -> EAGAIN
-;       full + some bytes written -> short success
-;       no readers               -> EPIPE
-;   - Does not yield.
+; Nonblocking semantics:
+;   no readers                -> EPIPE
+;   full + zero bytes written -> EAGAIN
+;   full + some bytes written -> short success
 ;
-; Stack frame after setup:
-;   $0101,S = done count
-;   $0102,S = requested length high
-;   $0103,S = requested length low
-;   $0104,S = open object, later replaced by pipe index
+; Locking:
+;   pipe_lock protects pipe-private scratch and pipe tables.
+;
+; Important:
+;   pipe-private scratch must not be written before pipe_lock
+;   is acquired. A preemptive IRQ could otherwise allow another
+;   process to enter pipe_read/pipe_write and overwrite the same
+;   scratch before this call owns the pipe subsystem.
 ;
 ; Clobbers:
 ;   A, X, Y, flags
 ; ------------------------------------------------------------
 
 .proc pipe_write
-    ; Zero-length write succeeds immediately.
+    ; Zero-length write succeeds immediately. This check uses only
+    ; the incoming registers and does not touch shared scratch.
     cpx #$00
-    bne @have_len
+    bne @save_inputs
 
     cmp #$00
-    bne @have_len
+    bne @save_inputs
 
     lda #$00
     tax
     clc
     rts
 
-@have_len:
-    ; Build stack frame.
-    phy                         ; open object
+@save_inputs:
+    ; Preserve call inputs across LOCK_ACQUIRE.
+    ; LOCK_ACQUIRE clobbers A/flags, and the subsystem scratch
+    ; cannot be used until pipe_lock is held.
     pha                         ; requested length low
     phx                         ; requested length high
-    lda #$00
-    pha                         ; done count
+    phy                         ; open object
 
     LOCK_ACQUIRE pipe_lock
 
-    ; X = open object.
-    tsx
-    lda $0104,x
-    tax
+    ; Now it is safe to populate pipe-private scratch.
+    ply
+    sty pipe_obj
+
+    plx
+    stx pipe_req_hi
+
+    pla
+    sta pipe_req_lo
+
+    ; Validate endpoint mode.
+    ldx pipe_obj
 
     lda open_pipe_mode,x
     cmp #PIPE_END_WRITE
@@ -1254,6 +1281,7 @@
     jmp @err_ebadf_locked
 
 @mode_ok:
+    ; Resolve open object -> pipe index.
     lda open_pipe,x
     cmp #PIPE_NONE
     bne @pipe_ok
@@ -1261,9 +1289,7 @@
     jmp @err_ebadf_locked
 
 @pipe_ok:
-    ; Replace saved open object with pipe index.
-    tsx
-    sta $0104,x
+    sta pipe_idx
     tax                         ; X = pipe index
 
     lda pipe_state,x
@@ -1273,61 +1299,60 @@
     jmp @err_ebadf_locked
 
 @state_ok:
+    ; Broken pipe: no readers.
     lda pipe_readers,x
-    bne @write_loop
+    bne @can_start
 
     jmp @err_epipe_locked
 
+@can_start:
+    stz pipe_done_lo
+    stz pipe_done_hi
+
 @write_loop:
-    ; Stop if requested length reached.
-    tsx
-    lda $0102,x                 ; req high
+    ; Stop when requested length has been reached.
+    ;
+    ; If req_hi != 0, the pipe buffer will fill first because
+    ; PIPE_BUF_SIZE is currently 64 bytes.
+    lda pipe_req_hi
     bne @check_space
 
-    lda $0101,x                 ; done
-    cmp $0103,x                 ; req low
+    lda pipe_done_lo
+    cmp pipe_req_lo
     beq @done
 
 @check_space:
-    ; X = pipe index.
-    tsx
-    lda $0104,x
-    tax
+    ldx pipe_idx
 
     lda pipe_count,x
     cmp #PIPE_BUF_SIZE
     bne @space_available
 
     ; Full pipe.
-    ; If at least one byte was written, return short success.
-    tsx
-    lda $0101,x                 ; done
+    ; If some progress was made, return a short write.
+    lda pipe_done_lo
+    ora pipe_done_hi
     bne @done
 
+    ; Full with zero progress: nonblocking would-block.
     jmp @err_eagain_locked
 
 @space_available:
-    ; Compute pipe buffer pointer:
-    ;   pipe_buf_ptr = pipe_buf + pipe_index * PIPE_BUF_SIZE + head
-    tsx
-    lda $0104,x
-    tax
-
+    ; Compute destination pointer:
+    ;   pipe_buf_ptr = pipe buffer base + head
     lda pipe_head,x
     jsr pipe_set_buf_ptr
 
-    ; Copy user buffer[done] to current pipe buffer byte.
-    tsx
-    ldy $0101,x                 ; done
+    ; Copy one byte from user buffer[done] to pipe buffer.
+    ldy pipe_done_lo
     lda (pipe_ptr),y
-    sta (pipe_buf_ptr)
 
-    ; X = pipe index.
-    tsx
-    lda $0104,x
-    tax
+    ldy #$00
+    sta (pipe_buf_ptr),y
 
-    ; head = (head + 1) & (PIPE_BUF_SIZE - 1)
+    ; Advance head.
+    ldx pipe_idx
+
     lda pipe_head,x
     ina
     and #(PIPE_BUF_SIZE - 1)
@@ -1336,36 +1361,32 @@
     inc pipe_count,x
 
     ; done++
-    tsx
-    inc $0101,x
+    inc pipe_done_lo
+    bne @write_loop
 
+    inc pipe_done_hi
     bra @write_loop
 
 @done:
-    ; Preserve return byte count in X while dropping frame.
-    tsx
-    lda $0101,x
-    tax
+    ; Save return value across LOCK_RELEASE.
+    ; After releasing pipe_lock, pipe_done_* is no longer protected.
+    lda pipe_done_lo
+    pha
+
+    lda pipe_done_hi
+    pha
 
     LOCK_RELEASE pipe_lock
 
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; pipe index/open object
+    pla
+    tax                         ; X = bytes written high
 
-    txa                         ; A = bytes written
-    ldx #$00                    ; high byte = 0
+    pla                         ; A = bytes written low
     clc
     rts
 
 @err_ebadf_locked:
     LOCK_RELEASE pipe_lock
-
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; open object / pipe index
 
     ldy #EBADF
     sec
@@ -1374,22 +1395,12 @@
 @err_eagain_locked:
     LOCK_RELEASE pipe_lock
 
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; open object / pipe index
-
     ldy #EAGAIN
     sec
     rts
 
 @err_epipe_locked:
     LOCK_RELEASE pipe_lock
-
-    pla                         ; done
-    pla                         ; req high
-    pla                         ; req low
-    pla                         ; open object / pipe index
 
     ldy #EPIPE
     sec

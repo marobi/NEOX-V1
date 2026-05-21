@@ -48,6 +48,8 @@
 
 .import current_pid
 
+.importzp io_ptr
+
 .import proc_fd_obj
 .import proc_fd_flags
 
@@ -60,20 +62,50 @@
 .import dev_call
 
 .importzp fd_ptr
-.importzp fd_flags_tmp
-.importzp fd_obj_tmp
-.importzp fd_index_tmp
-.importzp fd_pid_tmp
-.importzp fd_closeproc_pid
-.importzp fd_closeproc_fd
+
 .importzp dev_ptr
 
+.importzp pipe_ptr
 .import pipe_read
 .import pipe_write
 .import pipe_close_endpoint
 
-.importzp io_ptr
-.importzp pipe_ptr
+.segment "KERN_BSS"
+
+; ------------------------------------------------------------
+; FD-private scratch
+;
+; These variables are private to fd.asm.
+;
+; Rules:
+;   - valid only inside FD subsystem routines
+;   - protected by fd_lock where FD/open-object tables are modified
+;   - never ABI-visible
+;   - never monitor/RP-visible
+;   - not stored in shared_state.asm
+;   - not stored in zero page because they are not pointers
+;
+; fd_ptr remains in ZEROPAGE because it is used for
+; indirect-indexed addressing: (fd_ptr),Y.
+; ------------------------------------------------------------
+
+fd_pid_tmp:
+    .res 1              ; PID currently being inspected/modified
+
+fd_index_tmp:
+    .res 1              ; per-process fd number
+
+fd_obj_tmp:
+    .res 1              ; open-object index
+
+fd_flags_tmp:
+    .res 1              ; FD_FLAG_READ / FD_FLAG_WRITE / CLOEXEC mask
+
+fd_closeproc_pid:
+    .res 1              ; PID used while closing all FDs for a process
+
+fd_closeproc_fd:
+    .res 1              ; fd iterator used by fd_close_process
 
 .segment "KERN_TEXT"
 
@@ -539,6 +571,8 @@
 ; ------------------------------------------------------------
 
 .proc fd_init_tables
+	stz fd_lock
+	
     ldx #$00
 
 @clear:

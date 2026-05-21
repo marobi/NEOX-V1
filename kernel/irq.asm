@@ -18,7 +18,8 @@
 ;   2. Ask IRQ classification logic for the source
 ;   3. If source = monitor request:
 ;        -> acknowledge it
-;        -> enter supervisor context 0
+;        -> set monitor_pending
+;        -> restore interrupted context
 ;   4. If source = timer tick:
 ;        -> if sched_lock != 0, resume interrupted context
 ;        -> else perform normal scheduler context switch
@@ -32,9 +33,10 @@
 ;   This file extends the frame by pushing:
 ;       A, X, Y
 ;
-;   So sched_context_switch / enter_monitor_irq may later
-;   restore with:
+;   So sched_context_switch may later restore with:
 ;       PLY / PLX / PLA / RTI
+;
+;   Monitor entry is deferred.
 ; ============================================================
 
 .setcpu "65C02"
@@ -50,7 +52,7 @@
 
 .import sched_context_switch
 .import sched_lock
-.import enter_monitor_irq
+.import monitor_pending
 .import console_owner_pid
 
 .segment "KERN_TEXT"
@@ -68,10 +70,11 @@
 ;
 ; Outputs:
 ;   Does not return normally.
-;   Either:
-;     - restores interrupted context and RTI
-;     - enters monitor
-;     - or transfers to scheduler switch logic
+;
+; Either:
+;   - restores interrupted context and RTI
+;   - records a pending monitor request and RTI
+;   - or transfers to scheduler switch logic
 ;
 ; Clobbers:
 ;   A, X, Y
@@ -105,7 +108,9 @@
 
 @monitor:
     jsr BIOS_ACK_IRQ         ; clear source
-    jmp enter_monitor_irq
+    lda #1
+	sta monitor_pending
+	bra irq_restore
 
 @timer:
     jsr BIOS_ACK_IRQ        ; clear source

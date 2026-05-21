@@ -21,7 +21,7 @@
 
 .import kernel_main
 .import set_brk_vector
-.import enter_monitor_syscall
+.import enter_monitor
 .import leave_monitor
 .import ksys_read
 .import ksys_write
@@ -42,7 +42,7 @@
 RESET:
 kernel_entry_table:
     jmp kernel_main
-    jmp enter_monitor_syscall
+    jmp enter_monitor
 	jmp set_brk_vector
 	jmp leave_monitor
 	jmp ksys_read

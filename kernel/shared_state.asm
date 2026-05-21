@@ -130,8 +130,8 @@ proc_signal_pending:
 ; ------------------------------------------------------------
 .export sched_lock
 .export console_owner_pid
-.export monitor_return_mode
 .export monitor_active
+.export monitor_pending
 
 sched_lock:     .res 1
 
@@ -148,9 +148,9 @@ sched_lock:     .res 1
 
 console_owner_pid:   .res 1
 
-monitor_return_mode: .res 1
-
 monitor_active:		 .res 1
+
+monitor_pending:	 .res 1
 
 ; ------------------------------------------------------------
 ; Per-process file descriptor tables
@@ -317,7 +317,7 @@ init_task_ptr:
     .res 2
 
 ; ------------------------------------------------------------
-;
+; Pipes
 ; ------------------------------------------------------------
 
 .export pipe_lock
