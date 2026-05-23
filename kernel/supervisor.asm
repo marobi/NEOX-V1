@@ -19,6 +19,8 @@
 .include "process.inc"
 .include "scheduler_defs.inc"
 
+.import ksys_io_lock
+
 .import monitor_pending
 .import sched_lock
 .import fd_lock
@@ -66,11 +68,12 @@ MONITOR_ENTRY       = $B000
     lda sched_lock
     bne @unsafe
 
-    lda fd_lock
-    ora pipe_lock
-    ora rp_lock
-    bne @unsafe
-
+	lda fd_lock
+	ora pipe_lock
+	ora rp_lock
+	ora ksys_io_lock
+	bne @unsafe
+	
     clc
     rts
 

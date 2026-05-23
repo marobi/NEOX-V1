@@ -172,26 +172,6 @@
 ;   X = PID to terminate
 ;   A = exit code
 ;
-; Return:
-;   C clear = terminated
-;   C set   = invalid target
-;
-; Effects:
-;   - refuses to terminate PID 0
-;   - closes all FDs
-;   - clears wait state
-;   - clears pending signal
-;   - stores exit code
-;   - marks process EMPTY
-; ------------------------------------------------------------
-
-; ------------------------------------------------------------
-; proc_terminate
-;
-; Input:
-;   X = PID to terminate
-;   A = exit code
-;
 ; Notes:
 ;   - PID 0 must never be terminated.
 ;   - fd_close_process clobbers X.

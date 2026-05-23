@@ -59,6 +59,8 @@
 
 .import rp_lock
 
+.import ksys_io_init
+
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
@@ -118,8 +120,9 @@
     jsr scheduler_init
 	    
     ; --------------------------------------------------------
-    ; Initialize fd/pipe table/objects
+    ; Initialize ksys/fd/pipe
     ; --------------------------------------------------------
+	jsr ksys_io_init
 	jsr fd_init_tables
 	jsr pipe_init_tables
 

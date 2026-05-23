@@ -79,8 +79,9 @@ bios_jmp_vec:
     phx
     phy
 
+@retry2:
     SYSCALL readc_blk, sys_read
-    bcs @ic_error
+    bcs @retry2		; likely EAGAIN
 
     ; A/X = bytes read.
     ; If zero bytes were returned, retry inside BIOS instead of
@@ -92,9 +93,7 @@ bios_jmp_vec:
     txa
     bne @got_char
 
-    ply
-    plx
-    bra @retry
+    bra @retry2
 
 @got_char:
     lda icharbuf
@@ -107,14 +106,6 @@ bios_jmp_vec:
 
     ora #0
     clc
-    rts
-
-@ic_error:
-    ply
-    plx
-
-    lda #0
-    sec
     rts
 .endproc
 

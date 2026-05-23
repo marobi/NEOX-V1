@@ -28,10 +28,12 @@
 
 .setcpu "65C02"
 
+.include "lock.inc"
 .include "syscall.inc"
 .include "fd.inc"
 .include "process.inc"
 
+.export ksys_io_init
 .export ksys_read
 .export ksys_console_read_blocking
 .export ksys_write
@@ -39,28 +41,83 @@
 .export ksys_dup
 .export ksys_dup2
 .export ksys_pipe
-.export ksys_ticks
 
-.import sched_ticks_lo
-.import sched_ticks_hi
+.import sched_lock_enter
+.import sched_lock_leave
+
+.import ksys_io_lock
 
 .import current_pid
-.import proc_set_wait
-.import sched_yield
+
+.import fd_resolve_read
+.import fd_resolve_write
+
+.import pipe_read
+.import pipe_write
 .import rp_console_read_start
 .import rp_console_read_finish
+.import rp_console_write_start
+.import rp_console_write_finish
 
-.import fd_read
-.import fd_write
 .import fd_close
 .import fd_dup
 .import fd_dup2
 .import pipe_create
 
 .importzp io_ptr
-.importzp io_tmp
+
+.importzp pipe_ptr
+
+.segment "KERN_BSS"
+
+; ------------------------------------------------------------
+; ksys_io private scratch
+;
+; Protected by:
+;   ksys_io_lock
+;
+; Rules:
+;   - valid only while ksys_io_lock is held
+;   - never live across sched_yield
+;   - never live across WAIT_* blocking
+;   - never live across an indefinite RP wait
+;
+; io_ptr remains in zero page because fd/device/backend code
+; needs a zero-page pointer for indirect indexed addressing.
+; ------------------------------------------------------------
+
+ksys_rw_fd_tmp:
+    .res 1
+
+ksys_rw_len_lo:
+    .res 1
+
+ksys_rw_len_hi:
+    .res 1
+
+ksys_rw_buf_lo:
+    .res 1
+
+ksys_rw_buf_hi:
+    .res 1
 
 .segment "KERN_TEXT"
+
+; ------------------------------------------------------------
+; ksys_io_init
+;
+; Purpose:
+;   Initialize ksys_io subsystem state.
+;
+; Notes:
+;   ksys_io_lock is the real serialization lock for ksys_read
+;   and ksys_write. It is not sched_lock.
+; ------------------------------------------------------------
+
+.proc ksys_io_init
+    stz ksys_io_lock
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; ksys_console_read_blocking
@@ -73,8 +130,6 @@
 ;   cooperatively so other runnable tasks may execute.
 ;
 ; Important:
-;   WAIT_CONSOLE blocking already happened in console_read
-;   before this routine was entered.
 ; ------------------------------------------------------------
 
 .proc ksys_console_read_blocking
@@ -100,120 +155,341 @@
 .endproc
 
 ; ------------------------------------------------------------
+; ksys_console_write_wait
+;
+; Wait for an async RP console write to complete.
+;
+; Important:
+;   ksys_io_lock is not held here.
+;   sched_lock is not held here.
+;   rp_lock is held by the in-flight RP transaction.
+; ------------------------------------------------------------
+
+.proc ksys_console_write_wait
+@wait:
+    jsr rp_console_write_finish
+    bcc @done
+
+    cpy #E_OK
+    bne @fail
+
+    ; Optional later:
+    ;   jsr sched_yield
+    ;
+    ; For now this is a polling wait, but it no longer holds
+    ; ksys_io_lock or the scheduler gate.
+    bra @wait
+
+@done:
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; ksys_console_read_wait
+;
+; Wait for an async RP console read to complete.
+;
+; Important:
+;   ksys_io_lock is not held here.
+;   sched_lock is not held here.
+;   rp_lock is held by the in-flight RP transaction.
+; ------------------------------------------------------------
+
+.proc ksys_console_read_wait
+@wait:
+    jsr rp_console_read_finish
+    bcc @done
+
+    cpy #E_OK
+    bne @fail
+
+    bra @wait
+
+@done:
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
 ; ksys_read
 ;
-; Purpose:
-;   Kernel-side syscall wrapper for read(fd, buf, len).
+; Generic read syscall dispatch.
 ;
-; Responsibility:
-;   Decode syscall argument block only.
+; Supports:
+;   OBJ_PIPE
+;   OBJ_DEVICE / DEV_CONSOLE
 ;
-; Dispatch:
-;   fd_read owns:
-;     - fd validation
-;     - fd permission checks
-;     - open-object resolution
-;     - device/file backend dispatch
+; Locking model:
+;   ksys_io_lock protects syscall scratch and io_ptr while live.
+;
+;   Pipe backend:
+;       executed while ksys_io_lock is held because pipe backend
+;       is nonblocking and uses pipe_ptr/io-derived state.
+;
+;   Console backend:
+;       RP request is started while ksys_io_lock is held, because
+;       io_ptr must be stable while copied into the RP request.
+;       ksys_io_lock is then released before waiting for RP_DONE.
 ; ------------------------------------------------------------
 
 .proc ksys_read
-    ; Save pointer to rw_args.
+    phx
+    phy
+
+    jsr sched_lock_enter
+    LOCK_ACQUIRE ksys_io_lock
+
+    ply
+    plx
+
+    ; Decode rw_args while serialized.
     stx io_ptr
     sty io_ptr+1
 
-    ; Save fd temporarily on stack.
     ldy #rw_args::fd
     lda (io_ptr),y
-    pha
+    sta ksys_rw_fd_tmp
 
-    ; Save caller buffer pointer while io_ptr still points to rw_args.
     ldy #rw_args::buf_ptr
     lda (io_ptr),y
-    sta io_tmp
+    sta ksys_rw_buf_lo
     iny
     lda (io_ptr),y
-    sta io_tmp+1
+    sta ksys_rw_buf_hi
 
-    ; Load requested transfer length.
     ldy #rw_args::len
     lda (io_ptr),y
-    pha
+    sta ksys_rw_len_lo
     iny
     lda (io_ptr),y
-    tax
+    sta ksys_rw_len_hi
 
-    ; FD/device layer expects io_ptr to point to the data buffer.
-    lda io_tmp
+    ; Resolve FD for read.
+    ldy ksys_rw_fd_tmp
+    jsr fd_resolve_read
+    bcs @locked_fail
+
+    cmp #OBJ_PIPE
+    beq @pipe
+
+    cmp #OBJ_DEVICE
+    beq @device
+
+    ldy #ENODEV
+    bra @locked_fail_y
+
+@pipe:
+    ; X = open object.
+    ;
+    ; pipe_read uses pipe_ptr as the user buffer pointer.
+    lda ksys_rw_buf_lo
+    sta pipe_ptr
+    lda ksys_rw_buf_hi
+    sta pipe_ptr+1
+
+;    tay                         ; wrong if left from type; reload obj below
+    ; restore open object from X into Y
+    txa
+    tay
+
+    lda ksys_rw_len_lo
+    ldx ksys_rw_len_hi
+
+    jsr pipe_read
+
+    php
+    pha
+    phx
+    phy
+
+    LOCK_RELEASE ksys_io_lock
+    jsr sched_lock_leave
+
+    ply
+    plx
+    pla
+    plp
+    rts
+
+@device:
+    ; Only console device exists for now.
+    cpy #DEV_CONSOLE
+    beq @console
+
+    ldy #ENODEV
+    bra @locked_fail_y
+
+@console:
+    ; Start RP console read while io_ptr is stable.
+    lda ksys_rw_buf_lo
     sta io_ptr
-    lda io_tmp+1
+    lda ksys_rw_buf_hi
     sta io_ptr+1
 
-    ; Restore low length byte into A.
-    pla
+    lda ksys_rw_len_lo
+    ldx ksys_rw_len_hi
 
-    ; Restore fd into Y.
+    jsr rp_console_read_start
+    bcs @locked_fail
+
+    ; The RP request now owns copied pointer/length in the
+    ; mailbox request block. io_ptr no longer needs protection.
+    LOCK_RELEASE ksys_io_lock
+    jsr sched_lock_leave
+
+    jmp ksys_console_read_wait
+
+@locked_fail:
+    ; Preserve errno already in Y.
+@locked_fail_y:
+    phy
+    LOCK_RELEASE ksys_io_lock
+    jsr sched_lock_leave
     ply
-
-    jsr fd_read
+    sec
     rts
 .endproc
 
 ; ------------------------------------------------------------
 ; ksys_write
 ;
-; Purpose:
-;   Kernel-side syscall wrapper for write(fd, buf, len).
+; Generic write syscall dispatch.
 ;
-; Responsibility:
-;   Decode syscall argument block only.
+; Supports:
+;   OBJ_PIPE
+;   OBJ_DEVICE / DEV_CONSOLE
 ;
-; Dispatch:
-;   fd_write owns:
-;     - fd validation
-;     - fd permission checks
-;     - open-object resolution
-;     - device/file backend dispatch
+; Locking model:
+;   ksys_io_lock protects syscall scratch and io_ptr while live.
+;
+;   Pipe backend:
+;       executed while ksys_io_lock is held because pipe backend
+;       is nonblocking.
+;
+;   Console backend:
+;       RP request is started while ksys_io_lock is held, then
+;       ksys_io_lock is released before waiting for RP_DONE.
 ; ------------------------------------------------------------
 
 .proc ksys_write
-    ; Save pointer to rw_args.
+    phx
+    phy
+
+    jsr sched_lock_enter
+    LOCK_ACQUIRE ksys_io_lock
+
+    ply
+    plx
+
+    ; Decode rw_args while serialized.
     stx io_ptr
     sty io_ptr+1
 
-    ; Save fd temporarily on stack.
     ldy #rw_args::fd
     lda (io_ptr),y
-    pha
+    sta ksys_rw_fd_tmp
 
-    ; Save caller buffer pointer while io_ptr still points to rw_args.
     ldy #rw_args::buf_ptr
     lda (io_ptr),y
-    sta io_tmp
+    sta ksys_rw_buf_lo
     iny
     lda (io_ptr),y
-    sta io_tmp+1
+    sta ksys_rw_buf_hi
 
-    ; Load requested transfer length.
     ldy #rw_args::len
     lda (io_ptr),y
-    pha
+    sta ksys_rw_len_lo
     iny
     lda (io_ptr),y
-    tax
+    sta ksys_rw_len_hi
 
-    ; FD/device layer expects io_ptr to point to the data buffer.
-    lda io_tmp
+    ; Resolve FD for write.
+    ldy ksys_rw_fd_tmp
+    jsr fd_resolve_write
+    bcs @locked_fail
+
+    cmp #OBJ_PIPE
+    beq @pipe
+
+    cmp #OBJ_DEVICE
+    beq @device
+
+    ldy #ENODEV
+    bra @locked_fail_y
+
+@pipe:
+    lda ksys_rw_buf_lo
+    sta pipe_ptr
+    lda ksys_rw_buf_hi
+    sta pipe_ptr+1
+
+    txa
+    tay                         ; Y = open object
+
+    lda ksys_rw_len_lo
+    ldx ksys_rw_len_hi
+
+    jsr pipe_write
+
+    php
+    pha
+    phx
+    phy
+
+    LOCK_RELEASE ksys_io_lock
+    jsr sched_lock_leave
+
+    ply
+    plx
+    pla
+    plp
+    rts
+
+@device:
+    ; Only console device exists for now.
+    cpy #DEV_CONSOLE
+    beq @console
+
+    ldy #ENODEV
+    bra @locked_fail_y
+
+@console:
+    ; Start RP console write while io_ptr is stable.
+    lda ksys_rw_buf_lo
     sta io_ptr
-    lda io_tmp+1
+    lda ksys_rw_buf_hi
     sta io_ptr+1
 
-    ; Restore low length byte into A.
-    pla
+    lda ksys_rw_len_lo
+    ldx ksys_rw_len_hi
 
-    ; Restore fd into Y.
+    jsr rp_console_write_start
+    bcs @locked_fail
+
+    ; The RP request now owns copied pointer/length in the
+    ; mailbox request block. io_ptr no longer needs protection.
+    LOCK_RELEASE ksys_io_lock
+    jsr sched_lock_leave
+
+    jmp ksys_console_write_wait
+
+@locked_fail:
+    ; Preserve errno already in Y.
+@locked_fail_y:
+    phy
+    LOCK_RELEASE ksys_io_lock
+    jsr sched_lock_leave
     ply
-
-    jsr fd_write
+    sec
     rts
 .endproc
 
@@ -304,32 +580,6 @@
 ;             Y = errno
 ; ------------------------------------------------------------
 
-.import pipe_state
-
 .proc ksys_pipe
     jmp pipe_create
-.endproc
-
-; ------------------------------------------------------------
-; ksys_ticks
-;
-; Return:
-;   C clear
-;   A = scheduler ticks low
-;   X = scheduler ticks high
-;
-; Notes:
-;   Uses a high-low-high stable read so an IRQ increment between
-;   byte reads cannot return a torn 16-bit value.
-; ------------------------------------------------------------
-
-.proc ksys_ticks
-@retry:
-    ldx sched_ticks_hi
-    lda sched_ticks_lo
-    cpx sched_ticks_hi
-    bne @retry
-
-    clc
-    rts
 .endproc

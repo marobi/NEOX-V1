@@ -24,6 +24,9 @@
 .include "scheduler_defs.inc"
 .include "syscall.inc"
 
+.export fd_resolve_read
+.export fd_resolve_write
+
 .export fd_init_tables
 .export fd_init_process
 .export fd_close_process
@@ -33,15 +36,15 @@
 .export fd_dup
 .export fd_dup2
 
-.export fd_alloc_open_locked
-.export fd_free_open_locked
-.export fd_init_open_locked
-.export fd_alloc_fd_current_locked
-.export fd_attach_current_locked
-.export fd_detach_current_locked
-.export fd_check_free_pid_fd_locked
-.export fd_attach_pid_fd_read_locked
-.export fd_attach_pid_fd_write_locked
+.export fd_alloc_open
+.export fd_free_open
+.export fd_init_open
+.export fd_alloc_fd_current
+.export fd_attach_current
+.export fd_detach_current
+.export fd_check_free_pid_fd
+.export fd_attach_pid_fd_read
+.export fd_attach_pid_fd_write
 
 ;---------------------------------------------------
 .import fd_lock
@@ -110,7 +113,7 @@ fd_closeproc_fd:
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
-; fd_alloc_open_locked
+; fd_alloc_open
 ;
 ; Caller:
 ;   fd_lock held
@@ -120,7 +123,7 @@ fd_closeproc_fd:
 ;   C set   = failure, Y = ENOMEM
 ; ------------------------------------------------------------
 
-.proc fd_alloc_open_locked
+.proc fd_alloc_open
     ldx #0
 
 @scan:
@@ -147,7 +150,7 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
-; fd_free_open_locked
+; fd_free_open
 ;
 ; Caller:
 ;   fd_lock held
@@ -159,7 +162,7 @@ fd_closeproc_fd:
 ;   C clear
 ; ------------------------------------------------------------
 
-.proc fd_free_open_locked
+.proc fd_free_open
     stz open_type,x
     stz open_refcnt,x
     stz open_flags,x
@@ -169,7 +172,7 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
-; fd_init_open_locked
+; fd_init_open
 ;
 ; Caller:
 ;   fd_lock held
@@ -186,7 +189,7 @@ fd_closeproc_fd:
 ;   Refcount remains 0 until an FD is attached.
 ; ------------------------------------------------------------
 
-.proc fd_init_open_locked
+.proc fd_init_open
     sta open_type,x
     tya
     sta open_flags,x
@@ -197,22 +200,7 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
-; fd_alloc_fd_current_locked
-;
-; Caller:
-;   fd_lock held
-;
-; Output:
-;   C clear = success, Y = fd
-;   C set   = failure, Y = EMFILE
-; ------------------------------------------------------------
-
-.proc fd_alloc_fd_current_locked
-    jmp fd_find_free_current
-.endproc
-
-; ------------------------------------------------------------
-; fd_attach_current_locked
+; fd_attach_current
 ;
 ; Caller:
 ;   fd_lock held
@@ -229,7 +217,7 @@ fd_closeproc_fd:
 ;   Uses fd_attach, which increments open_refcnt.
 ; ------------------------------------------------------------
 
-.proc fd_attach_current_locked
+.proc fd_attach_current
     sta fd_flags_tmp
     txa
     ldx current_pid
@@ -237,30 +225,7 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
-; fd_detach_current_locked
-;
-; Caller:
-;   fd_lock held
-;
-; Input:
-;   A = fd
-;
-; Output:
-;   C clear = success
-;   C set   = failure, Y = errno
-;
-; Notes:
-;   Rollback helper only.
-;   It clears current_pid's fd slot and decrements open_refcnt.
-;   It does not run backend close effects.
-; ------------------------------------------------------------
-
-.proc fd_detach_current_locked
-    jmp fd_close_current_locked
-.endproc
-
-; ------------------------------------------------------------
-; fd_check_free_pid_fd_locked
+; fd_check_free_pid_fd
 ;
 ; Input:
 ;   X = PID
@@ -274,7 +239,7 @@ fd_closeproc_fd:
 ;   Caller holds fd_lock.
 ; ------------------------------------------------------------
 
-.proc fd_check_free_pid_fd_locked
+.proc fd_check_free_pid_fd
     cpx #MAX_PROCS
     bcc @pid_ok
 
@@ -330,7 +295,7 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
-; fd_attach_pid_fd_read_locked
+; fd_attach_pid_fd_read
 ;
 ; Input:
 ;   A = PID
@@ -345,16 +310,16 @@ fd_closeproc_fd:
 ;   Caller holds fd_lock.
 ; ------------------------------------------------------------
 
-.proc fd_attach_pid_fd_read_locked
+.proc fd_attach_pid_fd_read
     pha
     lda #FD_FLAG_READ
     sta fd_flags_tmp
     pla
-    jmp fd_attach_pid_fd_mode_locked
+    jmp fd_attach_pid_fd_mode
 .endproc
 
 ; ------------------------------------------------------------
-; fd_attach_pid_fd_write_locked
+; fd_attach_pid_fd_write
 ;
 ; Input:
 ;   A = PID
@@ -369,16 +334,16 @@ fd_closeproc_fd:
 ;   Caller holds fd_lock.
 ; ------------------------------------------------------------
 
-.proc fd_attach_pid_fd_write_locked
+.proc fd_attach_pid_fd_write
     pha
     lda #FD_FLAG_WRITE
     sta fd_flags_tmp
     pla
-    jmp fd_attach_pid_fd_mode_locked
+    jmp fd_attach_pid_fd_mode
 .endproc
 
 ; ------------------------------------------------------------
-; fd_attach_pid_fd_mode_locked
+; fd_attach_pid_fd_mode
 ;
 ; Internal helper.
 ;
@@ -392,14 +357,14 @@ fd_closeproc_fd:
 ;   Caller holds fd_lock.
 ; ------------------------------------------------------------
 
-.proc fd_attach_pid_fd_mode_locked
+.proc fd_attach_pid_fd_mode
     sta fd_pid_tmp
     stx fd_obj_tmp
     sty fd_index_tmp
 
     ldx fd_pid_tmp
     ldy fd_index_tmp
-    jsr fd_check_free_pid_fd_locked
+    jsr fd_check_free_pid_fd
     bcc @free
 
     sec
@@ -467,7 +432,7 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
-; fd_close_current_locked
+; fd_close_current
 ;
 ; Internal helper.
 ;
@@ -486,7 +451,7 @@ fd_closeproc_fd:
 ;   Does not call backend close.
 ; ------------------------------------------------------------
 
-.proc fd_close_current_locked
+.proc fd_close_current
     cmp #MAX_FDS
     bcc @fd_ok
 
@@ -553,29 +518,97 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
+; fd_detach_current
+;
+; Caller:
+;   fd_lock held
+;
+; Input:
+;   A = fd
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Notes:
+;   Rollback helper only.
+;   It clears current_pid's fd slot and decrements open_refcnt.
+;   It does not run backend close effects.
+; ------------------------------------------------------------
+
+.proc fd_detach_current
+    jmp fd_close_current
+.endproc
+
+; ------------------------------------------------------------
 ; fd_init_tables
 ;
 ; Purpose:
-;   Initialize global open-object table.
+;   Initialize the FD subsystem at boot.
 ;
 ; Behavior:
-;   - clears all open-object slots
-;   - installs three console objects:
+;   - clears fd_lock
+;   - clears every per-process FD slot for every PID
+;   - clears every per-process FD flag slot for every PID
+;   - clears all global open-object slots
+;   - installs three global console open objects:
 ;       0 = stdin
 ;       1 = stdout
 ;       2 = stderr
 ;
 ; Notes:
-;   Refcounts start at 0 and are incremented when processes
-;   attach descriptors.
+;   Per-process FD tables are cleared here even for PROC_EMPTY
+;   slots. This keeps monitor/ps output deterministic when a PID
+;   was not created, for example when task 3 is disabled.
+;
+;   Refcounts start at 0. They are incremented later by
+;   fd_init_process / fd_attach when processes attach their
+;   local descriptors to these open objects.
 ; ------------------------------------------------------------
 
 .proc fd_init_tables
-	stz fd_lock
-	
+    ; FD subsystem starts unlocked.
+    stz fd_lock
+
+    ; --------------------------------------------------------
+    ; Clear all per-process FD object slots.
+    ;
+    ; proc_fd_obj[pid * MAX_FDS + fd] = FD_NONE
+    ; for every PID and every FD.
+    ; --------------------------------------------------------
+
+    ldx #$00
+    lda #FD_NONE
+
+@clear_proc_fd_obj:
+    sta proc_fd_obj,x
+    inx
+    cpx #(MAX_PROCS * MAX_FDS)
+    bne @clear_proc_fd_obj
+
+    ; --------------------------------------------------------
+    ; Clear all per-process FD flags.
+    ;
+    ; proc_fd_flags[pid * MAX_FDS + fd] = 0
+    ; for every PID and every FD.
+    ; --------------------------------------------------------
+
+    ldx #$00
+    lda #$00
+
+@clear_proc_fd_flags:
+    sta proc_fd_flags,x
+    inx
+    cpx #(MAX_PROCS * MAX_FDS)
+    bne @clear_proc_fd_flags
+
+    ; --------------------------------------------------------
+    ; Clear global open-object table.
+    ; --------------------------------------------------------
+
     ldx #$00
 
-@clear:
+@clear_open:
     stz open_type,x
     stz open_refcnt,x
     stz open_flags,x
@@ -583,7 +616,14 @@ fd_closeproc_fd:
 
     inx
     cpx #OPEN_MAX
-    bne @clear
+    bne @clear_open
+
+    ; --------------------------------------------------------
+    ; Install standard global console open objects.
+    ;
+    ; Refcounts remain 0 here. Per-process fd_attach calls will
+    ; increment them.
+    ; --------------------------------------------------------
 
     ; stdin object
     lda #OBJ_DEVICE
@@ -603,6 +643,7 @@ fd_closeproc_fd:
     lda #DEV_CONSOLE
     sta open_dev+STDERR
 
+    clc
     rts
 .endproc
 
@@ -868,11 +909,11 @@ fd_closeproc_fd:
 
     ; Decrement refcount.
     lda open_refcnt,x
-    beq @done_locked
+    beq @done
 
     dec open_refcnt,x
     lda open_refcnt,x
-    bne @done_locked
+    bne @done
 
     ; Last reference. Check whether backend close is needed.
     lda open_type,x
@@ -883,8 +924,8 @@ fd_closeproc_fd:
     beq @close_device
 
     ; Unknown/simple object type: free generic open slot.
-    jsr fd_free_open_locked
-    bra @done_locked
+    jsr fd_free_open
+    bra @done
 
 @close_pipe:
     ; X = open object.
@@ -896,11 +937,11 @@ fd_closeproc_fd:
     jsr pipe_close_endpoint
 
     plx
-    jsr fd_free_open_locked
+    jsr fd_free_open
 
-    bra @done_locked
+    bra @done
 
-@done_locked:
+@done:
     LOCK_RELEASE fd_lock
     lda #0
     tax
@@ -1131,7 +1172,7 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
-; fd_tail_call_device_locked
+; fd_tail_call_device
 ;
 ; Internal helper.
 ;
@@ -1156,7 +1197,7 @@ fd_closeproc_fd:
 ;   Uses RTS tail-call, not RTI.
 ; ------------------------------------------------------------
 
-.proc fd_tail_call_device_locked
+.proc fd_tail_call_device
     ; Restore requested length for backend.
     plx                         ; X = length high
     pla                         ; A = length low
@@ -1192,6 +1233,142 @@ fd_closeproc_fd:
     tya                         ; restore A = length low
 
     rts                         ; tail-call device backend
+.endproc
+
+; ------------------------------------------------------------
+; fd_resolve_read
+;
+; Input:
+;   Y = fd number
+;
+; Output:
+;   C clear = success
+;       X = open object index
+;       A = open object type
+;       Y = device id, if object is OBJ_DEVICE
+;
+;   C set = failure
+;       Y = errno
+;
+; Purpose:
+;   Validate fd for read and return the open-object metadata.
+;
+; Notes:
+;   Does not call a backend.
+;   Does not keep fd_lock held on return.
+; ------------------------------------------------------------
+
+.proc fd_resolve_read
+    lda #FD_FLAG_READ
+    bra fd_resolve_rw
+.endproc
+
+; ------------------------------------------------------------
+; fd_resolve_write
+;
+; Input:
+;   Y = fd number
+;
+; Output:
+;   C clear = success
+;       X = open object index
+;       A = open object type
+;       Y = device id, if object is OBJ_DEVICE
+;
+;   C set = failure
+;       Y = errno
+;
+; Purpose:
+;   Validate fd for write and return the open-object metadata.
+;
+; Notes:
+;   Does not call a backend.
+;   Does not keep fd_lock held on return.
+; ------------------------------------------------------------
+
+.proc fd_resolve_write
+    lda #FD_FLAG_WRITE
+    ; fall through
+.endproc
+
+; ------------------------------------------------------------
+; fd_resolve_rw
+;
+; Input:
+;   A = required FD flag
+;   Y = fd number
+;
+; Output:
+;   C clear = success
+;       X = open object index
+;       A = open object type
+;       Y = device id, if object is OBJ_DEVICE
+;
+;   C set = failure
+;       Y = errno
+;
+; Locking:
+;   Acquires fd_lock only for fd/open-object lookup.
+;   Releases fd_lock before returning.
+; ------------------------------------------------------------
+
+.proc fd_resolve_rw
+    sta fd_flags_tmp
+
+    LOCK_ACQUIRE fd_lock
+
+    ; Resolve fd -> open object.
+    tya
+    jsr fd_lookup
+    bcc @fd_ok
+
+    ; fd_lookup returns errno in Y.
+    phy
+    LOCK_RELEASE fd_lock
+    ply
+    sec
+    rts
+
+@fd_ok:
+    ; Save open object across permission check.
+    phx
+
+    lda fd_flags_tmp
+    jsr fd_check_perm
+    bcc @perm_ok
+
+    ; fd_check_perm returns errno in Y.
+    plx                         ; discard saved open object
+    phy
+    LOCK_RELEASE fd_lock
+    ply
+    sec
+    rts
+
+@perm_ok:
+    plx                         ; X = open object
+
+    ; Return object metadata.
+    ;
+    ; Preserve X across lock release by saving it. Preserve
+    ; returned A/Y across LOCK_RELEASE because the macro clobbers A.
+    lda open_type,x
+    pha
+
+    lda open_dev,x
+    tay
+
+    phx
+    phy
+
+    LOCK_RELEASE fd_lock
+
+    ply                         ; Y = device id
+    plx                         ; X = open object
+    pla                         ; A = object type
+
+    clc
+    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -1311,7 +1488,7 @@ fd_closeproc_fd:
     rts
 
 @op_ok:
-    jmp fd_tail_call_device_locked
+    jmp fd_tail_call_device
 .endproc
 
 ; ------------------------------------------------------------
@@ -1431,7 +1608,7 @@ fd_closeproc_fd:
     rts
 
 @op_ok:
-    jmp fd_tail_call_device_locked
+    jmp fd_tail_call_device
 .endproc
 
 ; ------------------------------------------------------------
@@ -1530,6 +1707,21 @@ fd_closeproc_fd:
     ldy #EMFILE
     sec
     rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_alloc_fd_current
+;
+; Caller:
+;   fd_lock held
+;
+; Output:
+;   C clear = success, Y = fd
+;   C set   = failure, Y = EMFILE
+; ------------------------------------------------------------
+
+.proc fd_alloc_fd_current
+    jmp fd_find_free_current
 .endproc
 
 ; ------------------------------------------------------------
@@ -1650,7 +1842,7 @@ fd_closeproc_fd:
 ;   - Validates newfd before taking fd_lock.
 ;   - Validates oldfd before closing/replacing newfd.
 ;   - dup2(oldfd, oldfd) returns oldfd without changing refcounts.
-;   - fd_close_current_locked is used because fd_lock is already held.
+;   - fd_close_current is used because fd_lock is already held.
 ; ------------------------------------------------------------
 
 .proc fd_dup2
@@ -1721,7 +1913,7 @@ fd_closeproc_fd:
     phy                         ; keep newfd for attach/return
 
     tya                         ; A = newfd
-    jsr fd_close_current_locked
+    jsr fd_close_current
     bcc @target_closed_ok
 
     cpy #EBADF

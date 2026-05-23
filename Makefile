@@ -86,6 +86,7 @@ KERNEL_SRCS := \
 	kernel/timer.asm \
 	kernel/ksys_io.asm \
 	kernel/ksys_proc.asm \
+	kernel/ksys_time.asm \
 	kernel/device.asm \
 	kernel/console_device.asm \
 	kernel/rp2350.asm \

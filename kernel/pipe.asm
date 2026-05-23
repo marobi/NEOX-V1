@@ -21,9 +21,9 @@
 .include "lock.inc"
 
 .export pipe_init_tables
-.export pipe_alloc_locked
-.export pipe_free_locked
-.export pipe_endpoint_init_locked
+.export pipe_alloc
+.export pipe_free
+.export pipe_endpoint_init
 .export pipe_read
 .export pipe_write
 .export pipe_close_endpoint
@@ -34,15 +34,15 @@
 .import fd_lock
 .import current_pid
 
-.import fd_alloc_open_locked
-.import fd_free_open_locked
-.import fd_alloc_fd_current_locked
-.import fd_attach_current_locked
-.import fd_detach_current_locked
-.import fd_init_open_locked
-.import fd_check_free_pid_fd_locked
-.import fd_attach_pid_fd_read_locked
-.import fd_attach_pid_fd_write_locked
+.import fd_alloc_open
+.import fd_free_open
+.import fd_alloc_fd_current
+.import fd_attach_current
+.import fd_detach_current
+.import fd_init_open
+.import fd_check_free_pid_fd
+.import fd_attach_pid_fd_read
+.import fd_attach_pid_fd_write
 
 .import pipe_lock
 .import pipe_state
@@ -251,7 +251,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ; Allocate and initialize read endpoint open object.
     ; --------------------------------------------------------
 
-    jsr fd_alloc_open_locked
+    jsr fd_alloc_open
     bcc @read_obj_ok
 
     tya
@@ -268,13 +268,13 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tax                         ; X = read open object
     lda #OBJ_PIPE
     ldy #FD_FLAG_READ
-    jsr fd_init_open_locked
+    jsr fd_init_open
 
     ; --------------------------------------------------------
     ; Allocate and initialize write endpoint open object.
     ; --------------------------------------------------------
 
-    jsr fd_alloc_open_locked
+    jsr fd_alloc_open
     bcc @write_obj_ok
 
     tya
@@ -291,7 +291,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tax                         ; X = write open object
     lda #OBJ_PIPE
     ldy #FD_FLAG_WRITE
-    jsr fd_init_open_locked
+    jsr fd_init_open
 
     ; --------------------------------------------------------
     ; Allocate pipe table entry and attach endpoint metadata.
@@ -299,7 +299,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     LOCK_ACQUIRE pipe_lock
 
-    jsr pipe_alloc_locked
+    jsr pipe_alloc
     bcc @pipe_ok
 
     tya
@@ -322,7 +322,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     pla                         ; A = read open object
     ldy #PIPE_END_READ
-    jsr pipe_endpoint_init_locked
+    jsr pipe_endpoint_init
 
     ; write endpoint: A = write object, X = pipe index, Y = write mode
     tsx
@@ -334,7 +334,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     pla                         ; A = write open object
     ldy #PIPE_END_WRITE
-    jsr pipe_endpoint_init_locked
+    jsr pipe_endpoint_init
 
     LOCK_RELEASE pipe_lock
 
@@ -342,7 +342,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ; Allocate read fd and attach it.
     ; --------------------------------------------------------
 
-    jsr fd_alloc_fd_current_locked
+    jsr fd_alloc_fd_current
     bcc @read_fd_ok
 
     tya
@@ -366,13 +366,13 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tax                         ; X = read open object
 
     lda #FD_FLAG_READ
-    jsr fd_attach_current_locked
+    jsr fd_attach_current
 
     ; --------------------------------------------------------
     ; Allocate write fd and attach it.
     ; --------------------------------------------------------
 
-    jsr fd_alloc_fd_current_locked
+    jsr fd_alloc_fd_current
     bcc @write_fd_ok
 
     tya
@@ -396,7 +396,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tax                         ; X = write open object
 
     lda #FD_FLAG_WRITE
-    jsr fd_attach_current_locked
+    jsr fd_attach_current
 
     ; --------------------------------------------------------
     ; Success.
@@ -440,7 +440,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ; fd_lock is still held.
     tsx
     lda $0105,x
-    jsr fd_detach_current_locked
+    jsr fd_detach_current
 
 @fail_endpoints:
     ; No pipe_lock is held here.
@@ -468,7 +468,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     beq @fail_readobj
 
     tax
-    jsr fd_free_open_locked
+    jsr fd_free_open
 
 @fail_readobj:
     tsx
@@ -477,7 +477,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     beq @fail_fdlock
 
     tax
-    jsr fd_free_open_locked
+    jsr fd_free_open
 
 @fail_fdlock:
     LOCK_RELEASE fd_lock
@@ -575,13 +575,13 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ldy $0105,x                 ; common fd
     lda $0107,x                 ; reader PID
     tax
-    jsr fd_check_free_pid_fd_locked
+    jsr fd_check_free_pid_fd
     bcc @reader_fd_free
 
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd_locked
+    jmp @fail_fd
 
 @reader_fd_free:
     ; --------------------------------------------------------
@@ -592,26 +592,26 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ldy $0105,x                 ; common fd
     lda $0106,x                 ; writer PID
     tax
-    jsr fd_check_free_pid_fd_locked
+    jsr fd_check_free_pid_fd
     bcc @writer_fd_free
 
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd_locked
+    jmp @fail_fd
 
 @writer_fd_free:
     ; --------------------------------------------------------
     ; Allocate and initialize read endpoint open object.
     ; --------------------------------------------------------
 
-    jsr fd_alloc_open_locked
+    jsr fd_alloc_open
     bcc @read_obj_ok
 
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd_locked
+    jmp @fail_fd
 
 @read_obj_ok:
     txa                         ; A = read open object
@@ -622,13 +622,13 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tax                         ; X = read open object
     lda #OBJ_PIPE
     ldy #FD_FLAG_READ
-    jsr fd_init_open_locked
+    jsr fd_init_open
 
     ; --------------------------------------------------------
     ; Allocate and initialize write endpoint open object.
     ; --------------------------------------------------------
 
-    jsr fd_alloc_open_locked
+    jsr fd_alloc_open
     bcc @write_obj_ok
 
     tya
@@ -637,9 +637,9 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     lda $0104,x                 ; read open object
     tax
-    jsr fd_free_open_locked
+    jsr fd_free_open
 
-    jmp @fail_fd_locked
+    jmp @fail_fd
 
 @write_obj_ok:
     txa                         ; A = write open object
@@ -650,7 +650,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tax                         ; X = write open object
     lda #OBJ_PIPE
     ldy #FD_FLAG_WRITE
-    jsr fd_init_open_locked
+    jsr fd_init_open
 
     ; --------------------------------------------------------
     ; Allocate pipe and initialize endpoint metadata.
@@ -658,7 +658,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     LOCK_ACQUIRE pipe_lock
 
-    jsr pipe_alloc_locked
+    jsr pipe_alloc
     bcc @pipe_ok
 
     LOCK_RELEASE pipe_lock
@@ -669,14 +669,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     lda $0104,x                 ; read open object
     tax
-    jsr fd_free_open_locked
+    jsr fd_free_open
 
     tsx
     lda $0103,x                 ; write open object
     tax
-    jsr fd_free_open_locked
+    jsr fd_free_open
 
-    jmp @fail_fd_locked
+    jmp @fail_fd
 
 @pipe_ok:
     tsx
@@ -695,7 +695,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     pla                         ; A = read open object
     ldy #PIPE_END_READ
-    jsr pipe_endpoint_init_locked
+    jsr pipe_endpoint_init
 
     ; write endpoint metadata:
     ;   A = write open object
@@ -711,14 +711,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     pla                         ; A = write open object
     ldy #PIPE_END_WRITE
-    jsr pipe_endpoint_init_locked
+    jsr pipe_endpoint_init
 
     LOCK_RELEASE pipe_lock
 
     ; --------------------------------------------------------
     ; Attach read endpoint to reader PID/fd.
     ;
-    ; Input to fd_attach_pid_fd_read_locked:
+    ; Input to fd_attach_pid_fd_read:
     ;   A = PID
     ;   X = open object
     ;   Y = fd
@@ -733,7 +733,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     lda $0107,x                 ; reader PID
     plx                         ; X = read open object
 
-    jsr fd_attach_pid_fd_read_locked
+    jsr fd_attach_pid_fd_read
     bcc @read_attach_ok
 
     ; Should be unreachable because fd_lock is still held and the
@@ -741,13 +741,13 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd_locked
+    jmp @fail_fd
 
 @read_attach_ok:
     ; --------------------------------------------------------
     ; Attach write endpoint to writer PID/fd.
     ;
-    ; Input to fd_attach_pid_fd_write_locked:
+    ; Input to fd_attach_pid_fd_write:
     ;   A = PID
     ;   X = open object
     ;   Y = fd
@@ -762,7 +762,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     lda $0106,x                 ; writer PID
     plx                         ; X = write open object
 
-    jsr fd_attach_pid_fd_write_locked
+    jsr fd_attach_pid_fd_write
     bcc @write_attach_ok
 
     ; Should be unreachable because fd_lock is still held and the
@@ -770,7 +770,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd_locked
+    jmp @fail_fd
 
 @write_attach_ok:
     LOCK_RELEASE fd_lock
@@ -787,7 +787,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     clc
     rts
 
-@fail_fd_locked:
+@fail_fd:
     LOCK_RELEASE fd_lock
 
 @fail_frame:
@@ -809,7 +809,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 .endproc
 
 ; ------------------------------------------------------------
-; pipe_alloc_locked
+; pipe_alloc
 ;
 ; Allocate a pipe table entry.
 ;
@@ -823,7 +823,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; Clobbers: A, X, Y
 ; ------------------------------------------------------------
 
-.proc pipe_alloc_locked
+.proc pipe_alloc
     ldx #$00
 
 @scan:
@@ -856,7 +856,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 .endproc
 
 ; ------------------------------------------------------------
-; pipe_free_locked
+; pipe_free
 ;
 ; Free a pipe table entry.
 ;
@@ -872,7 +872,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; Clobbers: A, X
 ; ------------------------------------------------------------
 
-.proc pipe_free_locked
+.proc pipe_free
     tax
 
     stz pipe_state,x
@@ -887,7 +887,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 .endproc
 
 ; ------------------------------------------------------------
-; pipe_endpoint_init_locked
+; pipe_endpoint_init
 ;
 ; Input:
 ;   A = open object
@@ -904,7 +904,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   A, X, flags
 ; ------------------------------------------------------------
 
-.proc pipe_endpoint_init_locked
+.proc pipe_endpoint_init
     phx                         ; save pipe index
     tax                         ; X = open object
 
@@ -995,7 +995,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     bne @done
 
     txa
-    jsr pipe_free_locked
+    jsr pipe_free
 
 @done:
     LOCK_RELEASE pipe_lock
@@ -1080,7 +1080,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     cmp #PIPE_END_READ
     beq @mode_ok
 
-    jmp @err_ebadf_locked
+    jmp @err_ebadf
 
 @mode_ok:
     ; Resolve open object -> pipe index.
@@ -1088,7 +1088,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     cmp #PIPE_NONE
     bne @pipe_ok
 
-    jmp @err_ebadf_locked
+    jmp @err_ebadf
 
 @pipe_ok:
     sta pipe_idx
@@ -1098,7 +1098,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     cmp #PIPE_USED
     beq @state_ok
 
-    jmp @err_ebadf_locked
+    jmp @err_ebadf
 
 @state_ok:
     ; Empty pipe:
@@ -1108,7 +1108,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     bne @can_read
 
     lda pipe_writers,x
-    bne @err_eagain_locked
+    bne @err_eagain
 
     LOCK_RELEASE pipe_lock
 
@@ -1186,14 +1186,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
     clc
     rts
 
-@err_ebadf_locked:
+@err_ebadf:
     LOCK_RELEASE pipe_lock
 
     ldy #EBADF
     sec
     rts
 
-@err_eagain_locked:
+@err_eagain:
     LOCK_RELEASE pipe_lock
 
     ldy #EAGAIN
@@ -1278,7 +1278,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     cmp #PIPE_END_WRITE
     beq @mode_ok
 
-    jmp @err_ebadf_locked
+    jmp @err_ebadf
 
 @mode_ok:
     ; Resolve open object -> pipe index.
@@ -1286,7 +1286,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     cmp #PIPE_NONE
     bne @pipe_ok
 
-    jmp @err_ebadf_locked
+    jmp @err_ebadf
 
 @pipe_ok:
     sta pipe_idx
@@ -1296,14 +1296,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
     cmp #PIPE_USED
     beq @state_ok
 
-    jmp @err_ebadf_locked
+    jmp @err_ebadf
 
 @state_ok:
     ; Broken pipe: no readers.
     lda pipe_readers,x
     bne @can_start
 
-    jmp @err_epipe_locked
+    jmp @err_epipe
 
 @can_start:
     stz pipe_done_lo
@@ -1335,7 +1335,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     bne @done
 
     ; Full with zero progress: nonblocking would-block.
-    jmp @err_eagain_locked
+    jmp @err_eagain
 
 @space_available:
     ; Compute destination pointer:
@@ -1385,21 +1385,21 @@ pipe_done_hi:       .res 1      ; completed byte count high
     clc
     rts
 
-@err_ebadf_locked:
+@err_ebadf:
     LOCK_RELEASE pipe_lock
 
     ldy #EBADF
     sec
     rts
 
-@err_eagain_locked:
+@err_eagain:
     LOCK_RELEASE pipe_lock
 
     ldy #EAGAIN
     sec
     rts
 
-@err_epipe_locked:
+@err_epipe:
     LOCK_RELEASE pipe_lock
 
     ldy #EPIPE

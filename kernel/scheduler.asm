@@ -140,12 +140,49 @@
 ; proc_set_running
 ;
 ; Input:
-;   X = pid
+;   X = selected PID
+;
+; Purpose:
+;   Commit X as the current running process.
+;
+; Policy:
+;   PROC_RUNNING is exclusive. On a single CPU, only current_pid
+;   may be RUNNING.
+;
+;   This routine owns the transition:
+;
+;       old current_pid -> READY, if it was RUNNING
+;       selected X      -> RUNNING
+;       current_pid     -> X
+;
+; Important:
+;   Call this before loading the selected process stack/context.
 ; ------------------------------------------------------------
 
 .proc proc_set_running
+    phx
+
+    ; Demote old current_pid if it is a normal running task.
+    ldx current_pid
+    cpx #IDLE_PID
+    beq @set_selected
+
+    lda proc_state,x
+    cmp #PROC_RUNNING
+    bne @set_selected
+
+    lda #PROC_READY
+    jsr proc_set_state
+
+@set_selected:
+    ; Restore selected PID.
+    plx
+
     lda #PROC_RUNNING
-    jmp proc_set_state
+    jsr proc_set_state
+
+    stx current_pid
+    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -526,6 +563,11 @@
 
     lda proc_state,x
 
+    ; DEBUG-BEGIN: sched_pick_next candidate state
+    stx sched_debug_state_pid
+    sta sched_debug_state_old
+    ; DEBUG-END: sched_pick_next candidate state
+	
     cmp #PROC_NEW
     beq @found
 
@@ -543,9 +585,41 @@
     bra @check
 
 @idle:
+    ; No PROC_NEW or PROC_READY task was found.
+    ; That is only valid if no normal task is still PROC_RUNNING.
+    ;
+    ; If a normal task is PROC_RUNNING here, scheduler state is
+    ; corrupt: that PID should have been demoted to PROC_READY
+    ; before this scan.
+    ldx #FIRST_TASK_PID
+
+@scan_stale_running:
+    lda proc_state,x
+    cmp #PROC_RUNNING
+    beq @stale_running
+
+    inx
+    cpx #MAX_PROCS
+    bne @scan_stale_running
+
     ldx #IDLE_PID
     sec
     rts
+
+@stale_running:
+    ; DEBUG-BEGIN: stale RUNNING diagnostic
+    stx sched_debug_state_pid
+    lda proc_state,x
+    sta sched_debug_state_old
+
+    lda #$EE
+    sta sched_debug_marker
+    ; DEBUG-END: stale RUNNING diagnostic
+
+    ; DEBUG-BEGIN: halt on illegal scheduler state
+@halt:
+    bra @halt
+    ; DEBUG-END: halt on illegal scheduler state
 
 @found:
     sec
@@ -555,26 +629,16 @@
 ; ------------------------------------------------------------
 ; sched_context_switch
 ;
-; Purpose:
-;   IRQ-driven context switch.
+; IRQ/timer scheduler entry.
+;
+; Called from IRQ context. The current task stack is saved as
+; RTI-style state because the interrupted frame contains the
+; CPU IRQ return frame.
 ;
 ; Stack model:
-;   Entered from IRQ path. The saved process stack contains an
-;   IRQ/RTI-compatible frame.
-;
-; Policy:
-;   - Save current SP for normal tasks only
-;   - Mark saved stack as RTI-resumable
-;   - Convert current RUNNING normal task to READY
-;   - Wake pending events
-;   - Pick next runnable process
-;   - If PID 0 is selected, enter idle_loop directly
-;   - Otherwise resume selected process by recorded resume mode
-;
-; Important:
-;   PID 0 is the idle/supervisor fallback. It is not a normal
-;   schedulable process and must not be saved/resumed through
-;   proc_sp[0].
+;   irq_entry has pushed A/X/Y before entering the scheduler.
+;   The saved SP therefore points at the scheduler/IRQ save
+;   frame for the interrupted task.
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
@@ -606,6 +670,19 @@
 
     ; Save interrupted SP for normal task.
     tsx
+
+    ; DEBUG-BEGIN: sched_context_switch save interrupted owner SP
+    ;
+    ; sched_debug_old_pid   = PID whose IRQ stack is being saved
+    ; sched_debug_state_old = SP observed at IRQ scheduler entry
+    ;
+    ; If a task stack leaks under timer preemption, this value
+    ; will move downward before the scheduler stores it in
+    ; proc_sp[].
+    ; DEBUG-END: sched_context_switch save interrupted owner SP
+    sty sched_debug_old_pid
+    stx sched_debug_state_old
+
     txa
     sta proc_sp,y
 
@@ -641,9 +718,6 @@
 @pick:
     jsr sched_pick_next
 
-    ; X = selected PID, including possible IDLE fallback.
-    stx current_pid
-
     lda #$03
     sta sched_debug_marker
 
@@ -659,7 +733,26 @@
     beq @start_new
 
     ; Resume existing normal process.
+    ;
+    ; proc_set_running commits:
+    ;   old current_pid -> READY, if applicable
+    ;   selected X      -> RUNNING
+    ;   current_pid     -> X
+    ;
+    ; It returns with X = current_pid.
     jsr proc_set_running
+
+    ; DEBUG-BEGIN: sched_context_switch resume target SP
+    ;
+    ; sched_debug_state_pid = PID selected for resume
+    ; sched_debug_state_new = saved SP loaded from proc_sp[PID]
+    ;
+    ; If this shows a low SP, the IRQ scheduler is restoring a
+    ; stack value that was already saved low earlier.
+    ; DEBUG-END: sched_context_switch resume target SP
+    stx sched_debug_state_pid
+    lda proc_sp,x
+    sta sched_debug_state_new
 
     lda proc_sp,x
     tax
@@ -694,52 +787,51 @@
     jsr proc_set_running
 
     lda #IDLE_PID
-    sta current_pid
-
-    lda #IDLE_PID
     ldx #<idle_loop
     ldy #>idle_loop
     jmp BIOS_CONTEXT_JUMP
 .endproc
 
-
 ; ------------------------------------------------------------
 ; sched_yield
 ;
-; Purpose:
-;   Voluntary scheduler handoff from syscall/user-call context.
+; Cooperative scheduler entry.
 ;
-; Stack model:
-;   This is NOT an IRQ path.
-;   Normal saved stacks contain RTS-compatible return frames.
+; Called from syscall/user context. The current task stack is
+; saved as RTS-style state, not IRQ/RTI-style state.
 ;
-; Important:
-;   PID 0 is the idle/supervisor fallback. It is not a normal
-;   process and must not be saved as PROC_RESUME_RTS.
+; Monitor note:
+;   irq_entry only sets monitor_pending. Actual monitor entry
+;   happens here, outside IRQ context, after supervisor checks
+;   subsystem locks.
 ; ------------------------------------------------------------
 
 .proc sched_yield
-    ; Cooperative monitor safe point.
-    ;
-    ; irq_entry only sets monitor_pending. Actual monitor entry
-    ; happens here, outside IRQ context, after supervisor checks
-    ; subsystem locks.
-    jsr supervisor_try_enter_pending
-
+    ; Cooperative scheduler entry must be non-preemptible from
+    ; the first instruction. A timer IRQ racing with sys_yield
+    ; must not enter sched_context_switch while sched_yield is
+    ; setting up its own scheduler path.
     sei
 
+    ; Cooperative monitor safe point.
+    jsr supervisor_try_enter_pending
+	
+;debug
     lda #$04
     sta sched_debug_marker
 
     lda current_pid
     sta sched_debug_pid
+;end debug
 
     ; Current yielding owner.
     ldy current_pid
 
+;debug
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+;end debug
 
     ; --------------------------------------------------------
     ; PID 0 is not a normal task.
@@ -754,6 +846,18 @@
 
     ; Save current syscall/user stack pointer.
     tsx
+
+    ; DEBUG-BEGIN: sched_yield save current owner SP
+    ;
+    ; sched_debug_old_pid   = PID whose stack is being saved
+    ; sched_debug_state_old = SP observed at yield entry
+    ;
+    ; If a task stack leaks, this value will move downward over
+    ; repeated yields before the scheduler stores it in proc_sp[].
+    sty sched_debug_old_pid
+    stx sched_debug_state_old
+    ; DEBUG-END: sched_yield save current owner SP
+
     txa
     sta proc_sp,y
 
@@ -788,15 +892,21 @@
     jsr scheduler_wake_timers
 
     jsr sched_pick_next
-
-    ; X = selected PID, including possible IDLE fallback.
-    stx current_pid
-
+    ; DEBUG-BEGIN: sched_yield selected PID
+    ;
+    ; Captures the PID selected after wake processing.
+    ; Useful when PID 3 is woken by console input.
+    stx sched_debug_state_pid
+    lda proc_state,x
+    sta sched_debug_state_new
+    ; DEBUG-END: sched_yield selected PID
+; debug
     lda #$06
     sta sched_debug_marker
 
     txa
     sta sched_debug_pid
+; end debug
 
     ; PID 0 is entered directly, not through proc_sp[0].
     cpx #IDLE_PID
@@ -807,18 +917,42 @@
     beq @start_new
 
     ; Resume existing normal process.
+    ;
+    ; proc_set_running commits:
+    ;   old current_pid -> READY, if applicable
+    ;   selected X      -> RUNNING
+    ;   current_pid     -> X
+    ;
+    ; It returns with X = current_pid.
     jsr proc_set_running
+
+    ; DEBUG-BEGIN: sched_yield committed software PID
+    lda #$61
+    sta sched_debug_marker
+
+    stx sched_debug_state_pid
+    lda current_pid
+    sta sched_debug_state_new
+    ; DEBUG-END: sched_yield committed software PID
+
+    stx sched_debug_state_pid
+    lda proc_sp,x
+    sta sched_debug_state_new
 
     lda proc_sp,x
     tax
     txs
 
-    ; Resume through the stack format recorded for this PID.
+    ; DEBUG-BEGIN: sched_yield loaded target stack
+    lda #$62
+    sta sched_debug_marker
+    ; DEBUG-END: sched_yield loaded target stack
+
     ldx current_pid
     lda proc_resume_mode,x
     cmp #PROC_RESUME_RTS
     beq @resume_rts
-
+	
 @resume_rti:
     lda proc_context,x
     jmp BIOS_CONTEXT_RTI
@@ -840,9 +974,6 @@
 @resume_idle:
     ldx #IDLE_PID
     jsr proc_set_running
-
-    lda #IDLE_PID
-    sta current_pid
 
     lda #IDLE_PID
     ldx #<idle_loop
@@ -893,10 +1024,16 @@
 ;   Resume a task suspended from syscall/yield context.
 ;
 ; Stack:
-;   Restored process stack contains the original RTS return
-;   address from the blocking syscall.
+;   Restored process stack contains the RTS return address into
+;   the syscall veneer.
+;
+; Notes:
+;   sched_yield enters with IRQs disabled. Unlike RTI resume,
+;   this path does not restore a saved processor status byte.
+;   Re-enable IRQs before returning to the syscall veneer.
 ; ------------------------------------------------------------
 
 .proc sched_resume_rts
+    cli
     rts
 .endproc

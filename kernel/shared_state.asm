@@ -53,6 +53,33 @@ rp_lock:        .res 1
 
 fd_lock:
     .res 1
+
+; ------------------------------------------------------------
+; ksys_io_lock
+;
+; Purpose:
+;   Serializes ksys_read / ksys_write syscall dispatch.
+;
+; Protects:
+;   - ksys_io.asm module-local read/write scratch
+;   - io_ptr while it is used as the active backend buffer pointer
+;   - fd_read / fd_write dispatch while io_ptr is live
+;
+; Rule:
+;   This is a real serialization lock, not sched_lock.
+;
+;   It must not be held across:
+;     - sched_yield
+;     - WAIT_CONSOLE
+;     - WAIT_PIPE_READ
+;     - WAIT_PIPE_WRITE
+;     - any indefinite RP wait
+; ------------------------------------------------------------
+
+.export ksys_io_lock
+
+ksys_io_lock:
+    .res 1
 	
 ; ------------------------------------------------------------
 ; Scheduler core state

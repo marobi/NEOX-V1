@@ -35,10 +35,6 @@
 
 .import monitor_active
 
-.import proc_set_wait
-
-.import sched_yield
-
 .import ksys_console_read_blocking
 .import rp_console_write
 
@@ -159,24 +155,15 @@ console_ops:
     bne @zero_read
 
 @owner_ok:
-    ; Owner requesting input → check readiness
     lda RP_CONSOLE_RDY
     bne @has_data
-    ; --------------------------------------------------------
-    ; Owner + no data → block on console input
-    ; --------------------------------------------------------
 
-    ; Generic wait model:
-    ;   current process waits for console input.
-    ;   wait_object is unused for console, so Y = 0.
-    ldx current_pid
-    lda #WAIT_CONSOLE
-    ldy #0
-    jsr proc_set_wait
+    ; Normal owner but no data.
+    ; Backend must not block internally.
+    ldy #EAGAIN
+    sec
+    rts
 
-    jsr sched_yield
-    bra @retry
-	
 ; ------------------------------------------------------------
 ; Monitor path: nonblocking polling only
 ; ------------------------------------------------------------

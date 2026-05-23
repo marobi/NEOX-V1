@@ -39,6 +39,8 @@
 .export rp_console_write
 .export rp_console_read_start
 .export rp_console_read_finish
+.export rp_console_write_start
+.export rp_console_write_finish
 
 .importzp io_ptr
 .importzp rp_tmp
@@ -444,6 +446,131 @@
 
 @error:
     ; Preserve errno across cleanup/release.
+    ldy #EIO
+    phy
+
+    lda #RP_IDLE
+    sta RP_STATUS
+
+    jsr rp_release_lock
+
+    ply
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; rp_console_write_start
+;
+; Purpose:
+;   Submit a console write request and return immediately.
+;
+; Input:
+;   io_ptr -> source buffer
+;   A      = length low
+;   X      = length high
+;
+; Return:
+;   C clear = request submitted
+;
+; Synchronization:
+;   Acquires rp_lock.
+;   rp_lock remains held until rp_console_write_finish releases it.
+;
+; Notes:
+;   This routine copies io_ptr and length into the RP request
+;   block immediately. After it returns, the caller no longer
+;   needs io_ptr to remain stable.
+; ------------------------------------------------------------
+
+.proc rp_console_write_start
+    pha
+    phx
+
+    jsr rp_acquire_lock
+
+    plx
+    pla
+
+    sta RP_ARG1L
+    stx RP_ARG1H
+
+    lda io_ptr
+    sta RP_ARG0L
+    lda io_ptr+1
+    sta RP_ARG0H
+
+    stz RP_ARG2L
+    stz RP_ARG2H
+    stz RP_RES0L
+    stz RP_RES0H
+    stz RP_ERR
+    stz RP_FLAGS
+    stz RP_STATE
+
+    php
+    sei
+
+    lda #RP_BUSY
+    sta RP_STATUS
+
+    lda #RP_CMD_CON_WRITE
+    sta RP_DOORBELL
+
+    plp
+
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; rp_console_write_finish
+;
+; Purpose:
+;   Nonblocking completion check for async console write.
+;
+; Return:
+;   C clear = completed successfully
+;       A/X = bytes written
+;
+;   C set = not complete or failed
+;       Y = E_OK  if still busy
+;       Y = EIO   if RP reported error
+;
+; Synchronization:
+;   Assumes rp_console_write_start acquired rp_lock.
+;   Releases rp_lock only when RP_DONE or RP_ERROR is seen.
+; ------------------------------------------------------------
+
+.proc rp_console_write_finish
+    lda RP_STATUS
+    cmp #RP_DONE
+    beq @done
+
+    cmp #RP_ERROR
+    beq @error
+
+    ldy #E_OK
+    sec
+    rts
+
+@done:
+    lda RP_RES0L
+    ldx RP_RES0H
+    pha
+    phx
+
+    lda #RP_IDLE
+    sta RP_STATUS
+
+    jsr rp_release_lock
+
+    plx
+    pla
+    clc
+    rts
+
+@error:
     ldy #EIO
     phy
 

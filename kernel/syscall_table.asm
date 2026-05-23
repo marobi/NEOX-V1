@@ -166,9 +166,17 @@ syscall_table:
 .endproc
 
 .proc k_yield
+    ; Enter cooperative scheduler path with IRQs disabled.
+    ;
+    ; This closes the race where a timer IRQ arrives after the
+    ; user has entered sys_yield but before sched_yield executes
+    ; its own SEI.
+    sei
+
     jsr KERN_ENTRY_KSYS_YIELD
-	clc
-	rts
+
+    clc
+    rts
 .endproc
 
 .proc k_sbrk

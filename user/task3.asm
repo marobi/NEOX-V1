@@ -15,6 +15,7 @@
 .proc user_task3_entry
 @loop:
     jsr BIOS_GETCHAR
+	
     jsr BIOS_PUTCHAR
 
     cmp #'q'
