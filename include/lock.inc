@@ -10,7 +10,9 @@
 ; require a fixed memory operand.
 ;
 ; Rules:
-;   - Do not hold a lock across sched_yield.
+;	- Do not hold short subsystem locks across sched_yield.
+;	  ksys_io_lock is a sleepable serialization lock and may be held across 
+;	  the complete read/write syscall path.
 ;   - Do not hold fd_lock across device read/write backends.
 ;   - Do not hold fd_lock across RP mailbox waits.
 ;   - Do not hold pipe_lock across blocking wait/yield.

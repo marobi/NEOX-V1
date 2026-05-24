@@ -48,6 +48,7 @@
 
 ;---------------------------------------------------
 .import fd_lock
+.import fd_lock_owner
 
 .import current_pid
 
@@ -1406,12 +1407,21 @@ fd_closeproc_fd:
 
     LOCK_ACQUIRE fd_lock
 
-    ; Resolve fd -> open object.
+	; DEBUG-BEGIN: fd_read acquired fd_lock
+	lda current_pid
+	sta fd_lock_owner
+	; DEBUG-END: fd_read acquired fd_lock
+    
+	; Resolve fd -> open object.
     tya
     jsr fd_lookup
     bcc @fd_ok
 
     LOCK_RELEASE fd_lock
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1429,8 +1439,12 @@ fd_closeproc_fd:
     plx                         ; discard open object
 
     LOCK_RELEASE fd_lock
-
-    plx
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
+    
+	plx
     pla
     sec
     rts
@@ -1447,6 +1461,11 @@ fd_closeproc_fd:
 
     LOCK_RELEASE fd_lock
 
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
+
     plx
     pla
     ldy #ENODEV
@@ -1459,6 +1478,11 @@ fd_closeproc_fd:
     pha
 
     LOCK_RELEASE fd_lock
+
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
     lda io_ptr
@@ -1481,6 +1505,10 @@ fd_closeproc_fd:
     bcc @op_ok
 
     LOCK_RELEASE fd_lock
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1526,12 +1554,21 @@ fd_closeproc_fd:
 
     LOCK_ACQUIRE fd_lock
 
+	; DEBUG-BEGIN: fd_read acquired fd_lock
+	lda current_pid
+	sta fd_lock_owner
+	; DEBUG-END: fd_read acquired fd_lock
+
     ; Resolve fd -> open object.
     tya
     jsr fd_lookup
     bcc @fd_ok
 
     LOCK_RELEASE fd_lock
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1549,6 +1586,10 @@ fd_closeproc_fd:
     plx                         ; discard open object
 
     LOCK_RELEASE fd_lock
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1566,6 +1607,10 @@ fd_closeproc_fd:
     beq @device_ok
 
     LOCK_RELEASE fd_lock
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1579,6 +1624,10 @@ fd_closeproc_fd:
     pha
 
     LOCK_RELEASE fd_lock
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
     lda io_ptr
@@ -1601,6 +1650,10 @@ fd_closeproc_fd:
     bcc @op_ok
 
     LOCK_RELEASE fd_lock
+	; DEBUG-BEGIN: fd_read releasing fd_lock
+	lda #$ff
+	sta fd_lock_owner
+	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla

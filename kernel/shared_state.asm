@@ -58,22 +58,25 @@ fd_lock:
 ; ksys_io_lock
 ;
 ; Purpose:
-;   Serializes ksys_read / ksys_write syscall dispatch.
+;   Global serialization owner for ksys_read / ksys_write.
 ;
-; Protects:
-;   - ksys_io.asm module-local read/write scratch
-;   - io_ptr while it is used as the active backend buffer pointer
-;   - fd_read / fd_write dispatch while io_ptr is live
+; Policy:
+;   Only one process may execute the read/write syscall path at
+;   a time.
 ;
-; Rule:
-;   This is a real serialization lock, not sched_lock.
+;   This covers:
+;     - syscall argument decoding
+;     - io_ptr backend buffer pointer
+;     - fd_read / fd_write
+;     - FD dispatch to pipe, console, and future file/device
 ;
-;   It must not be held across:
-;     - sched_yield
-;     - WAIT_CONSOLE
-;     - WAIT_PIPE_READ
-;     - WAIT_PIPE_WRITE
-;     - any indefinite RP wait
+; Wait rule:
+;   A process that cannot acquire this lock must not spin.
+;   It blocks on:
+;
+;       WAIT_KSYS_IO, object 0
+;
+;   and calls sched_yield.
 ; ------------------------------------------------------------
 
 .export ksys_io_lock
@@ -395,6 +398,17 @@ sched_ticks_lo:
 sched_ticks_hi:
     .res 1
 
+; ------------------------------------------------------------
+
+.export ksys_io_owner
+.export fd_lock_owner
+
+ksys_io_owner:
+    .res 1
+
+fd_lock_owner:
+    .res 1
+	
 ; ------------------------------------------------------------
 ; Scheduler debug markers
 ; ------------------------------------------------------------

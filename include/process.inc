@@ -43,6 +43,14 @@ WAIT_PIPE       = $03
 WAIT_TIMER      = $04
 WAIT_PROC       = $05
 
+; Global read/write syscall serialization wait.
+;
+; Used when a process wants to enter ksys_read / ksys_write but
+; another process already owns ksys_io_lock.
+;
+; wait_object = 0 for the current coarse global read/write lock.
+WAIT_KSYS_IO	= $06
+
 EXIT_OK			= $00
 
 .endif

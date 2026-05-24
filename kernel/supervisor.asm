@@ -58,10 +58,11 @@ MONITOR_ENTRY       = $B000
 ;   no non-reentrant subsystem lock is held.
 ;
 ; Locks checked:
-;   sched_lock - monitor/scheduler critical section
-;   fd_lock    - FD/open-object tables
-;   pipe_lock  - pipe tables/buffers
-;   rp_lock    - RP mailbox/request block
+;   sched_lock   - monitor/scheduler critical section
+;   fd_lock      - FD/open-object tables
+;   pipe_lock    - pipe tables/buffers
+;   rp_lock      - RP mailbox/request block
+;   ksys_io_lock - active global read/write syscall path
 ; ------------------------------------------------------------
 
 .proc supervisor_monitor_safe

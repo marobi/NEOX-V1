@@ -28,6 +28,7 @@
 
 .export scheduler_init
 .export scheduler_set_current_context
+.export scheduler_wake_one
 .export sched_pick_next
 .export sched_context_switch
 .export sched_yield
@@ -99,6 +100,15 @@
 .import proc_ticks_lo
 .import proc_ticks_hi
 
+; ------------------------------------------------------------
+.segment "KERN_BSS"
+
+sched_wake_reason_tmp:
+    .res 1
+
+sched_wake_object_tmp:
+    .res 1
+	
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
@@ -106,19 +116,36 @@
 ;
 ; Input:
 ;   X = PID
-;   A = new state
+;   A = new process state
 ;
+; Output:
+;   A = new process state
+;   X = unchanged
+;
+; Purpose:
+;   Store a new process state and update scheduler debug fields.
+;
+; Important:
+;   Do not use sched_debug_state_new as temporary storage for the
+;   real new state. Those debug bytes are global diagnostics and
+;   may be overwritten by another scheduler path if an IRQ/context
+;   switch occurs between save and store.
+;
+;   The new state is preserved on the current process stack instead.
+;   If an IRQ occurs while the byte is on the stack, that stack state
+;   is saved/restored with the process context.
 ; ------------------------------------------------------------
 
 .proc proc_set_state
-    sta sched_debug_state_new
+    pha                         ; preserve real new state safely
 
     stx sched_debug_state_pid
 
     lda proc_state,x
     sta sched_debug_state_old
 
-    lda sched_debug_state_new
+    pla                         ; restore real new state
+    sta sched_debug_state_new
     sta proc_state,x
 
     rts
@@ -203,6 +230,96 @@
 .proc proc_wake
     jsr proc_clear_wait
     jmp proc_set_ready
+.endproc
+
+; ------------------------------------------------------------
+; scheduler_wake_one
+;
+; Input:
+;   A = wait reason
+;   Y = wait object
+;
+; Output:
+;   C clear = one matching process was woken
+;   C set   = no matching waiter found
+;
+; Purpose:
+;   Wake one blocked process waiting on a specific
+;   wait_reason / wait_object pair.
+;
+; Policy:
+;   Scans normal task PIDs in round-robin order, starting after
+;   current_pid. This avoids always waking the lowest PID first.
+;
+; Example:
+;   lda #WAIT_KSYS_IO
+;   ldy #$00
+;   jsr scheduler_wake_one
+;
+; Notes:
+;   This helper does not disable IRQs by itself.
+;   Callers that need release+wake atomicity must already protect
+;   the surrounding sequence, for example:
+;
+;       php
+;       sei
+;       release resource
+;       jsr scheduler_wake_one
+;       plp
+; ------------------------------------------------------------
+
+.proc scheduler_wake_one
+    sta sched_wake_reason_tmp
+    sty sched_wake_object_tmp
+
+    ; Start scan after current_pid for round-robin fairness.
+    ldx current_pid
+
+    cpx #FIRST_TASK_PID
+    bcc @start_first
+
+    inx
+    cpx #MAX_PROCS
+    bne @set_count
+
+@start_first:
+    ldx #FIRST_TASK_PID
+
+@set_count:
+    lda #(MAX_PROCS - FIRST_TASK_PID)
+    sta sched_ptr
+
+@check:
+    lda proc_state,x
+    cmp #PROC_BLOCKED
+    bne @next
+
+    lda wait_reason,x
+    cmp sched_wake_reason_tmp
+    bne @next
+
+    lda wait_object,x
+    cmp sched_wake_object_tmp
+    bne @next
+
+    jsr proc_wake
+    clc
+    rts
+
+@next:
+    dec sched_ptr
+    beq @none
+
+    inx
+    cpx #MAX_PROCS
+    bne @check
+
+    ldx #FIRST_TASK_PID
+    bra @check
+
+@none:
+    sec
+    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -652,7 +769,6 @@
 
     ; Current interrupted owner.
     ldy current_pid
-
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
