@@ -17,7 +17,7 @@ Current file: bios.asm
 000000r 2               .ifndef __BIOS_INC__
 000000r 2               __BIOS_INC__ = 1
 000000r 2               
-000000r 2               BIOS_IRQ_SOURCE =   $D012
+000000r 2               BIOS_IRQ_SOURCE =   $E00C
 000000r 2               
 000000r 2               BIOS_BASE         = $F000
 000000r 2               
@@ -402,69 +402,70 @@ Current file: bios.asm
 0000AAr 1               ; registers preserved
 0000AAr 1               ;
 0000AAr 1               .proc ACK_IRQ
-0000AAr 1  78           	sei
-0000ABr 1  48           	pha
-0000ACr 1  A9 01        	lda #CMD_ACK_IRQ
-0000AEr 1  20 rr rr     	jsr exec_cmd
-0000B1r 1  68           	pla
-0000B2r 1  58           	cli
-0000B3r 1  60           	rts
-0000B4r 1               .endproc
-0000B4r 1               
-0000B4r 1               ;
-0000B4r 1               ; switch context
-0000B4r 1               ; A = context
-0000B4r 1               ;
-0000B4r 1               .proc SET_MMU_CONTEXT_AND_RTI
-0000B4r 1  AA           	tax						; context
-0000B5r 1  78           	sei
-0000B6r 1               @wait_cmd:
-0000B6r 1  AD 02 D0     	lda CMD_PORT
-0000B9r 1  D0 FB        	bne @wait_cmd
-0000BBr 1  8E 03 D0     	stx PARAM_PORT
-0000BEr 1  A9 02        	lda #CMD_CONTEXT_SWITCH
-0000C0r 1  8D 02 D0     	sta CMD_PORT			; context switch
-0000C3r 1               
-0000C3r 1               @wait_completion:
-0000C3r 1  AD 02 D0     	lda CMD_PORT
-0000C6r 1  D0 FB        	bne @wait_completion
-0000C8r 1               
-0000C8r 1  7A           	ply
-0000C9r 1  FA           	plx
-0000CAr 1  68           	pla
-0000CBr 1  58           	cli
-0000CCr 1  40           	rti
-0000CDr 1               .endproc
+0000AAr 1               ;	php
+0000AAr 1               ;	sei
+0000AAr 1               ;	pha
+0000AAr 1               ;	lda #CMD_ACK_IRQ
+0000AAr 1               ;	jsr exec_cmd
+0000AAr 1               ;	pla
+0000AAr 1               ;	plp
+0000AAr 1  9C 0C E0     	stz BIOS_IRQ_SOURCE
+0000ADr 1  60           	rts
+0000AEr 1               .endproc
+0000AEr 1               
+0000AEr 1               ;
+0000AEr 1               ; switch context
+0000AEr 1               ; A = context
+0000AEr 1               ;
+0000AEr 1               .proc SET_MMU_CONTEXT_AND_RTI
+0000AEr 1  AA           	tax						; context
+0000AFr 1  78           	sei
+0000B0r 1               @wait_cmd:
+0000B0r 1  AD 02 D0     	lda CMD_PORT
+0000B3r 1  D0 FB        	bne @wait_cmd
+0000B5r 1  8E 03 D0     	stx PARAM_PORT
+0000B8r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
+0000BAr 1  8D 02 D0     	sta CMD_PORT			; context switch
+0000BDr 1               
+0000BDr 1               @wait_completion:
+0000BDr 1  AD 02 D0     	lda CMD_PORT
+0000C0r 1  D0 FB        	bne @wait_completion
+0000C2r 1               
+0000C2r 1  7A           	ply
+0000C3r 1  FA           	plx
+0000C4r 1  68           	pla
+0000C5r 1  40           	rti
+0000C6r 1               .endproc
+0000C6r 1               
+0000C6r 1               ; A = context
+0000C6r 1               ; X = target low
+0000C6r 1               ; Y = target high
+0000C6r 1               .proc SET_MMU_CONTEXT_AND_JUMP
+0000C6r 1  78           	sei
+0000C7r 1                   ; save jump target
+0000C7r 1  8E rr rr         stx bios_jmp_vec
+0000CAr 1  8C rr rr         sty bios_jmp_vec+1
 0000CDr 1               
-0000CDr 1               ; A = context
-0000CDr 1               ; X = target low
-0000CDr 1               ; Y = target high
-0000CDr 1               .proc SET_MMU_CONTEXT_AND_JUMP
-0000CDr 1  78           	sei
-0000CEr 1                   ; save jump target
-0000CEr 1  8E rr rr         stx bios_jmp_vec
-0000D1r 1  8C rr rr         sty bios_jmp_vec+1
-0000D4r 1               
-0000D4r 1  AA           	tax				; context
-0000D5r 1               @wait_cmd:
-0000D5r 1  AD 02 D0     	lda CMD_PORT
-0000D8r 1  D0 FB        	bne @wait_cmd
-0000DAr 1  8E 03 D0     	stx PARAM_PORT
-0000DDr 1  A9 02        	lda #CMD_CONTEXT_SWITCH
-0000DFr 1  8D 02 D0     	sta CMD_PORT
-0000E2r 1               @wait_completion:
-0000E2r 1  AD 02 D0     	lda CMD_PORT
-0000E5r 1  D0 FB        	bne @wait_completion
-0000E7r 1               
-0000E7r 1  58           	cli
-0000E8r 1  6C rr rr         jmp (bios_jmp_vec)
-0000EBr 1               .endproc
-0000EBr 1               
-0000EBr 1               ; -----------------------------------------------------------------------------
-0000EBr 1               ; empty
-0000EBr 1               ;
-0000EBr 1               .proc EMPTY
-0000EBr 1  00           	BRK
-0000ECr 1  EA           	NOP
-0000EDr 1               .endproc
-0000EDr 1               
+0000CDr 1  AA           	tax				; context
+0000CEr 1               @wait_cmd:
+0000CEr 1  AD 02 D0     	lda CMD_PORT
+0000D1r 1  D0 FB        	bne @wait_cmd
+0000D3r 1  8E 03 D0     	stx PARAM_PORT
+0000D6r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
+0000D8r 1  8D 02 D0     	sta CMD_PORT
+0000DBr 1               @wait_completion:
+0000DBr 1  AD 02 D0     	lda CMD_PORT
+0000DEr 1  D0 FB        	bne @wait_completion
+0000E0r 1               
+0000E0r 1               ;	cli
+0000E0r 1  6C rr rr         jmp (bios_jmp_vec)
+0000E3r 1               .endproc
+0000E3r 1               
+0000E3r 1               ; -----------------------------------------------------------------------------
+0000E3r 1               ; empty
+0000E3r 1               ;
+0000E3r 1               .proc EMPTY
+0000E3r 1  00           	BRK
+0000E4r 1  EA           	NOP
+0000E5r 1               .endproc
+0000E5r 1               

@@ -4,7 +4,7 @@
 .ifndef __BIOS_INC__
 __BIOS_INC__ = 1
 
-BIOS_IRQ_SOURCE =   $D012
+BIOS_IRQ_SOURCE =   $E00C
 
 BIOS_BASE         = $F000
 

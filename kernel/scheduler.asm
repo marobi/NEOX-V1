@@ -25,14 +25,17 @@
 .include "process.inc"
 .include "mailbox.inc"
 .include "scheduler_defs.inc"
+.include "debug.inc"
 
 .export scheduler_init
+.export scheduler_irq_tick
 .export scheduler_set_current_context
 .export scheduler_wake_one
 .export sched_pick_next
 .export sched_context_switch
 .export sched_yield
 .export sched_resume_rts
+.export sched_resume_idle
 .export first_run_entry
 
 .export proc_set_state
@@ -45,18 +48,6 @@
 .export proc_clear_wait
 .export proc_exit_current
 
-;---------------------------------------------
-
-.import sched_ticks_lo
-.import sched_ticks_hi
-
-.import sched_debug_marker
-.import sched_debug_pid
-.import sched_debug_old_pid
-.import sched_debug_old_state
-.import sched_debug_state_pid
-.import sched_debug_state_old
-.import sched_debug_state_new
 ;---------------------------------------------
 
 .import idle_loop
@@ -94,8 +85,10 @@
 .import proc_exit_code
 
 .import timer_init
-.import scheduler_tick
 .import scheduler_wake_timers
+
+.import system_ticks_lo
+.import system_ticks_hi
 
 .import proc_ticks_lo
 .import proc_ticks_hi
@@ -112,40 +105,73 @@ sched_wake_object_tmp:
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
+; scheduler_tick
+;
+; Purpose:
+;   Increment global 16-bit scheduler tick counter.
+;
+; Called from:
+;   timer IRQ path, once per scheduler tick.
+; ------------------------------------------------------------
+
+.proc scheduler_tick
+    inc system_ticks_lo
+    bne @done
+
+    inc system_ticks_hi
+
+@done:
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; scheduler_irq_tick
+;
+; Purpose:
+;   Account one hardware timer IRQ.
+;
+; Policy:
+;   This must run for every timer IRQ, even when the kernel is
+;   not at a safe preemption point.
+;
+; Notes:
+;   This only accounts time. It does not select or switch tasks.
+; ------------------------------------------------------------
+
+.proc scheduler_irq_tick
+    jsr sched_account_tick
+    jmp scheduler_tick
+.endproc
+
+; ------------------------------------------------------------
 ; proc_set_state
 ;
 ; Input:
 ;   X = PID
-;   A = new process state
-;
-; Output:
-;   A = new process state
-;   X = unchanged
+;   A = new state
 ;
 ; Purpose:
-;   Store a new process state and update scheduler debug fields.
+;   Set proc_state[X] and record both legacy and explicit debug
+;   state-transition fields.
 ;
 ; Important:
-;   Do not use sched_debug_state_new as temporary storage for the
-;   real new state. Those debug bytes are global diagnostics and
-;   may be overwritten by another scheduler path if an IRQ/context
-;   switch occurs between save and store.
-;
-;   The new state is preserved on the current process stack instead.
-;   If an IRQ occurs while the byte is on the stack, that stack state
-;   is saved/restored with the process context.
+;   Do not use debug fields as temporary storage for correctness.
+;   The real new state is preserved on the stack.
 ; ------------------------------------------------------------
 
 .proc proc_set_state
-    pha                         ; preserve real new state safely
+    pha
 
     stx sched_debug_state_pid
+    stx dbg_proc_state_pid
 
     lda proc_state,x
     sta sched_debug_state_old
+    sta dbg_proc_state_old
 
-    pla                         ; restore real new state
+    pla
     sta sched_debug_state_new
+    sta dbg_proc_state_new
     sta proc_state,x
 
     rts
@@ -339,7 +365,7 @@ sched_wake_object_tmp:
     sta wait_object,x
 
     lda #PROC_BLOCKED
-    sta proc_state,x
+    jsr proc_set_state
 
 @done:
     rts
@@ -403,9 +429,6 @@ sched_wake_object_tmp:
 ;   X
 ; ------------------------------------------------------------
 .proc proc_accounting_init
-    stz sched_ticks_lo
-    stz sched_ticks_hi
-
     ldx #MAX_PROCS - 1
 
 @clear_proc:
@@ -432,12 +455,6 @@ sched_wake_object_tmp:
 ;   X
 ; ------------------------------------------------------------
 .proc sched_account_tick
-    inc sched_ticks_lo
-    bne @proc_tick
-
-    inc sched_ticks_hi
-
-@proc_tick:
     ldx current_pid
 
     inc proc_ticks_lo,x
@@ -568,6 +585,9 @@ sched_wake_object_tmp:
 .proc scheduler_init
 	jsr proc_accounting_init
 	
+    stz system_ticks_lo
+    stz system_ticks_hi
+
     stz current_pid
     stz sched_lock
     stz monitor_pending
@@ -585,7 +605,7 @@ sched_wake_object_tmp:
     stz proc_entryH,x
     stz proc_flags,x
 	stz proc_resume_mode,x
-	stz proc_signal_pending
+	stz proc_signal_pending,x
 	
     lda #$FF
 	sta proc_parent_pid,x
@@ -744,37 +764,241 @@ sched_wake_object_tmp:
 .endproc
 
 ; ------------------------------------------------------------
+; sched_dispatch_next
+;
+; Shared scheduler dispatch/resume path.
+;
+; Called by:
+;   sched_context_switch
+;   sched_yield
+;
+; Responsibilities:
+;   - pick next runnable PID
+;   - commit selected PID as RUNNING
+;   - start PROC_NEW tasks
+;   - resume existing tasks through RTI or RTS path
+;   - enter PID 0 idle loop if no normal task is runnable
+;
+; Notes:
+;   This routine never returns.
+; ------------------------------------------------------------
+
+.proc sched_dispatch_next
+    jsr sched_pick_next
+
+    ; DEBUG-BEGIN: scheduler selected PID snapshot
+    lda #DBG_MARK_PICK
+    sta sched_debug_marker
+
+    txa
+    sta sched_debug_pid
+
+    stx dbg_sched_selected_pid
+
+    lda current_pid
+    sta dbg_sched_current_pid
+    ; DEBUG-END: scheduler selected PID snapshot
+
+    ; PID 0 is entered directly, not through proc_sp[0].
+    cpx #IDLE_PID
+    bne @not_idle
+    jmp @resume_idle
+
+@not_idle:
+    lda proc_state,x
+    cmp #PROC_NEW
+    bne @resume_existing
+    jmp @start_new
+
+@resume_existing:
+    ; Commit selected PID as RUNNING.
+    ;
+    ; proc_set_running returns with:
+    ;   X = current_pid
+    jsr proc_set_running
+
+    ; DEBUG-BEGIN: scheduler committed selected PID
+    lda #DBG_MARK_SELECTED
+    sta sched_debug_marker
+
+    stx sched_debug_state_pid
+    stx dbg_sched_loaded_pid
+
+    lda current_pid
+    sta sched_debug_state_new
+    ; DEBUG-END: scheduler committed selected PID
+
+    ; DEBUG-BEGIN: scheduler load snapshot
+    lda proc_sp,x
+    sta sched_debug_state_new
+    sta dbg_sched_loaded_sp
+
+    lda proc_resume_mode,x
+    sta dbg_sched_resume_mode
+    ; DEBUG-END: scheduler load snapshot
+
+    ; Load selected process stack.
+    lda proc_sp,x
+    tax
+    txs
+
+    ; DEBUG-BEGIN: scheduler stack loaded
+    lda #DBG_MARK_STACK_LOAD
+    sta sched_debug_marker
+    ; DEBUG-END: scheduler stack loaded
+
+    ; X currently contains SP, not PID.
+    ldx current_pid
+
+    lda proc_resume_mode,x
+    cmp #PROC_RESUME_RTS
+    beq @resume_rts
+
+@resume_rti:
+    ; DEBUG-BEGIN: force IRQ enabled in RTI resume frame
+    tsx
+    lda $0104,x
+    and #$fb
+    sta $0104,x
+    ; DEBUG-END: force IRQ enabled in RTI resume frame
+
+    ldx current_pid
+
+    ; DEBUG-BEGIN: scheduler RTI resume snapshot
+    lda #DBG_MARK_RESUME_RTI
+    sta sched_debug_marker
+
+    stx dbg_sched_resume_pid
+
+    lda #DBG_MODE_IRQ_RTI
+    sta dbg_sched_resume_mode
+
+    lda proc_context,x
+    sta dbg_sched_resume_context
+    ; DEBUG-END: scheduler RTI resume snapshot
+
+    ; Scheduler handoff is complete. RTI restores task P.
+    jsr sched_lock_leave
+
+    lda proc_context,x
+    jmp BIOS_CONTEXT_RTI
+
+@resume_rts:
+    ; DEBUG-BEGIN: scheduler RTS resume snapshot
+    lda #DBG_MARK_RESUME_RTS
+    sta sched_debug_marker
+
+    stx dbg_sched_resume_pid
+
+    lda #DBG_MODE_YIELD_RTS
+    sta dbg_sched_resume_mode
+
+    lda proc_context,x
+    sta dbg_sched_resume_context
+    ; DEBUG-END: scheduler RTS resume snapshot
+
+    lda proc_context,x
+    ldx #.lobyte(sched_resume_rts)
+    ldy #.hibyte(sched_resume_rts)
+    jmp BIOS_CONTEXT_JUMP
+
+@start_new:
+    jsr proc_set_running
+
+    ; DEBUG-BEGIN: scheduler first-run snapshot
+    lda #DBG_MARK_RESUME_RTS
+    sta sched_debug_marker
+
+    stx dbg_sched_resume_pid
+
+    lda #DBG_MODE_YIELD_RTS
+    sta dbg_sched_resume_mode
+
+    lda proc_context,x
+    sta dbg_sched_resume_context
+    ; DEBUG-END: scheduler first-run snapshot
+
+    lda proc_context,x
+    ldx #.lobyte(first_run_entry)
+    ldy #.hibyte(first_run_entry)
+    jmp BIOS_CONTEXT_JUMP
+
+@resume_idle:
+    ldx #IDLE_PID
+    jsr proc_set_running
+
+    ; DEBUG-BEGIN: scheduler idle resume snapshot
+    lda #DBG_MARK_RESUME_RTS
+    sta sched_debug_marker
+
+    lda #DBG_PID_NONE
+    sta dbg_sched_loaded_pid
+    stz dbg_sched_loaded_sp
+    stz dbg_sched_resume_mode
+
+    lda #IDLE_PID
+    sta dbg_sched_resume_pid
+    sta dbg_sched_resume_context
+
+    lda #DBG_MODE_YIELD_RTS
+    sta dbg_sched_resume_mode
+    ; DEBUG-END: scheduler idle resume snapshot
+
+	lda #IDLE_PID
+	ldx #.lobyte(sched_resume_idle)
+	ldy #.hibyte(sched_resume_idle)
+	jmp BIOS_CONTEXT_JUMP
+.endproc
+
+
+; ------------------------------------------------------------
 ; sched_context_switch
 ;
 ; IRQ/timer scheduler entry.
 ;
 ; Called from IRQ context. The current task stack is saved as
-; RTI-style state because the interrupted frame contains the
-; CPU IRQ return frame.
+; RTI-style state because the interrupted stack contains an IRQ
+; return frame.
 ;
-; Stack model:
-;   irq_entry has pushed A/X/Y before entering the scheduler.
-;   The saved SP therefore points at the scheduler/IRQ save
-;   frame for the interrupted task.
+; Responsibilities:
+;   - save current normal task state, if current_pid != 0
+;   - account timer tick
+;   - wake timer/console waiters
+;   - jump to shared dispatch/resume path
+;
+; Notes:
+;   This routine never returns directly.
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
-    lda #$01
+    ; IRQ handler only enters here when sched_lock and subsystem
+    ; locks were zero. From this point until final task handoff,
+    ; block nested preemptive scheduling.
+    jsr sched_lock_enter
+
+    ; DEBUG-BEGIN: scheduler IRQ entry
+    lda #DBG_MARK_IRQ_ENTRY
     sta sched_debug_marker
+
+    lda #DBG_PATH_IRQ
+    sta dbg_sched_path
 
     lda current_pid
     sta sched_debug_pid
-
-    jsr sched_account_tick
+    sta dbg_sched_current_pid
+    ; DEBUG-END: scheduler IRQ entry
 
     ; Current interrupted owner.
     ldy current_pid
+
+    ; DEBUG-BEGIN: scheduler IRQ current owner state
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+    ; DEBUG-END: scheduler IRQ current owner state
 
     ; --------------------------------------------------------
-    ; PID 0 is not a normal task.
+    ; PID 0 is not a normal saved task.
     ;
     ; Do not save proc_sp[0].
     ; Do not set proc_resume_mode[0].
@@ -787,17 +1011,16 @@ sched_wake_object_tmp:
     ; Save interrupted SP for normal task.
     tsx
 
-    ; DEBUG-BEGIN: sched_context_switch save interrupted owner SP
-    ;
-    ; sched_debug_old_pid   = PID whose IRQ stack is being saved
-    ; sched_debug_state_old = SP observed at IRQ scheduler entry
-    ;
-    ; If a task stack leaks under timer preemption, this value
-    ; will move downward before the scheduler stores it in
-    ; proc_sp[].
-    ; DEBUG-END: sched_context_switch save interrupted owner SP
+    ; DEBUG-BEGIN: scheduler IRQ save snapshot
     sty sched_debug_old_pid
     stx sched_debug_state_old
+
+    sty dbg_sched_saved_pid
+    stx dbg_sched_saved_sp
+
+    lda #DBG_MODE_IRQ_RTI
+    sta dbg_sched_saved_mode
+    ; DEBUG-END: scheduler IRQ save snapshot
 
     txa
     sta proc_sp,y
@@ -811,101 +1034,30 @@ sched_wake_object_tmp:
     cmp #PROC_RUNNING
     bne @wake_events
 
-    lda #$02
+    ; DEBUG-BEGIN: scheduler IRQ running-to-ready
+    lda #DBG_MARK_IRQ_SAVE
     sta sched_debug_marker
 
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+    ; DEBUG-END: scheduler IRQ running-to-ready
 
     tya
     tax
     jsr proc_set_ready
 
+    ; DEBUG-BEGIN: scheduler IRQ state after ready
     lda proc_state,x
     sta sched_debug_old_state
+    ; DEBUG-END: scheduler IRQ state after ready
 
 @wake_events:
-    jsr scheduler_tick
     jsr sched_update_console_focus
     jsr scheduler_wake_console_input
     jsr scheduler_wake_timers
 
-@pick:
-    jsr sched_pick_next
-
-    lda #$03
-    sta sched_debug_marker
-
-    txa
-    sta sched_debug_pid
-
-    ; PID 0 is entered directly, not through proc_sp[0].
-    cpx #IDLE_PID
-    beq @resume_idle
-
-    lda proc_state,x
-    cmp #PROC_NEW
-    beq @start_new
-
-    ; Resume existing normal process.
-    ;
-    ; proc_set_running commits:
-    ;   old current_pid -> READY, if applicable
-    ;   selected X      -> RUNNING
-    ;   current_pid     -> X
-    ;
-    ; It returns with X = current_pid.
-    jsr proc_set_running
-
-    ; DEBUG-BEGIN: sched_context_switch resume target SP
-    ;
-    ; sched_debug_state_pid = PID selected for resume
-    ; sched_debug_state_new = saved SP loaded from proc_sp[PID]
-    ;
-    ; If this shows a low SP, the IRQ scheduler is restoring a
-    ; stack value that was already saved low earlier.
-    ; DEBUG-END: sched_context_switch resume target SP
-    stx sched_debug_state_pid
-    lda proc_sp,x
-    sta sched_debug_state_new
-
-    lda proc_sp,x
-    tax
-    txs
-
-    ; Select RTI or RTS resume based on saved stack type.
-    ldx current_pid
-    lda proc_resume_mode,x
-    cmp #PROC_RESUME_RTS
-    beq @resume_rts
-
-@resume_rti:
-    lda proc_context,x
-    jmp BIOS_CONTEXT_RTI
-
-@resume_rts:
-    lda proc_context,x
-    ldx #<sched_resume_rts
-    ldy #>sched_resume_rts
-    jmp BIOS_CONTEXT_JUMP
-
-@start_new:
-    jsr proc_set_running
-
-    lda proc_context,x
-    ldx #<first_run_entry
-    ldy #>first_run_entry
-    jmp BIOS_CONTEXT_JUMP
-
-@resume_idle:
-    ldx #IDLE_PID
-    jsr proc_set_running
-
-    lda #IDLE_PID
-    ldx #<idle_loop
-    ldy #>idle_loop
-    jmp BIOS_CONTEXT_JUMP
+    jmp sched_dispatch_next
 .endproc
 
 ; ------------------------------------------------------------
@@ -913,71 +1065,75 @@ sched_wake_object_tmp:
 ;
 ; Cooperative scheduler entry.
 ;
-; Called from syscall/user context. The current task stack is
-; saved as RTS-style state, not IRQ/RTI-style state.
+; IRQ policy:
+;   IRQs are disabled only while the current task stack/state is
+;   captured and during the final handoff into sched_dispatch_next.
 ;
-; Monitor note:
-;   irq_entry only sets monitor_pending. Actual monitor entry
-;   happens here, outside IRQ context, after supervisor checks
-;   subsystem locks.
+;   sched_lock is the longer preemption gate. While sched_lock != 0,
+;   timer IRQs may still enter and account ticks through
+;   scheduler_irq_tick, but irq.asm must not enter
+;   sched_context_switch.
+;
+; Stack model:
+;   Current task is saved as RTS-style state.
+;
+; Notes:
+;   This routine never returns directly.
 ; ------------------------------------------------------------
 
 .proc sched_yield
-    ; Cooperative scheduler entry must be non-preemptible from
-    ; the first instruction. A timer IRQ racing with sys_yield
-    ; must not enter sched_context_switch while sched_yield is
-    ; setting up its own scheduler path.
+    ; --------------------------------------------------------
+    ; Short atomic entry section.
+    ;
+    ; Protect current_pid/proc_sp/proc_resume_mode/proc_state
+    ; capture from timer preemption.
+    ; --------------------------------------------------------
     sei
+    jsr sched_lock_enter
 
-    ; Cooperative monitor safe point.
-    jsr supervisor_try_enter_pending
-	
-;debug
-    lda #$04
+    ; DEBUG-BEGIN: scheduler yield entry
+    lda #DBG_MARK_YIELD
     sta sched_debug_marker
+
+    lda #DBG_PATH_YIELD
+    sta dbg_sched_path
 
     lda current_pid
     sta sched_debug_pid
-;end debug
+    sta dbg_sched_current_pid
+    ; DEBUG-END: scheduler yield entry
 
     ; Current yielding owner.
     ldy current_pid
 
-;debug
+    ; DEBUG-BEGIN: scheduler yield current owner state
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
-;end debug
+    ; DEBUG-END: scheduler yield current owner state
 
-    ; --------------------------------------------------------
-    ; PID 0 is not a normal task.
-    ;
-    ; Do not save proc_sp[0].
-    ; Do not set proc_resume_mode[0] to RTS.
-    ; Do not convert PID 0 to READY.
-    ; --------------------------------------------------------
-
+    ; PID 0 is not a normal saved task.
     cpy #IDLE_PID
-    beq @wake
+    beq @entry_done
 
     ; Save current syscall/user stack pointer.
     tsx
 
-    ; DEBUG-BEGIN: sched_yield save current owner SP
-    ;
-    ; sched_debug_old_pid   = PID whose stack is being saved
-    ; sched_debug_state_old = SP observed at yield entry
-    ;
-    ; If a task stack leaks, this value will move downward over
-    ; repeated yields before the scheduler stores it in proc_sp[].
+    ; DEBUG-BEGIN: scheduler yield save snapshot
     sty sched_debug_old_pid
     stx sched_debug_state_old
-    ; DEBUG-END: sched_yield save current owner SP
+
+    sty dbg_sched_saved_pid
+    stx dbg_sched_saved_sp
+
+    lda #DBG_MODE_YIELD_RTS
+    sta dbg_sched_saved_mode
+    ; DEBUG-END: scheduler yield save snapshot
 
     txa
     sta proc_sp,y
 
-    ; This stack was saved from syscall/user context.
+    ; This stack was saved from syscall/yield context.
     lda #PROC_RESUME_RTS
     sta proc_resume_mode,y
 
@@ -986,115 +1142,56 @@ sched_wake_object_tmp:
     ; so they are left blocked.
     lda proc_state,y
     cmp #PROC_RUNNING
-    bne @wake
+    bne @entry_done
 
-    lda #$05
+    ; DEBUG-BEGIN: scheduler yield running-to-ready
+    lda #DBG_MARK_YIELD
     sta sched_debug_marker
 
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+    ; DEBUG-END: scheduler yield running-to-ready
 
     tya
     tax
     jsr proc_set_ready
 
+    ; DEBUG-BEGIN: scheduler yield state after ready
     lda proc_state,x
     sta sched_debug_old_state
+    ; DEBUG-END: scheduler yield state after ready
 
-@wake:
+@entry_done:
+    ; --------------------------------------------------------
+    ; Long scheduler work with IRQs enabled.
+    ;
+    ; Timer IRQs are accepted here and counted by
+    ; scheduler_irq_tick. Because sched_lock != 0, irq.asm must
+    ; return from IRQ without entering sched_context_switch.
+    ; --------------------------------------------------------
+    cli
+
+    ; Cooperative monitor safe point.
+    jsr supervisor_try_enter_pending
+
     jsr sched_update_console_focus
     jsr scheduler_wake_console_input
     jsr scheduler_wake_timers
 
-    jsr sched_pick_next
-    ; DEBUG-BEGIN: sched_yield selected PID
+    ; --------------------------------------------------------
+    ; Short atomic dispatch section.
     ;
-    ; Captures the PID selected after wake processing.
-    ; Useful when PID 3 is woken by console input.
-    stx sched_debug_state_pid
-    lda proc_state,x
-    sta sched_debug_state_new
-    ; DEBUG-END: sched_yield selected PID
-; debug
-    lda #$06
-    sta sched_debug_marker
-
-    txa
-    sta sched_debug_pid
-; end debug
-
-    ; PID 0 is entered directly, not through proc_sp[0].
-    cpx #IDLE_PID
-    beq @resume_idle
-
-    lda proc_state,x
-    cmp #PROC_NEW
-    beq @start_new
-
-    ; Resume existing normal process.
+    ; sched_dispatch_next never returns. The selected final
+    ; resume/start path must call sched_lock_leave exactly once:
     ;
-    ; proc_set_running commits:
-    ;   old current_pid -> READY, if applicable
-    ;   selected X      -> RUNNING
-    ;   current_pid     -> X
-    ;
-    ; It returns with X = current_pid.
-    jsr proc_set_running
-
-    ; DEBUG-BEGIN: sched_yield committed software PID
-    lda #$61
-    sta sched_debug_marker
-
-    stx sched_debug_state_pid
-    lda current_pid
-    sta sched_debug_state_new
-    ; DEBUG-END: sched_yield committed software PID
-
-    stx sched_debug_state_pid
-    lda proc_sp,x
-    sta sched_debug_state_new
-
-    lda proc_sp,x
-    tax
-    txs
-
-    ; DEBUG-BEGIN: sched_yield loaded target stack
-    lda #$62
-    sta sched_debug_marker
-    ; DEBUG-END: sched_yield loaded target stack
-
-    ldx current_pid
-    lda proc_resume_mode,x
-    cmp #PROC_RESUME_RTS
-    beq @resume_rts
-	
-@resume_rti:
-    lda proc_context,x
-    jmp BIOS_CONTEXT_RTI
-
-@resume_rts:
-    lda proc_context,x
-    ldx #<sched_resume_rts
-    ldy #>sched_resume_rts
-    jmp BIOS_CONTEXT_JUMP
-
-@start_new:
-    jsr proc_set_running
-
-    lda proc_context,x
-    ldx #<first_run_entry
-    ldy #>first_run_entry
-    jmp BIOS_CONTEXT_JUMP
-
-@resume_idle:
-    ldx #IDLE_PID
-    jsr proc_set_running
-
-    lda #IDLE_PID
-    ldx #<idle_loop
-    ldy #>idle_loop
-    jmp BIOS_CONTEXT_JUMP
+    ;   @resume_rti
+    ;   sched_resume_rts
+    ;   first_run_entry
+    ;   sched_resume_idle
+    ; --------------------------------------------------------
+    sei
+    jmp sched_dispatch_next
 .endproc
 
 ; ------------------------------------------------------------
@@ -1128,7 +1225,10 @@ sched_wake_object_tmp:
 
     ; First-run path does not restore P via RTI.
     cld
-	cli
+
+    ; Scheduler handoff is complete in target context.
+    jsr sched_lock_leave
+    cli
 
     jmp (sched_ptr)
 .endproc
@@ -1150,6 +1250,18 @@ sched_wake_object_tmp:
 ; ------------------------------------------------------------
 
 .proc sched_resume_rts
+    ; Scheduler handoff is complete in target context.
+    jsr sched_lock_leave
     cli
     rts
+.endproc
+
+;
+;
+;
+.proc sched_resume_idle
+    ; Scheduler handoff is complete in idle context.
+    jsr sched_lock_leave
+    cli
+    jmp idle_loop
 .endproc

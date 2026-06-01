@@ -7,8 +7,8 @@
 
 .export ksys_ticks
 
-.import sched_ticks_lo
-.import sched_ticks_hi
+.import system_ticks_lo
+.import system_ticks_hi
 
 .segment "KERN_TEXT"
 
@@ -27,9 +27,9 @@
 
 .proc ksys_ticks
 @retry:
-    ldx sched_ticks_hi
-    lda sched_ticks_lo
-    cpx sched_ticks_hi
+    ldx system_ticks_hi
+    lda system_ticks_lo
+    cpx system_ticks_hi
     bne @retry
 
     clc

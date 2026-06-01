@@ -180,12 +180,7 @@ bios_jmp_vec:
 ; registers preserved
 ;
 .proc ACK_IRQ
-	sei
-	pha
-	lda #CMD_ACK_IRQ
-	jsr exec_cmd
-	pla
-	cli
+	stz BIOS_IRQ_SOURCE
 	rts
 .endproc
 
@@ -210,7 +205,6 @@ bios_jmp_vec:
 	ply
 	plx
 	pla
-	cli
 	rti
 .endproc
 
@@ -234,7 +228,7 @@ bios_jmp_vec:
 	lda CMD_PORT
 	bne @wait_completion
 
-	cli
+;	cli
     jmp (bios_jmp_vec)
 .endproc
 	

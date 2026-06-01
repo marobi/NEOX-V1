@@ -26,7 +26,6 @@
 .include "timer.inc"
 
 .export timer_init
-.export scheduler_tick
 .export timer_alloc
 .export timer_free
 .export timer_start_current
@@ -36,8 +35,6 @@
 .import proc_state
 .import wait_reason
 
-.import system_ticks_lo
-.import system_ticks_hi
 
 .import timer_pid
 .import timer_until_lo
@@ -46,6 +43,8 @@
 .import proc_set_wait
 .import proc_wake
 
+.import system_ticks_lo
+.import system_ticks_hi
 .import proc_ticks_lo
 .import proc_ticks_hi
 .import idle_ticks_lo
@@ -64,9 +63,6 @@
 ; ------------------------------------------------------------
 
 .proc timer_init
-    stz system_ticks_lo
-    stz system_ticks_hi
-
     ldx #0
 
 @clear:
@@ -80,26 +76,6 @@
     cpx #MAX_TIMER
     bne @clear
 
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; scheduler_tick
-;
-; Purpose:
-;   Increment global 16-bit scheduler tick counter.
-;
-; Called from:
-;   timer IRQ path, once per scheduler tick.
-; ------------------------------------------------------------
-
-.proc scheduler_tick
-    inc system_ticks_lo
-    bne @done
-
-    inc system_ticks_hi
-
-@done:
     rts
 .endproc
 
@@ -178,20 +154,26 @@
 ;
 ;       system_ticks + A
 ;
-; Notes:
-;   - A = 0 is treated as success/no block by the caller.
-;   - wait_object stores the timer slot.
-;   - Uses 16-bit absolute wake time.
+; Race rule:
+;   The timer slot and process wait state must be installed as
+;   one atomic operation with IRQs disabled.
+;
+;   Otherwise scheduler_wake_timers can observe timer_pid[] before
+;   the process is PROC_BLOCKED, free the timer, and the process
+;   can then block forever on a dead timer slot.
 ; ------------------------------------------------------------
 
 .proc timer_start_current
-    ; Preserve requested duration.
+    ; Preserve requested duration and caller IRQ state.
     pha
+    php
+    sei
 
     jsr timer_alloc
     bcc @slot_ok
 
     ; No slot available.
+    plp
     pla
     sec
     rts
@@ -216,12 +198,15 @@
     adc #0
     sta timer_until_hi,x
 
-    ; Block current process on WAIT_TIMER.
+    ; Block current process on WAIT_TIMER while IRQs are still
+    ; disabled. This prevents a timer IRQ from freeing the slot
+    ; before the process is visibly blocked.
     ldx current_pid
     lda #WAIT_TIMER
     ; Y already contains timer slot.
     jsr proc_set_wait
 
+    plp
     clc
     rts
 .endproc

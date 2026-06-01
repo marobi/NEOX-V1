@@ -1,7 +1,7 @@
-al 00F0E2 .@wait_completion
-al 00F0D5 .@wait_cmd
-al 00F0C3 .@wait_completion
-al 00F0B6 .@wait_cmd
+al 00F0DB .@wait_completion
+al 00F0CE .@wait_cmd
+al 00F0BD .@wait_completion
+al 00F0B0 .@wait_cmd
 al 00F09D .@wait_cmd
 al 00F09C .exec_cmd
 al 00F09A .@gl_error
@@ -16,11 +16,11 @@ al 00F038 .readc_blk
 al 00F032 .read_blk
 al 00F031 .icharbuf
 al 00F030 .ocharbuf
-al 00F0CD .SET_MMU_CONTEXT_AND_JUMP
+al 00F0C6 .SET_MMU_CONTEXT_AND_JUMP
 al 00F0AA .ACK_IRQ
 al 00F083 ._GETLINE
-al 00F0B4 .SET_MMU_CONTEXT_AND_RTI
-al 00F0EB .EMPTY
+al 00F0AE .SET_MMU_CONTEXT_AND_RTI
+al 00F0E3 .EMPTY
 al 00F068 ._PUTCHAR
 al 00F046 ._GETCHAR
 al 00F000 .BIOS

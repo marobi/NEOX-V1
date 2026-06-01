@@ -77,6 +77,25 @@
 .segment "KERN_BSS"
 
 ; ------------------------------------------------------------
+; fd_mul_lo / fd_mul_hi
+;
+; FD-local cached result of:
+;
+;   PID * MAX_FDS
+;
+; The public mul8u ABI returns:
+;   A = product low
+;   X = product high
+;
+; ------------------------------------------------------------
+
+fd_mul_lo:
+    .res 1
+
+fd_mul_hi:
+    .res 1
+
+; ------------------------------------------------------------
 ; FD-private scratch
 ;
 ; These variables are private to fd.asm.
@@ -112,6 +131,32 @@ fd_closeproc_fd:
     .res 1              ; fd iterator used by fd_close_process
 
 .segment "KERN_TEXT"
+
+; ------------------------------------------------------------
+; fd_calc_pid_offset
+;
+; Input:
+;   A = PID
+;
+; Output:
+;   fd_mul_lo = low byte of PID * MAX_FDS
+;   fd_mul_hi = high byte of PID * MAX_FDS
+;
+; Clobbers:
+;   A, X, Y
+;
+; Notes:
+; ------------------------------------------------------------
+
+.proc fd_calc_pid_offset
+    ldx #MAX_FDS
+    jsr mul8u
+
+    sta fd_mul_lo
+    stx fd_mul_hi
+
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; fd_alloc_open
@@ -234,10 +279,17 @@ fd_closeproc_fd:
 ;
 ; Output:
 ;   C clear = fd slot is free
-;   C set   = failure, Y = errno
+;             X = PID
+;             Y = fd
+;
+;   C set   = failure
+;             Y = errno
 ;
 ; Requirements:
 ;   Caller holds fd_lock.
+;
+; mul8u rule:
+;   Uses fd_calc_pid_offset.
 ; ------------------------------------------------------------
 
 .proc fd_check_free_pid_fd
@@ -262,21 +314,16 @@ fd_closeproc_fd:
 
     ; offset = PID * MAX_FDS
     txa
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    jsr fd_calc_pid_offset
 
     ; fd_ptr = proc_fd_obj + offset
     clc
     lda #<proc_fd_obj
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_obj
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
@@ -378,44 +425,19 @@ fd_closeproc_fd:
     jmp fd_attach
 .endproc
 
-; ------------------------------------------------------------
-; fd_check_perm
-;
-; Purpose:
-;   Check access permission for the current process fd.
-;
-; Input:
-;   fd_index_tmp = fd index
-;   A            = required flag mask
-;                  FD_FLAG_READ or FD_FLAG_WRITE
-;
-; Output:
-;   C clear = allowed
-;   C set   = denied
-;             Y = EBADF
-;
-; Clobbers:
-;   A, X, Y, fd_ptr, factor1, factor2, fd_flags_tmp
-; ------------------------------------------------------------
-
 .proc fd_check_perm
     sta fd_flags_tmp
 
     lda current_pid
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    jsr fd_calc_pid_offset
 
     clc
     lda #<proc_fd_flags
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_flags
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
@@ -464,20 +486,15 @@ fd_closeproc_fd:
     sta fd_index_tmp
 
     lda current_pid
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    jsr fd_calc_pid_offset
 
     clc
     lda #<proc_fd_obj
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_obj
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
@@ -497,11 +514,11 @@ fd_closeproc_fd:
 
     clc
     lda #<proc_fd_flags
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_flags
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
@@ -664,7 +681,7 @@ fd_closeproc_fd:
 ;   C clear = success
 ;
 ; Clobbers:
-;   A, X, Y, fd_ptr, factor1, factor2
+;   A, X, Y, fd_ptr
 ;   fd_pid_tmp, fd_index_tmp, fd_obj_tmp
 ;
 ; Requirements:
@@ -682,56 +699,39 @@ fd_closeproc_fd:
     sty fd_index_tmp
     sta fd_obj_tmp
 
-    ; --------------------------------------------------------
     ; offset = pid * MAX_FDS
-    ; --------------------------------------------------------
+    lda fd_pid_tmp
+    jsr fd_calc_pid_offset
 
-    txa
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
-
-    ; --------------------------------------------------------
     ; proc_fd_obj[pid][fd] = object
-    ; --------------------------------------------------------
-
     clc
     lda #<proc_fd_obj
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_obj
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
     lda fd_obj_tmp
     sta (fd_ptr),y
 
-    ; --------------------------------------------------------
     ; proc_fd_flags[pid][fd] = fd_flags_tmp
-    ; --------------------------------------------------------
-
     clc
     lda #<proc_fd_flags
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_flags
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
     lda fd_flags_tmp
     sta (fd_ptr),y
 
-    ; --------------------------------------------------------
     ; open_refcnt[object]++
-    ; --------------------------------------------------------
-
     ldx fd_obj_tmp
     inc open_refcnt,x
 
@@ -758,7 +758,7 @@ fd_closeproc_fd:
 ;   Y = errno
 ;
 ; Clobbers:
-;   A, X, Y, fd_ptr, fd_index_tmp, factor1, factor2
+;   A, X, Y, fd_ptr, fd_index_tmp
 ; ------------------------------------------------------------
 
 .proc fd_lookup
@@ -773,20 +773,15 @@ fd_closeproc_fd:
     sta fd_index_tmp
 
     lda current_pid
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    jsr fd_calc_pid_offset
 
     clc
     lda #<proc_fd_obj
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_obj
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
@@ -857,22 +852,17 @@ fd_closeproc_fd:
     sta fd_index_tmp
 
     ; offset = PID * MAX_FDS
-    txa
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    lda fd_pid_tmp
+    jsr fd_calc_pid_offset
 
     ; fd_ptr = proc_fd_obj + offset
     clc
     lda #<proc_fd_obj
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_obj
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ; Get object.
@@ -897,11 +887,11 @@ fd_closeproc_fd:
     ; Clear proc_fd_flags[PID][fd].
     clc
     lda #<proc_fd_flags
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_flags
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
@@ -1025,10 +1015,20 @@ fd_closeproc_fd:
 ; Input:
 ;   X = PID
 ;
+; Output:
+;   C clear = success
+;   C set   = failure
+;             Y = errno
+;
 ; Notes:
 ;   May run while scheduler is active.
 ;   Target PID must not be runnable yet.
+;
+; Locking:
 ;   Owns fd_lock while clearing/attaching descriptors.
+;
+; mul8u rule:
+;   Uses fd_calc_pid_offset.
 ; ------------------------------------------------------------
 
 .proc fd_init_process
@@ -1042,26 +1042,21 @@ fd_closeproc_fd:
 @pid_ok:
     LOCK_ACQUIRE fd_lock
 
-    ; Save PID because fd_attach uses scratch internally.
+    ; Save PID because fd_attach uses FD-local scratch internally.
     stx fd_pid_tmp
 
     ; offset = PID * MAX_FDS
-    txa
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    lda fd_pid_tmp
+    jsr fd_calc_pid_offset
 
     ; Clear proc_fd_obj[pid][*].
     clc
     lda #<proc_fd_obj
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_obj
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy #0
@@ -1076,11 +1071,11 @@ fd_closeproc_fd:
     ; Clear proc_fd_flags[pid][*].
     clc
     lda #<proc_fd_flags
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_flags
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy #0
@@ -1093,6 +1088,9 @@ fd_closeproc_fd:
     bne @clear_flags
 
     ; Attach standard descriptors.
+    ;
+    ; fd_attach requires fd_lock to be held.
+    ; It recalculates its own PID/fd table offset internally.
 
     ldx fd_pid_tmp
     lda #FD_FLAG_READ
@@ -1554,10 +1552,10 @@ fd_closeproc_fd:
 
     LOCK_ACQUIRE fd_lock
 
-	; DEBUG-BEGIN: fd_read acquired fd_lock
+	; DEBUG-BEGIN: fd_write acquired fd_lock
 	lda current_pid
 	sta fd_lock_owner
-	; DEBUG-END: fd_read acquired fd_lock
+	; DEBUG-END: fd_write acquired fd_lock
 
     ; Resolve fd -> open object.
     tya
@@ -1565,10 +1563,10 @@ fd_closeproc_fd:
     bcc @fd_ok
 
     LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
+	; DEBUG-BEGIN: fd_write releasing fd_lock
 	lda #$ff
 	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
+	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1586,10 +1584,10 @@ fd_closeproc_fd:
     plx                         ; discard open object
 
     LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
+	; DEBUG-BEGIN: fd_write releasing fd_lock
 	lda #$ff
 	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
+	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1607,10 +1605,10 @@ fd_closeproc_fd:
     beq @device_ok
 
     LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
+	; DEBUG-BEGIN: fd_write releasing fd_lock
 	lda #$ff
 	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
+	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1624,10 +1622,10 @@ fd_closeproc_fd:
     pha
 
     LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
+	; DEBUG-BEGIN: fd_write releasing fd_lock
 	lda #$ff
 	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
+	; DEBUG-END: fd_write releasing fd_lock
 
     ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
     lda io_ptr
@@ -1650,10 +1648,10 @@ fd_closeproc_fd:
     bcc @op_ok
 
     LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
+	; DEBUG-BEGIN: fd_write releasing fd_lock
 	lda #$ff
 	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
+	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1677,25 +1675,20 @@ fd_closeproc_fd:
 ;   A = fd flags
 ;
 ; Clobbers:
-;   A, Y, fd_ptr, factor1, factor2
+;   A, Y, fd_ptr
 ; ------------------------------------------------------------
 
 .proc fd_get_flags_current
     lda current_pid
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    jsr fd_calc_pid_offset
 
     clc
     lda #<proc_fd_flags
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_flags
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy fd_index_tmp
@@ -1718,25 +1711,20 @@ fd_closeproc_fd:
 ;             Y = EMFILE
 ;
 ; Clobbers:
-;   A, Y, fd_ptr, factor1, factor2
+;   A, Y, fd_ptr
 ; ------------------------------------------------------------
 
 .proc fd_find_free_current
     lda current_pid
-    sta factor1
-
-    lda #MAX_FDS
-    sta factor2
-
-    jsr mul8u
+    jsr fd_calc_pid_offset
 
     clc
     lda #<proc_fd_obj
-    adc factor1
+    adc fd_mul_lo
     sta fd_ptr
 
     lda #>proc_fd_obj
-    adc factor2
+    adc fd_mul_hi
     sta fd_ptr+1
 
     ldy #0

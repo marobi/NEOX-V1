@@ -46,14 +46,19 @@
 
 .export irq_entry
 .export nmi_entry
-.export irq_get_source
 
 .import brk_vector
 
+.import scheduler_irq_tick
 .import sched_context_switch
 .import sched_lock
 .import monitor_pending
 .import console_owner_pid
+
+.import ksys_io_lock
+.import fd_lock
+.import pipe_lock
+.import rp_lock
 
 .segment "KERN_TEXT"
 
@@ -89,38 +94,49 @@
     phx
     phy
 
-    jsr irq_get_source
+    lda RP_IRQ_SOURCE
+;	jsr BIOS_ACQ_IRQ			; ack IRQ
+	stz RP_IRQ_SOURCE
+	
+	cmp #RP_IRQ_SRC_NONE		; non IRQ
+	beq irq_restore
 
-    cmp #RP_IRQ_SRC_TIMER
+    cmp #RP_IRQ_SRC_TIMER		; TIMER IRQ
     beq @timer
 
-    cmp #RP_IRQ_SRC_MONITOR
+    cmp #RP_IRQ_SRC_MONITOR		; MONITOR IRQ
     beq @monitor
 
     tsx
     lda $0104,x
     and #$10
-    bne brk_entry
+    bne brk_entry				; BREAK
 
     ; unknown → just return
-    jsr BIOS_ACK_IRQ         ; clear source
     bra irq_restore
 
-@monitor:
-    jsr BIOS_ACK_IRQ         ; clear source
+@monitor:	
     lda #1
 	sta monitor_pending
 	bra irq_restore
 
 @timer:
-    jsr BIOS_ACK_IRQ        ; clear source
+    ; Count every hardware timer IRQ, even when this is not a
+    ; safe preemption point.
+    jsr scheduler_irq_tick
 
+    ; Only context-switch when no scheduler/subsystem lock is held.
     lda sched_lock
+    ora ksys_io_lock
+    ora fd_lock
+    ora pipe_lock
+    ora rp_lock
     bne irq_restore
 
     jmp sched_context_switch
 .endproc
 
+;
 	.export irq_restore
 irq_restore:
     ply
@@ -129,6 +145,7 @@ irq_restore:
     rti
 
 .proc brk_entry
+	; TODO: we need to set the context = 0
 	jmp (brk_vector)
 .endproc
 
@@ -144,22 +161,4 @@ irq_restore:
 
 .proc nmi_entry
     rti
-.endproc
-
-; ============================================================
-; irq_get_source
-;
-; Purpose:
-;   Read IRQ source provided by RP2350.
-;
-; Returns:
-;   A = RP_IRQ_SOURCE_XXXX
-;
-; Notes:
-;   RP2350 must set RP_IRQ_SOURCE before raising IRQ.
-; ============================================================
-
-.proc irq_get_source
-    lda RP_IRQ_SOURCE
-    rts
 .endproc

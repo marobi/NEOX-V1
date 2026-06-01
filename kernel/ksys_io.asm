@@ -28,6 +28,7 @@
 
 .setcpu "65C02"
 
+.include "debug.inc"
 .include "syscall.inc"
 .include "fd.inc"
 .include "process.inc"
@@ -46,8 +47,10 @@
 .import proc_set_wait
 .import sched_yield
 .import scheduler_wake_one
+
 .import ksys_io_lock
 .import ksys_io_owner
+.import ksys_io_phase
 
 .import rp_console_read_start
 .import rp_console_read_finish
@@ -220,13 +223,26 @@ ksys_rw_buf_hi:
 ;   Acquire global read/write syscall serialization.
 ;
 ; Behavior:
-;   If ksys_io_lock is busy, block on WAIT_KSYS_IO object 0,
-;   yield, and retry. This is not a spin lock.
+;   If ksys_io_lock is free:
+;       acquire it
+;       set ksys_io_owner = current_pid
+;       return
+;
+;   If busy and owned by another process:
+;       block current process on WAIT_KSYS_IO object 0
+;       sched_yield
+;       retry when woken
+;
+;   If busy and already owned by current_pid:
+;       trap. Recursive KIO acquisition is a kernel bug.
 ;
 ; Lost-wake protection:
 ;   IRQs are disabled across failed try-acquire and proc_set_wait.
 ;   This prevents the lock owner from releasing+waking between
-;   our failed acquire and our wait registration.
+;   failed acquire and wait registration.
+;
+; Return:
+;   C set = acquired
 ; ------------------------------------------------------------
 
 .proc ksys_io_acquire
@@ -237,6 +253,21 @@ ksys_rw_buf_hi:
     LOCK_TRY_ACQUIRE ksys_io_lock
     bcs @acquired
 
+    ; DEBUG-BEGIN: detect recursive ksys_io_lock acquire
+    lda ksys_io_owner
+    cmp current_pid
+    bne @wait_for_owner
+
+    lda #DBG_MARK_KIO_RECURSE
+    sta sched_debug_marker
+    lda current_pid
+    sta sched_debug_pid
+
+@trap_recursive:
+    bra @trap_recursive
+    ; DEBUG-END: detect recursive ksys_io_lock acquire
+
+@wait_for_owner:
     ldx current_pid
     lda #WAIT_KSYS_IO
     ldy #$00
@@ -248,8 +279,11 @@ ksys_rw_buf_hi:
     bra @retry
 
 @acquired:
-	ldx current_pid
-	stx ksys_io_owner
+    ; DEBUG-BEGIN: ksys_io_lock owner set
+    ldx current_pid
+    stx ksys_io_owner
+    ; DEBUG-END: ksys_io_lock owner set
+
     plp
     sec
     rts
@@ -261,20 +295,36 @@ ksys_rw_buf_hi:
 ; Purpose:
 ;   Release global read/write syscall serialization and wake one
 ;   process waiting on WAIT_KSYS_IO object 0.
+;
+; Policy:
+;   Wake one waiter only. ksys_io_lock is a single-owner
+;   serialization resource.
+;
+; Notes:
+;   Release+wake is protected with IRQs disabled so no 6502-side
+;   scheduler path can interleave between lock release and wake.
+;
+; Return:
+;   C set
 ; ------------------------------------------------------------
 
 .proc ksys_io_release
     php
     sei
 
+    ; DEBUG-BEGIN: ksys_io_lock owner clear
+    lda #DBG_OWNER_NONE
+    sta ksys_io_owner
+
+    lda #DBG_KIO_IDLE
+    sta ksys_io_phase
+    ; DEBUG-END: ksys_io_lock owner clear
+
     LOCK_RELEASE ksys_io_lock
 
     lda #WAIT_KSYS_IO
     ldy #$00
     jsr scheduler_wake_one
-	
-	lda #$ff
-	sta ksys_io_owner
 
     plp
     sec

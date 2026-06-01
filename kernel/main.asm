@@ -42,6 +42,8 @@
 .import brk_vector
 .import irq_restore
 
+.import debug_init
+
 .import scheduler_init
 .import scheduler_set_current_context
 
@@ -97,6 +99,8 @@
 	sta brk_vector
 	lda #>irq_restore
 	sta brk_vector+1
+	
+	jsr debug_init
 	
 	jsr rp_init
 	

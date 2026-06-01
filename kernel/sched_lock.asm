@@ -33,6 +33,7 @@
 .export sched_lock_enter
 .export sched_lock_leave
 
+.import sched_debug_marker
 .import sched_lock
 
 .segment "KERN_TEXT"
@@ -90,6 +91,18 @@
 ; ------------------------------------------------------------
 
 .proc sched_lock_leave
+    lda sched_lock
+    beq @underflow
+
     dec sched_lock
     rts
+
+@underflow:
+    ; DEBUG-BEGIN: scheduler lock underflow trap
+    lda #$D7
+    sta sched_debug_marker
+    ; DEBUG-END: scheduler lock underflow trap
+
+@trap:
+    bra @trap
 .endproc

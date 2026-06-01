@@ -18,5 +18,5 @@
 .proc idle_loop
 	cli			; assure IRQ enabled
 @idle:
-     bra @idle
+	bra @idle
 .endproc

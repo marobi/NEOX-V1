@@ -90,7 +90,8 @@ KERNEL_SRCS := \
 	kernel/device.asm \
 	kernel/console_device.asm \
 	kernel/rp2350.asm \
-	kernel/init_tasks.asm
+	kernel/init_tasks.asm \
+	kernel/debug.asm
 
 USER_SRCS := \
 	user/user_space.asm
