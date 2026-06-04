@@ -2,7 +2,7 @@
 
 NEOX is a small UNIX-like operating system for the **NEO6502_MMU** platform.
 
-The system targets a W65C02 CPU with an RP2350 coprocessor. The 6502 side runs the kernel, scheduler, syscall layer, file-descriptor layer, pipe layer, monitor integration, and user tasks. The RP2350 side provides external I/O services, interrupt sources, console integration, and platform control.
+The system targets a W65C02 CPU with an RP2350 coprocessor. The 6502 side runs the kernel, scheduler, syscall layer, file-descriptor layer, pipe layer, monitor integration, and user tasks. The RP2350 side provides external I/O services, interrupt sources, console integration, raw monitor console I/O, and platform control.
 
 NEOX is currently an experimental kernel, not a complete POSIX system. The design goal is to build a compact, understandable UNIX-like environment around processes, file descriptors, pipes, syscalls, and a monitor/debugger model suitable for a banked/MMU-enabled 6502 machine.
 
@@ -11,13 +11,13 @@ NEOX is currently an experimental kernel, not a complete POSIX system. The desig
 NEOX is intended to provide:
 
 - multiple 6502 tasks/processes
-- preemptive and cooperative scheduling
+- cooperative and timer-driven preemptive scheduling
 - a syscall interface
 - per-process file descriptors
 - shared open-object tables
 - console I/O through the RP2350
 - pipes for inter-process communication
-- monitor/debugger entry without corrupting kernel state
+- freeze-style monitor/debugger entry without corrupting kernel state
 - a clear kernel structure that can grow toward a small UNIX-like system
 
 The current implementation favors explicit, static kernel structures over dynamic allocation. This keeps the kernel easier to debug on real hardware and avoids unnecessary runtime complexity during bring-up.
@@ -27,14 +27,24 @@ The current implementation favors explicit, static kernel structures over dynami
 The hardware model is:
 
 ```text
-W65C02        main CPU running NEOX
-RP2350        I/O, interrupt, console, monitor, and platform coprocessor
-MMU           multiple 6502 address contexts
-SRAM          physical RAM behind the MMU
-ROM images    BIOS, monitor, syscall veneer, and kernel
+W65C02         main CPU running NEOX
+RP2350         I/O, interrupt, raw monitor console, and platform coprocessor
+MMU            multiple 6502 address contexts
+SRAM           physical RAM behind the MMU
+ROM images     BIOS, monitor, syscall veneer, and kernel
+MICMON         monitor/debugger
 ```
 
 The RP2350 communicates with the 6502 through shared mailbox/register mechanisms and interrupt sources.
+
+There are two distinct RP/6502 I/O models:
+
+```text
+normal kernel I/O       syscall -> ksys_io -> FD/device -> RP mailbox
+monitor raw I/O         BIOS raw get/put-char -> RP raw monitor path
+```
+
+The monitor raw I/O path is intentionally outside the normal kernel service model.
 
 ## Current Memory and Image Model
 
@@ -43,14 +53,14 @@ The current development layout uses separate statically linked images:
 ```text
 $8000-$BFFF  Kernel
 $C000-$CFFF  Syscall veneer
-$D000-$DFFF  RP I/O page
+$D000-$DFFF  RP I/O page / shared platform registers
 $E000-$EFFF  MICMON / monitor
 $F000-$FFFF  BIOS
 ```
 
 The current kernel model is statically linked. There is no relocatable user executable format yet.
 
-A later executable format may be added, but the present focus is kernel correctness, syscall behavior, process scheduling, and IPC.
+A later executable format may be added, but the present focus is kernel correctness, syscall behavior, process scheduling, IRQ/monitor behavior, and IPC.
 
 ## Toolchain
 
@@ -70,14 +80,15 @@ The kernel is organized around small subsystems:
 
 ```text
 scheduler       process switching, task state, wait state
-supervisor      monitor entry/exit and privileged control flow
+supervisor      MICMON entry/exit and privileged control flow
 irq             IRQ dispatch and timer/monitor interrupt handling
 syscall table   fixed syscall entry points
 FD layer        per-process FD table and global open-object table
 device layer    device dispatch through open objects
-console device  RP-backed console read/write
+console device  RP-backed normal console read/write
 pipe layer      static pipe implementation
-RP layer         mailbox / RP2350 request handling
+RP layer         normal mailbox / RP2350 request handling
+BIOS            context switching, IRQ ACK, raw monitor get/put-char
 ```
 
 The design avoids a relocatable runtime dependency. Kernel and syscall images are fixed-position binaries.
@@ -86,50 +97,140 @@ The design avoids a relocatable runtime dependency. Kernel and syscall images ar
 
 NEOX supports both cooperative and preemptive scheduling.
 
-Preemptive scheduling is driven by the timer IRQ when enabled. Cooperative scheduling is available through `sys_yield`.
+Cooperative scheduling is available through `sys_yield`. Preemptive scheduling is driven by the timer IRQ when enabled.
 
-The current scheduler tracks process state, saved stack pointers, context IDs, wait reasons, and file-descriptor ownership.
-
-PID 0 is reserved for the idle/supervisor role and is not treated as a normal user process.
-
-## Monitor Entry
-
-Monitor entry is deferred and cooperative.
-
-The IRQ handler does **not** enter MICMON directly. A monitor IRQ only records a pending monitor request:
+The scheduler tracks:
 
 ```text
-RP monitor IRQ
+process state
+saved stack pointers
+MMU context IDs
+wait reasons and wait objects
+file-descriptor ownership
+scheduler debug state
+```
+
+Only one PID should be `RUN` at a time.
+
+During freeze-monitor snapshots it is valid to observe transitional scheduler state, for example:
+
+```text
+current_pid has already been changed to the selected PID
+current_context still shows the previous MMU context
+sched_lock is still held
+```
+
+This means the monitor froze the CPU during a scheduler handoff. It is not automatically a corruption.
+
+## IRQ Model
+
+IRQ entry saves the interrupted A/X/Y registers on the interrupted context stack.
+
+IRQ source handling currently includes:
+
+```text
+timer IRQ       scheduler tick and optional preemptive context switch
+monitor IRQ     immediate freeze-style entry into MICMON
+other IRQ       restore interrupted context unchanged
+```
+
+The IRQ handler reads the RP IRQ source, acknowledges it through BIOS, and then classifies the source.
+
+Timer IRQ behavior:
+
+```text
+monitor_active = 0:
+    increment system_ticks through scheduler_irq_tick
+    context-switch only when scheduler/subsystem locks allow it
+
+monitor_active != 0:
+    acknowledge and ignore timer IRQ
+    do not increment system_ticks
+    do not run scheduler accounting
+    do not context-switch
+```
+
+This preserves freeze semantics while MICMON is active.
+
+## RP IRQ Handshake
+
+The current RP/6502 IRQ handshake is level/state based.
+
+The working model is:
+
+```text
+RP:
+    write RP_IRQ_SOURCE
+    set RP_IRQ_STATE pending/asserted
+    assert IRQ low
+
+6502:
+    read RP_IRQ_SOURCE
+    call BIOS_ACK_IRQ
+
+BIOS_ACK_IRQ:
+    preserve A
+    clear BIOS/RP IRQ source as the 6502 ACK
+    wait until BIOS/RP IRQ state is released
+    return with original A
+
+RP:
+    sees source cleared
+    releases IRQ
+    clears IRQ state
+```
+
+This avoids missed IRQ pulses when the 6502 has interrupts masked.
+
+The source value in A must survive `BIOS_ACK_IRQ`, because IRQ classification happens after ACK.
+
+## Monitor Model
+
+NEOX uses a **freeze-style monitor**.
+
+The monitor is not a kernel task and does not participate in the syscall/FD/device/pipe/RP-mailbox model. Its purpose is to inspect the current system state exactly as it was frozen.
+
+Monitor entry rules:
+
+```text
+monitor IRQ
     -> irq_entry
-    -> monitor_pending = 1
-    -> RTI
+    -> BIOS_ACK_IRQ
+    -> supervisor_enter_from_irq
+    -> save current IRQ stack pointer and current context
+    -> set monitor_active through console_monitor_enter
+    -> switch to monitor context
+    -> jump to MICMON
+
+monitor leave
+    -> console_monitor_exit
+    -> clear monitor_active
+    -> restore saved stack pointer and context
+    -> return through irq_restore
+    -> RTI to the interrupted code
 ```
 
-Actual monitor entry happens later from a safe cooperative kernel point, currently through `sched_yield`:
+The monitor may be entered while locks are held. This is intentional. Locks are part of the state being inspected.
+
+MICMON uses BIOS low-level raw get/put-char routines only. These raw routines are separate from the normal kernel console and do not take kernel locks.
+
+`monitor_active` is the authoritative software state for monitor mode. It is used to:
 
 ```text
-sched_yield
-    -> supervisor_try_enter_pending
-    -> supervisor_monitor_safe
-    -> enter_monitor
+freeze timer accounting in irq.asm
+distinguish context 0 idle/kernel from context 0 MICMON
+tell RP-side logic that raw monitor console mode is active
 ```
 
-This is an intentional implementation decision.
+`current_context == 0` alone is not sufficient to detect MICMON, because context 0 can also be used by idle/kernel/common code. RP-side monitor handling should use a dedicated monitor-active state, not infer monitor mode only from the MMU context.
 
-Earlier direct monitor entry from IRQ was unsafe because MICMON uses console, FD, and RP paths. If an IRQ entered MICMON while the interrupted task held one of the related locks, the monitor could re-enter the same subsystem and deadlock on a lock owned by the frozen task.
+## BIOS Monitor I/O
 
-The safe monitor-entry check currently requires these locks to be clear:
+BIOS provides raw monitor get/put-character routines for MICMON.
 
-```text
-sched_lock == 0
-fd_lock    == 0
-pipe_lock  == 0
-rp_lock    == 0
-```
+They communicate with RP through a dedicated low-level raw monitor console path.
 
-If any lock is held, the monitor request remains pending and is retried at a later safe point.
-
-This means that with the timer disabled, a CPU-bound task that never calls `sys_yield` or a syscall may delay monitor entry indefinitely. This is accepted for the current cooperative-safe monitor model.
+This is a critical invariant. Earlier monitor designs deadlocked when MICMON output went through `sys_write`, because the monitor could interrupt a task that already owned `ksys_io_lock` or `fd_lock`.
 
 ## Syscall Model
 
@@ -176,8 +277,6 @@ open-object backend reference
 
 The FD table and open-object table are shared kernel state.
 
-FD temporary scratch variables belong in `fd.asm` `KERN_BSS`. The zero-page FD pointer is kept only where indirect-indexed addressing requires it.
-
 ## Pipes
 
 The current pipe implementation is static and nonblocking at the backend layer.
@@ -209,7 +308,7 @@ The pipe core does not block internally and does not call `sched_yield`.
 
 This is an explicit decision. A previous attempt to block inside `pipe_read` / `pipe_write` was rejected because it required preserving pipe-local call state across a context switch and introduced unsafe lock/wait interactions.
 
-The intended future model is syscall-layer blocking:
+The intended model is syscall-layer blocking:
 
 ```text
 ksys_read / ksys_write
@@ -217,8 +316,9 @@ ksys_read / ksys_write
         -> pipe_read / pipe_write
     -> if EAGAIN:
         set wait state
+        release locks
         yield
-        retry later
+        retry later when woken
 ```
 
 This keeps pipe backend primitives small, deterministic, and nonblocking.
@@ -231,12 +331,12 @@ Example ping-pong setup:
 
 ```text
 Pipe A: Task 1 -> Task 2
-  PID 1 fd 3 = write
-  PID 2 fd 3 = read
+  PID 1 fd 3 = write endpoint
+  PID 2 fd 3 = read endpoint
 
 Pipe B: Task 2 -> Task 1
-  PID 2 fd 4 = write
-  PID 1 fd 4 = read
+  PID 2 fd 4 = write endpoint
+  PID 1 fd 4 = read endpoint
 ```
 
 The current nonblocking ping-pong test uses `EAGAIN -> sys_yield -> retry`.
@@ -244,7 +344,7 @@ The current nonblocking ping-pong test uses `EAGAIN -> sys_yield -> retry`.
 Observed 10-second loop baselines during development were approximately:
 
 ```text
-loops10 ~= $0700 .. $08A0
+loops ~= 220 .. 240 per sec, using 4 MC clock frequency
 ```
 
 These figures are development measurements, not final performance targets.
@@ -262,6 +362,7 @@ pipe tables and buffers
 locks
 monitor state
 RP-visible state
+scheduler debug state
 ```
 
 Subsystem-private scratch belongs in the owning module’s `KERN_BSS`.
@@ -296,12 +397,31 @@ Important rules:
 ```text
 Do not hold fd_lock across backend calls.
 Do not hold pipe_lock across sched_yield or blocking waits.
-Do not enter MICMON directly from IRQ.
-Do not spin in IRQ/scheduler paths on FD, pipe, or RP locks.
+Do not hold ksys_io_lock across sched_yield, WAIT_CONSOLE, WAIT_PIPE_READ, WAIT_PIPE_WRITE, or indefinite RP waits.
+Do not spin indefinitely when a real serialization lock cannot be acquired.
+Do not use normal kernel services from MICMON.
 Every lock byte must have one explicit initialization owner.
 ```
 
-The current monitor design exists largely to preserve these rules.
+Monitor entry is allowed while locks are held because MICMON uses raw BIOS monitor I/O only and must not acquire the inspected locks.
+
+## Scheduler and Debug Output
+
+The `ps` monitor output includes scheduler debug state.
+
+Important fields:
+
+```text
+Path / Marker       last scheduler path and debug marker
+Save PID/SP/Mode    last saved task stack and return mode
+Load PID/SP/Mode    last loaded task stack and return mode
+Resume PID/Ctx/Mode last resume target
+State change        last process state transition
+```
+
+The explicit scheduler debug section is the authoritative human-readable scheduler trace.
+
+Legacy raw debug bytes, if still exposed, should not be interpreted as strongly typed fields. Some legacy fields are reused for different values, such as loaded stack pointer versus process state.
 
 ## Current State
 
@@ -310,14 +430,17 @@ The current working baseline includes:
 - process switching
 - cooperative `sys_yield`
 - timer-driven scheduling when timer IRQ is enabled
-- deferred monitor entry through `monitor_pending`
+- stable repeated freeze-style MICMON entry/leave
+- `system_ticks` frozen while MICMON is active
+- PID 0 represented as the idle task: `RDY` when not executing, `RUN` when idle is executing
 - FD tables and open objects
 - console FD integration
 - static nonblocking pipes
 - inter-process pipe wiring for test tasks
 - two-pipe ping-pong test using `EAGAIN` and `sys_yield`
 - cleanup of FD and pipe scratch into module-local `KERN_BSS`
-- monitor IRQ path no longer directly entering MICMON
+- raw BIOS monitor I/O independent of syscalls and RP mailbox
+- RP/6502 IRQ handshake that avoids missed IRQ pulses
 
 The next major implementation step is expected to be syscall-layer blocking for pipes, not blocking inside the pipe backend.
 
@@ -325,29 +448,8 @@ The next major implementation step is expected to be syscall-layer blocking for 
 
 The codebase targets W65C02 and ca65.
 
-Coding rules used in the kernel:
-
-```text
-Use valid W65C02 addressing modes only.
-Do not use invalid forms such as LDX abs,X.
-Use JMP for tail calls instead of JSR followed immediately by RTS.
-Keep stack-frame and lock-sensitive routines explicit and commented.
-Prefer complete procedure replacements for complex scheduler/lock/wait changes.
-```
-
-Example tail-call rule:
-
-```asm
-; Avoid
-jsr routine
-rts
-
-; Use
-jmp routine
-```
-
 ## Status
 
 NEOX is under active development.
 
-The current code is intended for bring-up, kernel design validation, and hardware testing. Interfaces and internal structures may still change as the scheduler, FD layer, pipe layer, and syscall semantics mature.
+The current code is intended for bring-up, kernel design validation, and hardware testing. Interfaces and internal structures may still change as the scheduler, FD layer, pipe layer, syscall semantics, and monitor/RP integration mature.

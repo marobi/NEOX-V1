@@ -71,8 +71,6 @@
 
 .import sched_lock
 .import console_owner_pid
-.import monitor_pending
-.import supervisor_try_enter_pending
 
 .importzp sched_ptr
 
@@ -92,6 +90,8 @@
 
 .import proc_ticks_lo
 .import proc_ticks_hi
+
+.import monitor_active
 
 ; ------------------------------------------------------------
 .segment "KERN_BSS"
@@ -215,10 +215,10 @@ sched_wake_object_tmp:
 .proc proc_set_running
     phx
 
-    ; Demote old current_pid if it is a normal running task.
+    ; Demote old current_pid if it is currently RUNNING.
+    ; PID 0 is the idle task, not an empty slot, so it becomes
+    ; READY when another process is selected.
     ldx current_pid
-    cpx #IDLE_PID
-    beq @set_selected
 
     lda proc_state,x
     cmp #PROC_RUNNING
@@ -590,8 +590,9 @@ sched_wake_object_tmp:
 
     stz current_pid
     stz sched_lock
-    stz monitor_pending
 
+	stz monitor_active
+	
     lda #$FF
     sta console_owner_pid
 
@@ -1172,24 +1173,10 @@ sched_wake_object_tmp:
     ; --------------------------------------------------------
     cli
 
-    ; Cooperative monitor safe point.
-    jsr supervisor_try_enter_pending
-
     jsr sched_update_console_focus
     jsr scheduler_wake_console_input
     jsr scheduler_wake_timers
 
-    ; --------------------------------------------------------
-    ; Short atomic dispatch section.
-    ;
-    ; sched_dispatch_next never returns. The selected final
-    ; resume/start path must call sched_lock_leave exactly once:
-    ;
-    ;   @resume_rti
-    ;   sched_resume_rts
-    ;   first_run_entry
-    ;   sched_resume_idle
-    ; --------------------------------------------------------
     sei
     jmp sched_dispatch_next
 .endproc

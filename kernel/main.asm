@@ -143,15 +143,14 @@
     ; --------------------------------------------------------
     ; Mark IDLE_PID execution 
     ; --------------------------------------------------------
-    lda #0
-    sta current_pid
+    ldx #IDLE_PID
+    stx current_pid
 	
-	lda #$FF
-    sta console_owner_pid
-
-	ldx #IDLE_PID
     lda #PROC_RUNNING
     sta proc_state,x
+
+	lda #$FF
+    sta console_owner_pid
 
     lda #$00
     jsr scheduler_set_current_context
@@ -178,7 +177,6 @@
 	cpx #$0C
 	bne @rp_clear
 	
-
     stz RP_DOORBELL
 	rts
 .endproc

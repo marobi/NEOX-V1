@@ -3,14 +3,14 @@
 ; NEOX - MICMON supervisor entry/exit
 ;
 ; Model:
-;   Entering monitor freezes the scheduler state as-is.
-;   Leaving monitor only re-enables scheduling.
+;   Entering monitor freezes the current 6502 continuation.
+;   MICMON uses BIOS low-level raw get/put-char only.
+;   It must not call kernel syscalls, FD, pipe, ksys_io, RP mailbox,
+;   scheduler services, or any other inspected subsystem.
 ;
-; The supervisor does not:
-;   - save or alter current process state
-;   - change current_pid
-;   - change proc_state
-;   - touch console ownership/wait state
+; Return modes:
+;   - RTS mode: manual/cooperative entry through enter_monitor
+;   - IRQ mode: monitor IRQ entry through supervisor_enter_from_irq
 ; ============================================================
 
 .setcpu "65C02"
@@ -19,21 +19,12 @@
 .include "process.inc"
 .include "scheduler_defs.inc"
 
-.import ksys_io_lock
-
-.import monitor_pending
-.import sched_lock
-.import fd_lock
-.import pipe_lock
-.import rp_lock
-
 .export enter_monitor
 .export leave_monitor
-.export supervisor_try_enter_pending
+.export supervisor_enter_from_irq
 
 .import current_pid
 .import proc_context
-.import proc_sp
 
 .import console_monitor_enter
 .import console_monitor_exit
@@ -41,107 +32,94 @@
 .import sched_lock_enter
 .import sched_lock_leave
 
+.import irq_restore
+
 MONITOR_CONTEXT     = $00
 MONITOR_ENTRY       = $B000
+
+SUP_RETURN_RTS      = $00
+SUP_RETURN_IRQ      = $01
+
+.segment "KERN_BSS"
+
+supervisor_saved_pid:
+    .res 1
+
+supervisor_saved_sp:
+    .res 1
+
+supervisor_saved_context:
+    .res 1
+
+supervisor_saved_return_mode:
+    .res 1
 
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
-; supervisor_monitor_safe
+; supervisor_enter_from_irq
 ;
-; Return:
-;   C clear = safe to enter monitor
-;   C set   = unsafe
+; Called directly from irq_entry for RP_IRQ_SRC_MONITOR.
 ;
-; Policy:
-;   Monitor entry is cooperative only. It may happen only when
-;   no non-reentrant subsystem lock is held.
+; Stack on entry:
+;   irq_entry has already pushed A, X, Y.
+;   Below that is the hardware IRQ return frame.
 ;
-; Locks checked:
-;   sched_lock   - monitor/scheduler critical section
-;   fd_lock      - FD/open-object tables
-;   pipe_lock    - pipe tables/buffers
-;   rp_lock      - RP mailbox/request block
-;   ksys_io_lock - active global read/write syscall path
+; This path does not inspect or drain locks. The monitor is a
+; freeze/debug facility and uses only BIOS raw get/put-char.
 ; ------------------------------------------------------------
 
-.proc supervisor_monitor_safe
-    lda sched_lock
-    bne @unsafe
-
-	lda fd_lock
-	ora pipe_lock
-	ora rp_lock
-	ora ksys_io_lock
-	bne @unsafe
-	
-    clc
-    rts
-
-@unsafe:
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; supervisor_try_enter_pending
-;
-; Called from cooperative safe points.
-;
-; Return:
-;   RTS if no monitor request is pending or entry is unsafe.
-;   Does not return here if monitor is entered.
-;
-; Stack model:
-;   This routine is called with JSR from sched_yield. If monitor
-;   is entered, enter_monitor saves the current stack. On monitor
-;   exit, execution resumes at the return address of that JSR,
-;   so sched_yield continues normally.
-;
-; Notes:
-;   IRQ only sets monitor_pending. It never jumps to MICMON.
-;   This is the single deferred monitor-entry path.
-; ------------------------------------------------------------
-
-.proc supervisor_try_enter_pending
-    php
+.proc supervisor_enter_from_irq
     sei
 
-    lda monitor_pending
-    beq @done
+    ldy current_pid
+    sty supervisor_saved_pid
 
-    jsr supervisor_monitor_safe
-    bcs @done
+    lda proc_context,y
+    sta supervisor_saved_context
 
-    stz monitor_pending
+    tsx
+    stx supervisor_saved_sp
 
-    ; Restore caller's original P before entering MICMON.
-    ; enter_monitor is the only monitor entry path.
-    plp
-    jmp enter_monitor
+    lda #SUP_RETURN_IRQ
+    sta supervisor_saved_return_mode
 
-@done:
-    plp
-    rts
+    jsr sched_lock_enter
+
+    jsr console_monitor_enter
+
+    lda #MONITOR_CONTEXT
+    ldx #<MONITOR_ENTRY
+    ldy #>MONITOR_ENTRY
+    jmp BIOS_CONTEXT_JUMP
 .endproc
 
 ; ------------------------------------------------------------
 ; enter_monitor
 ;
-; Freeze scheduler and enter MICMON from a cooperative safe point.
+; Manual/cooperative monitor entry.
+;
+; This path saves the current RTS-style continuation and returns
+; through resume_rts_from_monitor on monitor exit.
 ; ------------------------------------------------------------
 
 .proc enter_monitor
-    ; Save current task stack pointer.
     ldy current_pid
+    sty supervisor_saved_pid
+
+    lda proc_context,y
+    sta supervisor_saved_context
+
     tsx
-    txa
-    sta proc_sp,y
+    stx supervisor_saved_sp
+
+    lda #SUP_RETURN_RTS
+    sta supervisor_saved_return_mode
 
     jsr sched_lock_enter
 
-	jsr console_monitor_enter
-	
+    jsr console_monitor_enter
+
     lda #MONITOR_CONTEXT
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
@@ -151,32 +129,36 @@ MONITOR_ENTRY       = $B000
 ; ------------------------------------------------------------
 ; leave_monitor
 ;
-; Purpose:
-;   Leave MICMON and resume normal scheduling.
-;
-;   - restore caller stack/context
-;   - return through RTS path
+; Leave MICMON and resume the exact saved continuation.
 ; ------------------------------------------------------------
 
 .proc leave_monitor
     sei
 
-	jsr console_monitor_exit
-	
-    ; Restore interrupted task stack pointer.
-    ldx current_pid
-    lda proc_sp,x
-    tax
+    jsr console_monitor_exit
+
+    ldx supervisor_saved_sp
     txs
 
-    ; Restore interrupted context.
-    ldx current_pid
-    lda proc_context,x
+    lda supervisor_saved_return_mode
+    pha
 
     jsr sched_lock_leave
-	
+
+    pla
+    cmp #SUP_RETURN_IRQ
+    beq @return_irq
+
+@return_rts:
+    lda supervisor_saved_context
     ldx #<resume_rts_from_monitor
     ldy #>resume_rts_from_monitor
+    jmp BIOS_CONTEXT_JUMP
+
+@return_irq:
+    lda supervisor_saved_context
+    ldx #<irq_restore
+    ldy #>irq_restore
     jmp BIOS_CONTEXT_JUMP
 .endproc
 
@@ -187,6 +169,6 @@ MONITOR_ENTRY       = $B000
 ; ------------------------------------------------------------
 
 .proc resume_rts_from_monitor
-	cli
-	rts
+    cli
+    rts
 .endproc

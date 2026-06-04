@@ -189,16 +189,11 @@ proc_signal_pending:
 ;
 ; monitor_active:
 ;   Nonzero while monitor mode is active.
-;
-; monitor_pending:
-;   Set by IRQ path when monitor entry is requested.
-;   Actual monitor entry happens at a cooperative safe point.
 ; ------------------------------------------------------------
 
 .export sched_lock
 .export console_owner_pid
 .export monitor_active
-.export monitor_pending
 
 sched_lock:
     .res 1
@@ -207,9 +202,6 @@ console_owner_pid:
     .res 1
 
 monitor_active:
-    .res 1
-
-monitor_pending:
     .res 1
 
 ; ------------------------------------------------------------

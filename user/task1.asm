@@ -12,7 +12,7 @@
 
 T1_TX_FD          = 3          ; Task 1 -> Task 2
 T1_RX_FD          = 4          ; Task 2 -> Task 1
-T1_SAMPLE_TICKS   = 500        ; TIMER 50 = 20 ms, 500 ticks = 10 sec
+T1_SAMPLE_TICKS   = 200        ; TIMER 20 = 50 ms, 200 ticks = 10 sec
 
 .segment "USER_DATA"
 

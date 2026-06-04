@@ -14,14 +14,15 @@
 ;   - RP2350 may also request entry into MICMON
 ;
 ; IRQ policy:
-;   1. Save A/X/Y onto the interrupted context stack
-;   2. Ask IRQ classification logic for the source
+;   1. Save A/X/Y onto the interrupted context stack.
+;   2. Read and acknowledge the RP IRQ source through BIOS_ACK_IRQ.
 ;   3. If source = monitor request:
-;        -> acknowledge it
-;        -> set monitor_pending
-;        -> restore interrupted context
+;        -> enter MICMON immediately through supervisor_enter_from_irq
+;        -> preserve the current IRQ stack as the frozen continuation
+;        -> return later through irq_restore / RTI
 ;   4. If source = timer tick:
-;        -> if sched_lock != 0, resume interrupted context
+;        -> count the tick
+;        -> if sched_lock or subsystem locks are held, resume unchanged
 ;        -> else perform normal scheduler context switch
 ;   5. All other IRQ sources:
 ;        -> restore interrupted context unchanged
@@ -36,7 +37,7 @@
 ;   So sched_context_switch may later restore with:
 ;       PLY / PLX / PLA / RTI
 ;
-;   Monitor entry is deferred.
+;   Monitor entry is immediate/freeze-style and does not use the scheduler.
 ; ============================================================
 
 .setcpu "65C02"
@@ -49,11 +50,13 @@
 
 .import brk_vector
 
+.import supervisor_enter_from_irq
+
 .import scheduler_irq_tick
 .import sched_context_switch
 .import sched_lock
-.import monitor_pending
 .import console_owner_pid
+.import monitor_active
 
 .import ksys_io_lock
 .import fd_lock
@@ -78,8 +81,8 @@
 ;
 ; Either:
 ;   - restores interrupted context and RTI
-;   - records a pending monitor request and RTI
-;   - or transfers to scheduler switch logic
+;   - enters MICMON immediately for a monitor request
+;   - or transfers to scheduler switch logic for a timer IRQ
 ;
 ; Clobbers:
 ;   A, X, Y
@@ -95,8 +98,7 @@
     phy
 
     lda RP_IRQ_SOURCE
-;	jsr BIOS_ACQ_IRQ			; ack IRQ
-	stz RP_IRQ_SOURCE
+	jsr BIOS_ACK_IRQ			; ack IRQ
 	
 	cmp #RP_IRQ_SRC_NONE		; non IRQ
 	beq irq_restore
@@ -115,14 +117,18 @@
     ; unknown → just return
     bra irq_restore
 
-@monitor:	
-    lda #1
-	sta monitor_pending
-	bra irq_restore
+@monitor:
+    jmp supervisor_enter_from_irq
 
 @timer:
-    ; Count every hardware timer IRQ, even when this is not a
-    ; safe preemption point.
+    ; Freeze-style monitor:
+    ; timer IRQs are already acknowledged by BIOS_ACK_IRQ before
+    ; reaching this branch. While MICMON is active, do not advance
+    ; system_ticks and do not run scheduler tick accounting.
+    lda monitor_active
+    bne irq_restore
+
+    ; Count every hardware timer IRQ outside monitor mode.
     jsr scheduler_irq_tick
 
     ; Only context-switch when no scheduler/subsystem lock is held.
