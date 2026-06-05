@@ -16,15 +16,13 @@
 .setcpu "65C02"
 
 .include "bios.inc"
-.include "process.inc"
-.include "scheduler_defs.inc"
 
 .export enter_monitor
 .export leave_monitor
 .export supervisor_enter_from_irq
 
 .import current_pid
-.import proc_context
+.import active_context
 
 .import console_monitor_enter
 .import console_monitor_exit
@@ -65,8 +63,10 @@ supervisor_saved_return_mode:
 ;   irq_entry has already pushed A, X, Y.
 ;   Below that is the hardware IRQ return frame.
 ;
-; This path does not inspect or drain locks. The monitor is a
-; freeze/debug facility and uses only BIOS raw get/put-char.
+; The saved return context is active_context, not
+; proc_context[current_pid]. During scheduler handoff current_pid
+; may already point to the selected process while the CPU is still
+; executing in the previous context.
 ; ------------------------------------------------------------
 
 .proc supervisor_enter_from_irq
@@ -75,7 +75,7 @@ supervisor_saved_return_mode:
     ldy current_pid
     sty supervisor_saved_pid
 
-    lda proc_context,y
+    lda active_context
     sta supervisor_saved_context
 
     tsx
@@ -88,7 +88,11 @@ supervisor_saved_return_mode:
 
     jsr console_monitor_enter
 
+    ; The interrupted context was saved in supervisor_saved_context.
+    ; From this point the active execution context becomes MICMON.
     lda #MONITOR_CONTEXT
+    sta active_context
+
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
     jmp BIOS_CONTEXT_JUMP
@@ -107,7 +111,7 @@ supervisor_saved_return_mode:
     ldy current_pid
     sty supervisor_saved_pid
 
-    lda proc_context,y
+    lda active_context
     sta supervisor_saved_context
 
     tsx
@@ -120,7 +124,11 @@ supervisor_saved_return_mode:
 
     jsr console_monitor_enter
 
+    ; The return context was saved in supervisor_saved_context.
+    ; From this point the active execution context becomes MICMON.
     lda #MONITOR_CONTEXT
+    sta active_context
+
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
     jmp BIOS_CONTEXT_JUMP
@@ -151,12 +159,14 @@ supervisor_saved_return_mode:
 
 @return_rts:
     lda supervisor_saved_context
+    sta active_context
     ldx #<resume_rts_from_monitor
     ldy #>resume_rts_from_monitor
     jmp BIOS_CONTEXT_JUMP
 
 @return_irq:
     lda supervisor_saved_context
+    sta active_context
     ldx #<irq_restore
     ldy #>irq_restore
     jmp BIOS_CONTEXT_JUMP

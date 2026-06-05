@@ -72,6 +72,8 @@
 .import sched_lock
 .import console_owner_pid
 
+.import active_context
+
 .importzp sched_ptr
 
 .import wait_reason
@@ -590,6 +592,7 @@ sched_wake_object_tmp:
 
     stz current_pid
     stz sched_lock
+	stz active_context
 
 	stz monitor_active
 	
@@ -878,6 +881,9 @@ sched_wake_object_tmp:
     sta dbg_sched_resume_context
     ; DEBUG-END: scheduler RTI resume snapshot
 
+    lda proc_context,x
+	sta active_context
+	
     ; Scheduler handoff is complete. RTI restores task P.
     jsr sched_lock_leave
 
@@ -1210,6 +1216,9 @@ sched_wake_object_tmp:
     lda proc_entryH,x
     sta sched_ptr+1
 
+    lda proc_context,x
+    sta active_context
+
     ; First-run path does not restore P via RTI.
     cld
 
@@ -1237,6 +1246,12 @@ sched_wake_object_tmp:
 ; ------------------------------------------------------------
 
 .proc sched_resume_rts
+    ; BIOS_CONTEXT_JUMP has completed. The CPU is now executing
+    ; in the selected process context.
+    ldx current_pid
+    lda proc_context,x
+    sta active_context
+
     ; Scheduler handoff is complete in target context.
     jsr sched_lock_leave
     cli
@@ -1247,6 +1262,10 @@ sched_wake_object_tmp:
 ;
 ;
 .proc sched_resume_idle
+    ; BIOS_CONTEXT_JUMP has completed. The CPU is now executing
+    ; in idle context 0.
+    stz active_context
+
     ; Scheduler handoff is complete in idle context.
     jsr sched_lock_leave
     cli

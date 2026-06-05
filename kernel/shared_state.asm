@@ -189,11 +189,19 @@ proc_signal_pending:
 ;
 ; monitor_active:
 ;   Nonzero while monitor mode is active.
+;
+; active_context:
+;   Actual MMU context currently executing on the 6502.
+;   This is distinct from current_pid/proc_context because the
+;   scheduler may update current_pid before BIOS_CONTEXT_JUMP has
+;   completed the physical context switch.
+; ------------------------------------------------------------
 ; ------------------------------------------------------------
 
 .export sched_lock
 .export console_owner_pid
 .export monitor_active
+.export active_context
 
 sched_lock:
     .res 1
@@ -204,6 +212,9 @@ console_owner_pid:
 monitor_active:
     .res 1
 
+active_context:
+	.res 1
+	
 ; ------------------------------------------------------------
 ; Per-process file descriptor tables
 ;
