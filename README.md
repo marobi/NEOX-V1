@@ -112,15 +112,7 @@ scheduler debug state
 
 Only one PID should be `RUN` at a time.
 
-During freeze-monitor snapshots it is valid to observe transitional scheduler state, for example:
-
-```text
-current_pid has already been changed to the selected PID
-current_context still shows the previous MMU context
-sched_lock is still held
-```
-
-This means the monitor froze the CPU during a scheduler handoff. It is not automatically a corruption.
+During freeze-monitor snapshots it is valid to observe transitional scheduler state.
 
 ## IRQ Model
 
@@ -181,8 +173,6 @@ RP:
 ```
 
 This avoids missed IRQ pulses when the 6502 has interrupts masked.
-
-The source value in A must survive `BIOS_ACK_IRQ`, because IRQ classification happens after ACK.
 
 ## Monitor Model
 
@@ -431,18 +421,13 @@ The current working baseline includes:
 - cooperative `sys_yield`
 - timer-driven scheduling when timer IRQ is enabled
 - stable repeated freeze-style MICMON entry/leave
-- `system_ticks` frozen while MICMON is active
-- PID 0 represented as the idle task: `RDY` when not executing, `RUN` when idle is executing
 - FD tables and open objects
 - console FD integration
 - static nonblocking pipes
-- inter-process pipe wiring for test tasks
+- inter-process pipes
 - two-pipe ping-pong test using `EAGAIN` and `sys_yield`
-- cleanup of FD and pipe scratch into module-local `KERN_BSS`
 - raw BIOS monitor I/O independent of syscalls and RP mailbox
 - RP/6502 IRQ handshake that avoids missed IRQ pulses
-
-The next major implementation step is expected to be syscall-layer blocking for pipes, not blocking inside the pipe backend.
 
 ## Assembly Conventions
 
