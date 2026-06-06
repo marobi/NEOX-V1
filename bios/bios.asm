@@ -9,10 +9,10 @@
 	.include "bios.inc"
 	.include "syscall.inc" 
  
-KBD_PORT   = $D000
-DSP_PORT   = KBD_PORT + 1
-CMD_PORT   = KBD_PORT + 2
-PARAM_PORT = KBD_PORT + 3
+KBD_PORT   = BIOS_IO_PORT
+DSP_PORT   = BIOS_IO_PORT + 1
+CMD_PORT   = BIOS_IO_PORT + 2
+PARAM_PORT = BIOS_IO_PORT + 3
 
 ; -----------------------------------------------------------------------------
 

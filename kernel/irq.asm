@@ -93,6 +93,7 @@
 ; ------------------------------------------------------------
 
 .proc irq_entry
+	sei
     pha
     phx
     phy
@@ -155,7 +156,6 @@ irq_restore:
     rti
 
 .proc brk_entry
-	; TODO: we need to set the context = 0
 	jmp (brk_vector)
 .endproc
 

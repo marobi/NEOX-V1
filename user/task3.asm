@@ -4,12 +4,11 @@
 ;
 ; Policy:
 ;   User tasks must use the normal syscall console path.
-;   BIOS character I/O is reserved for BIOS/MICMON.
 ;
 ; Behavior:
 ;   - read one byte from STDIN
 ;   - echo it to STDOUT
-;   - exit when the byte is 'q'
+;   - exit when the byte is 'Q'
 ;   - retry EAGAIN through sys_yield
 ;   - exit on any other read/write error or short transfer
 ; ============================================================

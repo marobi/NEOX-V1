@@ -4,6 +4,8 @@
 .ifndef __BIOS_INC__
 __BIOS_INC__ = 1
 
+BIOS_IO_PORT    =   $D000
+
 BIOS_IRQ_SOURCE =   $E00C
 BIOS_IRQ_STATE  =   $E00F
 

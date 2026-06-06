@@ -17,6 +17,8 @@ Current file: bios.asm
 000000r 2               .ifndef __BIOS_INC__
 000000r 2               __BIOS_INC__ = 1
 000000r 2               
+000000r 2               BIOS_IO_PORT    =   $D000
+000000r 2               
 000000r 2               BIOS_IRQ_SOURCE =   $E00C
 000000r 2               BIOS_IRQ_STATE  =   $E00F
 000000r 2               
@@ -228,10 +230,10 @@ Current file: bios.asm
 000000r 2               .endif
 000000r 2               
 000000r 1               
-000000r 1               KBD_PORT   = $D000
-000000r 1               DSP_PORT   = KBD_PORT + 1
-000000r 1               CMD_PORT   = KBD_PORT + 2
-000000r 1               PARAM_PORT = KBD_PORT + 3
+000000r 1               KBD_PORT   = BIOS_IO_PORT
+000000r 1               DSP_PORT   = BIOS_IO_PORT + 1
+000000r 1               CMD_PORT   = BIOS_IO_PORT + 2
+000000r 1               PARAM_PORT = BIOS_IO_PORT + 3
 000000r 1               
 000000r 1               ; -----------------------------------------------------------------------------
 000000r 1               
