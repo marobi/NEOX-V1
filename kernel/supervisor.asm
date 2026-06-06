@@ -33,7 +33,7 @@
 .import irq_restore
 
 MONITOR_CONTEXT     = $00
-MONITOR_ENTRY       = $B000
+MONITOR_ENTRY       = $B003
 
 SUP_RETURN_RTS      = $00
 SUP_RETURN_IRQ      = $01
@@ -57,7 +57,7 @@ supervisor_saved_return_mode:
 ; ------------------------------------------------------------
 ; supervisor_enter_from_irq
 ;
-; Called directly from irq_entry for RP_IRQ_SRC_MONITOR.
+; Called directly from irq_entry for RP_IRQ_SRC_MONITOR via JMP
 ;
 ; Stack on entry:
 ;   irq_entry has already pushed A, X, Y.

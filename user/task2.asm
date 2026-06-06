@@ -24,8 +24,25 @@ t2_rx_byte:
 t2_msg_start:
     .byte "T2 PINGPONG START", 13
 
+; Failure message layout:
+;   "T2 PINGPONG FAIL " + one diagnostic code + CR
+;
+; Codes:
+;   R = sys_read returned error other than EAGAIN
+;   A = sys_read returned low byte count != 1
+;   X = sys_read returned high byte count != 0
+;   B = sys_read returned byte other than 'P'
+;   W = sys_write returned error other than EAGAIN
+;   C = sys_write returned low byte count != 1
+;   H = sys_write returned high byte count != 0
+
 t2_msg_fail:
-    .byte "T2 PINGPONG FAIL", 13
+    .byte "T2 PINGPONG FAIL "
+
+t2_fail_code:
+    .byte "?"
+
+    .byte 13
 
 t2_wr_stdout_args:
     .byte STDOUT
@@ -65,8 +82,7 @@ t2_write_args:
 
     ldx #<t2_wr_stdout_args
     ldy #>t2_wr_stdout_args
-    jsr sys_write
-    rts
+    jmp sys_write
 .endproc
 
 .proc t2_print_start
@@ -79,7 +95,7 @@ t2_write_args:
 .proc t2_print_fail
     lda #<t2_msg_fail
     ldx #>t2_msg_fail
-    ldy #18
+    ldy #19
     jmp t2_print_msg
 .endproc
 
@@ -100,6 +116,8 @@ t2_write_args:
     cpy #EAGAIN
     beq @wait
 
+    lda #'R'                ; read returned non-EAGAIN error
+    sta t2_fail_code
     sec
     rts
 
@@ -110,17 +128,23 @@ t2_write_args:
 @ok:
     cmp #1
     beq :+
+    lda #'A'                ; read low byte count was not 1
+    sta t2_fail_code
     sec
     rts
 :
     cpx #0
     beq :+
+    lda #'X'                ; read high byte count was not 0
+    sta t2_fail_code
     sec
     rts
 :
     lda t2_rx_byte
     cmp #'P'
     beq :+
+    lda #'B'                ; read byte was not 'P'
+    sta t2_fail_code
     sec
     rts
 :
@@ -145,6 +169,8 @@ t2_write_args:
     cpy #EAGAIN
     beq @wait
 
+    lda #'W'                ; write returned non-EAGAIN error
+    sta t2_fail_code
     sec
     rts
 
@@ -155,11 +181,15 @@ t2_write_args:
 @ok:
     cmp #1
     beq :+
+    lda #'C'                ; write low byte count was not 1
+    sta t2_fail_code
     sec
     rts
 :
     cpx #0
     beq :+
+    lda #'H'                ; write high byte count was not 0
+    sta t2_fail_code
     sec
     rts
 :

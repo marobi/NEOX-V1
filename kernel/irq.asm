@@ -97,6 +97,15 @@
     phx
     phy
 
+    ; BRK uses the IRQ vector but is not an RP IRQ.
+    ; Test the stacked status B flag before reading/ACKing
+    ; RP_IRQ_SOURCE. Otherwise BRK with RP_IRQ_SOURCE = NONE would
+    ; be misclassified as "no IRQ" and restored immediately.
+    tsx
+    lda $0104,x
+    and #$10
+    bne brk_entry				; BREAK
+
     lda RP_IRQ_SOURCE
 	jsr BIOS_ACK_IRQ			; ack IRQ
 	
@@ -109,17 +118,12 @@
     cmp #RP_IRQ_SRC_MONITOR		; MONITOR IRQ
     beq @monitor
 
-    tsx
-    lda $0104,x
-    and #$10
-    bne brk_entry				; BREAK
-
     ; unknown → just return
     bra irq_restore
 
 @monitor:
-    jmp supervisor_enter_from_irq
-
+    jmp supervisor_enter_from_irq	; must be JMP
+	
 @timer:
     ; Freeze-style monitor:
     ; timer IRQs are already acknowledged by BIOS_ACK_IRQ before

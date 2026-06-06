@@ -1,12 +1,22 @@
 ; ============================================================
 ; task3.asm
 ; NEOX console echo task
+;
+; Policy:
+;   User tasks must use the normal syscall console path.
+;   BIOS character I/O is reserved for BIOS/MICMON.
+;
+; Behavior:
+;   - read one byte from STDIN
+;   - echo it to STDOUT
+;   - exit when the byte is 'q'
+;   - retry EAGAIN through sys_yield
+;   - exit on any other read/write error or short transfer
 ; ============================================================
 
 .setcpu "65C02"
 
 .include "syscall.inc"
-.include "bios.inc"
 
 T3_RX_FD          = STDIN
 T3_TX_FD          = STDOUT
@@ -29,22 +39,101 @@ t3_write_args:
     .byte 0
     .word t3_byte
     .word 1
-	
+
 .segment "USER_TEXT"
+
+; ------------------------------------------------------------
+; t3_read_char
+;
+; Return:
+;   C clear = one byte read into t3_byte
+;   C set   = fatal read error or short transfer
+; ------------------------------------------------------------
+
+.proc t3_read_char
+@again:
+    SYSCALL t3_read_args, sys_read
+    bcc @ok
+
+    cpy #EAGAIN
+    beq @wait
+
+    sec
+    rts
+
+@wait:
+    jsr sys_yield
+    bra @again
+
+@ok:
+    cmp #1
+    bne @bad_count
+
+    cpx #0
+    bne @bad_count
+
+    clc
+    rts
+
+@bad_count:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t3_write_char
+;
+; Return:
+;   C clear = one byte written from t3_byte
+;   C set   = fatal write error or short transfer
+; ------------------------------------------------------------
+
+.proc t3_write_char
+@again:
+    SYSCALL t3_write_args, sys_write
+    bcc @ok
+
+    cpy #EAGAIN
+    beq @wait
+
+    sec
+    rts
+
+@wait:
+    jsr sys_yield
+    bra @again
+
+@ok:
+    cmp #1
+    bne @bad_count
+
+    cpx #0
+    bne @bad_count
+
+    clc
+    rts
+
+@bad_count:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; user_task3_entry
+; ------------------------------------------------------------
 
 .proc user_task3_entry
 @loop:
-	SYSCALL t3_read_args, sys_read
-    bcc @ok
+    jsr t3_read_char
+    bcs @exit
 
-	jsr sys_yield
-    bra @loop
+    jsr t3_write_char
+    bcs @exit
 
-@ok:  
-    SYSCALL t3_write_args, sys_write
-	lda t3_byte
-    cmp #'q'
+    lda t3_byte
+    cmp #'Q'
     bne @loop
 
+@exit:
     jmp sys_exit
 .endproc

@@ -312,6 +312,12 @@ ksys_rw_buf_hi:
     php
     sei
 
+    ; Release the lock before clearing debug owner metadata.
+    ; External RP-side ps can read shared state asynchronously; this
+    ; ordering avoids the misleading stable-looking combination:
+    ;   ksys_io_lock = 1, ksys_io_owner = DBG_OWNER_NONE.
+    LOCK_RELEASE ksys_io_lock
+
     ; DEBUG-BEGIN: ksys_io_lock owner clear
     lda #DBG_OWNER_NONE
     sta ksys_io_owner
@@ -319,8 +325,6 @@ ksys_rw_buf_hi:
     lda #DBG_KIO_IDLE
     sta ksys_io_phase
     ; DEBUG-END: ksys_io_lock owner clear
-
-    LOCK_RELEASE ksys_io_lock
 
     lda #WAIT_KSYS_IO
     ldy #$00

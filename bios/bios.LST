@@ -267,7 +267,7 @@ Current file: bios.asm
 00002Dr 1  xx xx        	.res 2
 00002Fr 1               
 00002Fr 1               ; -----------------------------------------------------------------------------
-00002Fr 1               ; read a key from input, only a-reg is used
+00002Fr 1               ; simple interface: read a key from input, only a-reg is used
 00002Fr 1               ;
 00002Fr 1               .proc _GETCHAR
 00002Fr 1               @retry:
@@ -280,7 +280,7 @@ Current file: bios.asm
 00003Br 1               .endproc
 00003Br 1               
 00003Br 1               ; -----------------------------------------------------------------------------
-00003Br 1               ; write a char to output, only a-reg is used
+00003Br 1               ; simple interface: write a char to output, only a-reg is used
 00003Br 1               ;
 00003Br 1               .proc _PUTCHAR
 00003Br 1  48           	pha
@@ -352,32 +352,47 @@ Current file: bios.asm
 000078r 1               ; A = context
 000078r 1               ; X = target low
 000078r 1               ; Y = target high
+000078r 1               ;
+000078r 1               ; IRQ policy:
+000078r 1               ;   This routine must not change the caller's interrupt policy.
+000078r 1               ;   The target trampoline decides whether to CLI.
+000078r 1               ;
+000078r 1               ;   Scheduler targets such as sched_resume_rts, first_run_entry,
+000078r 1               ;   and sched_resume_idle already enable IRQs at the correct point.
+000078r 1               ;
+000078r 1               ;   Monitor leave may jump to irq_restore, where RTI restores the
+000078r 1               ;   original P register. Enabling IRQs here would create a race
+000078r 1               ;   before irq_restore has restored the interrupted frame.
+000078r 1               ;
 000078r 1               .proc SET_MMU_CONTEXT_AND_JUMP
 000078r 1  78           	sei
+000079r 1               
 000079r 1                   ; save jump target
 000079r 1  8E rr rr         stx bios_jmp_vec
 00007Cr 1  8C rr rr         sty bios_jmp_vec+1
 00007Fr 1               
 00007Fr 1  AA           	tax				; context
+000080r 1               
 000080r 1               @wait_cmd:
 000080r 1  AD 02 D0     	lda CMD_PORT
 000083r 1  D0 FB        	bne @wait_cmd
+000085r 1               
 000085r 1  8E 03 D0     	stx PARAM_PORT
 000088r 1  A9 02        	lda #CMD_CONTEXT_SWITCH
 00008Ar 1  8D 02 D0     	sta CMD_PORT
+00008Dr 1               
 00008Dr 1               @wait_completion:
 00008Dr 1  AD 02 D0     	lda CMD_PORT
 000090r 1  D0 FB        	bne @wait_completion
 000092r 1               
-000092r 1  58           	cli
-000093r 1  6C rr rr         jmp (bios_jmp_vec)
-000096r 1               .endproc
-000096r 1               
-000096r 1               ; -----------------------------------------------------------------------------
-000096r 1               ; empty
-000096r 1               ;
-000096r 1               .proc EMPTY
-000096r 1  00           	BRK
-000097r 1  EA           	NOP
-000098r 1               .endproc
-000098r 1               
+000092r 1  6C rr rr         jmp (bios_jmp_vec)
+000095r 1               .endproc
+000095r 1               
+000095r 1               ; -----------------------------------------------------------------------------
+000095r 1               ; empty
+000095r 1               ;
+000095r 1               .proc EMPTY
+000095r 1  00           	BRK
+000096r 1  EA           	NOP
+000097r 1               .endproc
+000097r 1               

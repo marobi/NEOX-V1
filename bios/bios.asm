@@ -48,7 +48,7 @@ bios_jmp_vec:
 	.res 2
 	
 ; -----------------------------------------------------------------------------
-; read a key from input, only a-reg is used
+; simple interface: read a key from input, only a-reg is used
 ;
 .proc _GETCHAR
 @retry:
@@ -61,7 +61,7 @@ bios_jmp_vec:
 .endproc
 
 ; -----------------------------------------------------------------------------
-; write a char to output, only a-reg is used
+; simple interface: write a char to output, only a-reg is used
 ;
 .proc _PUTCHAR
 	pha
@@ -133,24 +133,39 @@ bios_jmp_vec:
 ; A = context
 ; X = target low
 ; Y = target high
+;
+; IRQ policy:
+;   This routine must not change the caller's interrupt policy.
+;   The target trampoline decides whether to CLI.
+;
+;   Scheduler targets such as sched_resume_rts, first_run_entry,
+;   and sched_resume_idle already enable IRQs at the correct point.
+;
+;   Monitor leave may jump to irq_restore, where RTI restores the
+;   original P register. Enabling IRQs here would create a race
+;   before irq_restore has restored the interrupted frame.
+;
 .proc SET_MMU_CONTEXT_AND_JUMP
 	sei
+
     ; save jump target
     stx bios_jmp_vec
     sty bios_jmp_vec+1
 
 	tax				; context
+
 @wait_cmd:
 	lda CMD_PORT
 	bne @wait_cmd
+
 	stx PARAM_PORT
 	lda #CMD_CONTEXT_SWITCH
 	sta CMD_PORT
+
 @wait_completion:
 	lda CMD_PORT
 	bne @wait_completion
 
-	cli
     jmp (bios_jmp_vec)
 .endproc
 	
