@@ -142,6 +142,7 @@
     <None Include="include\supervisor.inc" />
     <None Include="include\syscall.inc" />
     <None Include="include\timer.inc" />
+    <None Include="kernel\debug.asm" />
     <None Include="kernel\entry_table.asm" />
     <None Include="kernel\fd.asm" />
     <None Include="kernel\idle_task.asm" />
