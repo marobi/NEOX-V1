@@ -71,17 +71,24 @@
     stz dbg_proc_state_old
     stz dbg_proc_state_new
 
-    ; Lock owners.
+    ; Scheduler lock diagnostics.
     lda #DBG_OWNER_NONE
-    sta ksys_io_owner
-    sta fd_lock_owner
-    sta pipe_lock_owner
+    sta sched_lock_owner
+    stz sched_lock_phase
+    stz sched_lock_depth
+    stz sched_lock_underflow
+
+    ; Lock/gate owners.
+    lda #DBG_OWNER_NONE
+    sta file_io_gate_owner
+    sta proc_gate_owner
     sta rp_lock_owner
 
-    ; Ksys I/O debug.
-    stz ksys_io_phase
-    stz dbg_io_wait_reason
-    stz dbg_io_wait_object
+    ; Sleepable gate debug.
+    stz file_io_gate_phase
+    stz proc_gate_phase
+    stz dbg_gate_wait_reason
+    stz dbg_gate_wait_object
 
     ; Timer debug.
     lda #DBG_PID_NONE
@@ -92,6 +99,15 @@
     stz dbg_timer_until_hi
     stz dbg_timer_now_lo
     stz dbg_timer_now_hi
+
+; DEBUG-BEGIN: temporary IRQ preemption selection diagnostic init
+    stz dbg_irq_preempt_count
+    lda #DBG_PID_NONE
+    sta dbg_irq_current_pid
+    sta dbg_irq_selected_pid
+    stz dbg_irq_saved_sp
+    stz dbg_irq_loaded_sp
+; DEBUG-END: temporary IRQ preemption selection diagnostic init
 
     rts
 .endproc

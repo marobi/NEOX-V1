@@ -19,6 +19,7 @@
 .setcpu "65C02"
 
 .include "fd.inc"
+.include "debug.inc"
 .include "lock.inc"
 .include "math8.inc"
 .include "scheduler_defs.inc"
@@ -47,8 +48,6 @@
 .export fd_attach_pid_fd_write
 
 ;---------------------------------------------------
-.import fd_lock
-.import fd_lock_owner
 
 .import current_pid
 
@@ -73,6 +72,7 @@
 .import pipe_read
 .import pipe_write
 .import pipe_close_endpoint
+.import file_io_gate_phase
 
 .segment "KERN_BSS"
 
@@ -102,7 +102,7 @@ fd_mul_hi:
 ;
 ; Rules:
 ;   - valid only inside FD subsystem routines
-;   - protected by fd_lock where FD/open-object tables are modified
+;   - protected by file_io_gate where FD/open-object tables are modified
 ;   - never ABI-visible
 ;   - never monitor/RP-visible
 ;   - not stored in shared_state.asm
@@ -162,7 +162,7 @@ fd_closeproc_fd:
 ; fd_alloc_open
 ;
 ; Caller:
-;   fd_lock held
+;   file_io_gate held by caller
 ;
 ; Output:
 ;   C clear = success, X = open object index
@@ -199,7 +199,7 @@ fd_closeproc_fd:
 ; fd_free_open
 ;
 ; Caller:
-;   fd_lock held
+;   file_io_gate held by caller
 ;
 ; Input:
 ;   X = open object index
@@ -221,7 +221,7 @@ fd_closeproc_fd:
 ; fd_init_open
 ;
 ; Caller:
-;   fd_lock held
+;   file_io_gate held by caller
 ;
 ; Input:
 ;   X = open object index
@@ -249,7 +249,7 @@ fd_closeproc_fd:
 ; fd_attach_current
 ;
 ; Caller:
-;   fd_lock held
+;   file_io_gate held by caller
 ;
 ; Input:
 ;   X = open object index
@@ -286,7 +286,7 @@ fd_closeproc_fd:
 ;             Y = errno
 ;
 ; Requirements:
-;   Caller holds fd_lock.
+;   Caller holds file_io_gate.
 ;
 ; mul8u rule:
 ;   Uses fd_calc_pid_offset.
@@ -355,7 +355,7 @@ fd_closeproc_fd:
 ;   C set   = failure, Y = errno
 ;
 ; Requirements:
-;   Caller holds fd_lock.
+;   Caller holds file_io_gate.
 ; ------------------------------------------------------------
 
 .proc fd_attach_pid_fd_read
@@ -379,7 +379,7 @@ fd_closeproc_fd:
 ;   C set   = failure, Y = errno
 ;
 ; Requirements:
-;   Caller holds fd_lock.
+;   Caller holds file_io_gate.
 ; ------------------------------------------------------------
 
 .proc fd_attach_pid_fd_write
@@ -402,7 +402,7 @@ fd_closeproc_fd:
 ;   fd_flags_tmp = FD_FLAG_READ or FD_FLAG_WRITE
 ;
 ; Requirements:
-;   Caller holds fd_lock.
+;   Caller holds file_io_gate.
 ; ------------------------------------------------------------
 
 .proc fd_attach_pid_fd_mode
@@ -460,7 +460,7 @@ fd_closeproc_fd:
 ; Internal helper.
 ;
 ; Purpose:
-;   Close fd for current_pid while fd_lock is already held.
+;   Close fd for current_pid while file_io_gate is already held.
 ;
 ; Input:
 ;   A = fd
@@ -470,7 +470,7 @@ fd_closeproc_fd:
 ;   C set   = failure, Y = errno
 ;
 ; Notes:
-;   Does not acquire/release fd_lock.
+;   Does not acquire/release file_io_gate.
 ;   Does not call backend close.
 ; ------------------------------------------------------------
 
@@ -539,7 +539,7 @@ fd_closeproc_fd:
 ; fd_detach_current
 ;
 ; Caller:
-;   fd_lock held
+;   file_io_gate held by caller
 ;
 ; Input:
 ;   A = fd
@@ -565,7 +565,7 @@ fd_closeproc_fd:
 ;   Initialize the FD subsystem at boot.
 ;
 ; Behavior:
-;   - clears fd_lock
+;   - clears file_io_gate state through ksys_io init
 ;   - clears every per-process FD slot for every PID
 ;   - clears every per-process FD flag slot for every PID
 ;   - clears all global open-object slots
@@ -586,7 +586,6 @@ fd_closeproc_fd:
 
 .proc fd_init_tables
     ; FD subsystem starts unlocked.
-    stz fd_lock
 
     ; --------------------------------------------------------
     ; Clear all per-process FD object slots.
@@ -820,8 +819,8 @@ fd_closeproc_fd:
 ;             Y = errno
 ;
 ; Notes:
-;   Owns fd_lock.
-;   Backend close, if any, runs outside fd_lock.
+;   Caller owns file_io_gate.
+;   Backend close, if any, runs while file_io_gate is held unless it is explicitly made sleepable later.
 ; ------------------------------------------------------------
 
 .proc fd_close_pid
@@ -841,9 +840,8 @@ fd_closeproc_fd:
     rts
 
 @fd_ok:
-    pha                         ; preserve fd across LOCK_ACQUIRE
+    pha                         ; preserve fd across table setup
 
-    LOCK_ACQUIRE fd_lock
 
     pla
 
@@ -871,7 +869,6 @@ fd_closeproc_fd:
     cmp #FD_NONE
     bne @is_open
 
-    LOCK_RELEASE fd_lock
 
     ldy #EBADF
     sec
@@ -920,8 +917,8 @@ fd_closeproc_fd:
 
 @close_pipe:
     ; X = open object.
-    ; pipe_close_endpoint acquires pipe_lock internally.
-    ; fd_lock -> pipe_lock order is used here and this path must not block.
+    ; pipe_close_endpoint expects file_io_gate to be held.
+    ; file_io_gate serializes this nonblocking path.
     phx
 
     txa
@@ -933,20 +930,18 @@ fd_closeproc_fd:
     bra @done
 
 @done:
-    LOCK_RELEASE fd_lock
     lda #0
     tax
     clc
     rts
 
 @close_device:
-    ; Resolve close op while fd_lock is still held, then snapshot
-    ; dev_ptr as an RTS target before releasing fd_lock.
+    ; Resolve close op while file_io_gate is still held, then snapshot
+    ; dev_ptr as an RTS target before the backend tail-call.
     lda #DEVOP_CLOSE
     jsr dev_resolve_op
     bcc @close_op_ok
 
-    LOCK_RELEASE fd_lock
 
     lda #0
     tax
@@ -978,7 +973,6 @@ fd_closeproc_fd:
     pha
 
 @target_ready:
-    LOCK_RELEASE fd_lock
 
     rts                         ; tail-call device close backend
 .endproc
@@ -1025,7 +1019,7 @@ fd_closeproc_fd:
 ;   Target PID must not be runnable yet.
 ;
 ; Locking:
-;   Owns fd_lock while clearing/attaching descriptors.
+;   Caller owns file_io_gate while clearing/attaching descriptors.
 ;
 ; mul8u rule:
 ;   Uses fd_calc_pid_offset.
@@ -1040,7 +1034,6 @@ fd_closeproc_fd:
     rts
 
 @pid_ok:
-    LOCK_ACQUIRE fd_lock
 
     ; Save PID because fd_attach uses FD-local scratch internally.
     stx fd_pid_tmp
@@ -1089,7 +1082,7 @@ fd_closeproc_fd:
 
     ; Attach standard descriptors.
     ;
-    ; fd_attach requires fd_lock to be held.
+    ; fd_attach requires file_io_gate to be held.
     ; It recalculates its own PID/fd table offset internally.
 
     ldx fd_pid_tmp
@@ -1113,7 +1106,6 @@ fd_closeproc_fd:
     lda #STDERR
     jsr fd_attach
 
-    LOCK_RELEASE fd_lock
 
     clc
     rts
@@ -1179,7 +1171,7 @@ fd_closeproc_fd:
 ;   Tail-call the device routine currently stored in dev_ptr.
 ;
 ; Input:
-;   fd_lock is held
+;   file_io_gate is held
 ;   dev_ptr = target device routine
 ;   stack contains:
 ;       saved X length
@@ -1191,8 +1183,8 @@ fd_closeproc_fd:
 ;   Device routine RTS returns to fd_read/fd_write caller.
 ;
 ; Notes:
-;   LOCK_RELEASE clobbers A, so A is preserved in Y.
-;   dev_ptr is snapshotted onto the stack before fd_lock release.
+;   A is preserved in Y while the RTS target is built.
+;   dev_ptr is snapshotted onto the stack before the backend tail-call.
 ;   Uses RTS tail-call, not RTI.
 ; ------------------------------------------------------------
 
@@ -1200,9 +1192,9 @@ fd_closeproc_fd:
     ; Restore requested length for backend.
     plx                         ; X = length high
     pla                         ; A = length low
-    tay                         ; preserve length low across LOCK_RELEASE
+    tay                         ; preserve length low while building RTS target
 
-    ; Push dev_ptr - 1 as RTS target while fd_lock is still held.
+    ; Push dev_ptr - 1 as RTS target while file_io_gate is still held.
     lda dev_ptr
     beq @target_low_zero
 
@@ -1227,7 +1219,6 @@ fd_closeproc_fd:
     pha
 
 @target_ready:
-    LOCK_RELEASE fd_lock
 
     tya                         ; restore A = length low
 
@@ -1254,7 +1245,7 @@ fd_closeproc_fd:
 ;
 ; Notes:
 ;   Does not call a backend.
-;   Does not keep fd_lock held on return.
+;   Does not keep file_io_gate held by caller on return.
 ; ------------------------------------------------------------
 
 .proc fd_resolve_read
@@ -1282,7 +1273,7 @@ fd_closeproc_fd:
 ;
 ; Notes:
 ;   Does not call a backend.
-;   Does not keep fd_lock held on return.
+;   Does not keep file_io_gate held by caller on return.
 ; ------------------------------------------------------------
 
 .proc fd_resolve_write
@@ -1307,14 +1298,12 @@ fd_closeproc_fd:
 ;       Y = errno
 ;
 ; Locking:
-;   Acquires fd_lock only for fd/open-object lookup.
-;   Releases fd_lock before returning.
+;   Requires file_io_gate for fd/open-object lookup.
 ; ------------------------------------------------------------
 
 .proc fd_resolve_rw
     sta fd_flags_tmp
 
-    LOCK_ACQUIRE fd_lock
 
     ; Resolve fd -> open object.
     tya
@@ -1323,7 +1312,6 @@ fd_closeproc_fd:
 
     ; fd_lookup returns errno in Y.
     phy
-    LOCK_RELEASE fd_lock
     ply
     sec
     rts
@@ -1339,7 +1327,6 @@ fd_closeproc_fd:
     ; fd_check_perm returns errno in Y.
     plx                         ; discard saved open object
     phy
-    LOCK_RELEASE fd_lock
     ply
     sec
     rts
@@ -1350,7 +1337,7 @@ fd_closeproc_fd:
     ; Return object metadata.
     ;
     ; Preserve X across lock release by saving it. Preserve
-    ; returned A/Y across LOCK_RELEASE because the macro clobbers A.
+    ; returned A/Y across helper scratch use.
     lda open_type,x
     pha
 
@@ -1360,7 +1347,6 @@ fd_closeproc_fd:
     phx
     phy
 
-    LOCK_RELEASE fd_lock
 
     ply                         ; Y = device id
     plx                         ; X = open object
@@ -1392,34 +1378,31 @@ fd_closeproc_fd:
 ;   fd -> open object -> permission -> object type -> backend
 ;
 ; Notes:
-;   - FD lookup and permission check are protected by fd_lock.
+;   - FD lookup and permission check are protected by file_io_gate.
 ;   - Device backend is tail-called through dev_ptr.
-;   - Pipe backend is called after fd_lock is released.
+;   - Pipe backend is called while file_io_gate is held.
 ;   - pipe_ptr is a dedicated ZP pointer for pipe byte transfer.
 ; ------------------------------------------------------------
 
 .proc fd_read
-    ; Preserve requested length.
+    ; Preserve requested length before touching debug state.
     pha
     phx
 
-    LOCK_ACQUIRE fd_lock
+    ; DEBUG-BEGIN: temporary fd_read entry diagnostic
+    lda #DBG_FILE_IO_FD_READ_ENTER
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read entry diagnostic
 
-	; DEBUG-BEGIN: fd_read acquired fd_lock
-	lda current_pid
-	sta fd_lock_owner
-	; DEBUG-END: fd_read acquired fd_lock
-    
-	; Resolve fd -> open object.
+    ; Resolve fd -> open object.
+    ; DEBUG-BEGIN: temporary fd_read lookup-call diagnostic
+    lda #DBG_FILE_IO_FD_READ_LOOKUP_CALL
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read lookup-call diagnostic
+
     tya
     jsr fd_lookup
     bcc @fd_ok
-
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1427,8 +1410,18 @@ fd_closeproc_fd:
     rts
 
 @fd_ok:
+    ; DEBUG-BEGIN: temporary fd_read lookup-return diagnostic
+    lda #DBG_FILE_IO_FD_READ_LOOKUP_RET
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read lookup-return diagnostic
+
     ; Save open object across permission check.
     phx
+
+    ; DEBUG-BEGIN: temporary fd_read permission-call diagnostic
+    lda #DBG_FILE_IO_FD_READ_PERM_CALL
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read permission-call diagnostic
 
     lda #FD_FLAG_READ
     jsr fd_check_perm
@@ -1436,19 +1429,23 @@ fd_closeproc_fd:
 
     plx                         ; discard open object
 
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
-    
-	plx
+    plx
     pla
     sec
     rts
 
 @perm_ok:
+    ; DEBUG-BEGIN: temporary fd_read permission-return diagnostic
+    lda #DBG_FILE_IO_FD_READ_PERM_RET
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read permission-return diagnostic
+
     plx                         ; X = open object
+
+    ; DEBUG-BEGIN: temporary fd_read object-type diagnostic
+    lda #DBG_FILE_IO_FD_READ_TYPE
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read object-type diagnostic
 
     lda open_type,x
     cmp #OBJ_PIPE
@@ -1457,12 +1454,7 @@ fd_closeproc_fd:
     cmp #OBJ_DEVICE
     beq @device_ok
 
-    LOCK_RELEASE fd_lock
 
-	; DEBUG-BEGIN: fd_read releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1475,12 +1467,10 @@ fd_closeproc_fd:
     txa
     pha
 
-    LOCK_RELEASE fd_lock
-
-	; DEBUG-BEGIN: fd_read releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
+    ; DEBUG-BEGIN: temporary fd_read pipe-backend diagnostic
+    lda #DBG_FILE_IO_FD_READ_PIPE
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read pipe-backend diagnostic
 
     ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
     lda io_ptr
@@ -1498,15 +1488,15 @@ fd_closeproc_fd:
     jmp pipe_read
 
 @device_ok:
+    ; DEBUG-BEGIN: temporary fd_read device-backend diagnostic
+    lda #DBG_FILE_IO_FD_READ_DEV
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary fd_read device-backend diagnostic
+
     lda #DEVOP_READ
     jsr dev_resolve_op
     bcc @op_ok
 
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_read releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_read releasing fd_lock
 
     plx
     pla
@@ -1539,9 +1529,9 @@ fd_closeproc_fd:
 ;   fd -> open object -> permission -> object type -> backend
 ;
 ; Notes:
-;   - FD lookup and permission check are protected by fd_lock.
+;   - FD lookup and permission check are protected by file_io_gate.
 ;   - Device backend is tail-called through dev_ptr.
-;   - Pipe backend is called after fd_lock is released.
+;   - Pipe backend is called while file_io_gate is held.
 ;   - pipe_ptr is a dedicated ZP pointer for pipe byte transfer.
 ; ------------------------------------------------------------
 
@@ -1550,23 +1540,13 @@ fd_closeproc_fd:
     pha
     phx
 
-    LOCK_ACQUIRE fd_lock
 
-	; DEBUG-BEGIN: fd_write acquired fd_lock
-	lda current_pid
-	sta fd_lock_owner
-	; DEBUG-END: fd_write acquired fd_lock
 
     ; Resolve fd -> open object.
     tya
     jsr fd_lookup
     bcc @fd_ok
 
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_write releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1583,11 +1563,6 @@ fd_closeproc_fd:
 
     plx                         ; discard open object
 
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_write releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1604,11 +1579,6 @@ fd_closeproc_fd:
     cmp #OBJ_DEVICE
     beq @device_ok
 
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_write releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1621,11 +1591,6 @@ fd_closeproc_fd:
     txa
     pha
 
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_write releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_write releasing fd_lock
 
     ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
     lda io_ptr
@@ -1647,11 +1612,6 @@ fd_closeproc_fd:
     jsr dev_resolve_op
     bcc @op_ok
 
-    LOCK_RELEASE fd_lock
-	; DEBUG-BEGIN: fd_write releasing fd_lock
-	lda #$ff
-	sta fd_lock_owner
-	; DEBUG-END: fd_write releasing fd_lock
 
     plx
     pla
@@ -1754,7 +1714,7 @@ fd_closeproc_fd:
 ; fd_alloc_fd_current
 ;
 ; Caller:
-;   fd_lock held
+;   file_io_gate held by caller
 ;
 ; Output:
 ;   C clear = success, Y = fd
@@ -1784,9 +1744,8 @@ fd_closeproc_fd:
 ; ------------------------------------------------------------
 
 .proc fd_dup
-    pha                         ; preserve oldfd across LOCK_ACQUIRE
+    pha                         ; preserve oldfd across table setup
 
-    LOCK_ACQUIRE fd_lock
 
     pla                         ; A = oldfd
 
@@ -1794,7 +1753,6 @@ fd_closeproc_fd:
     jsr fd_lookup
     bcc @old_ok
 
-    LOCK_RELEASE fd_lock
 
     sec
     rts
@@ -1813,7 +1771,6 @@ fd_closeproc_fd:
 
     plx                         ; discard old object
 
-    LOCK_RELEASE fd_lock
 
     sec
     rts
@@ -1844,7 +1801,6 @@ fd_closeproc_fd:
     ; Recover new fd return value.
     ply                         ; Y = new fd
 
-    LOCK_RELEASE fd_lock
 
     tya                         ; A = new fd
     ldx #0
@@ -1880,10 +1836,10 @@ fd_closeproc_fd:
 ;             Y = errno
 ;
 ; Notes:
-;   - Validates newfd before taking fd_lock.
+;   - Validates newfd before table work.
 ;   - Validates oldfd before closing/replacing newfd.
 ;   - dup2(oldfd, oldfd) returns oldfd without changing refcounts.
-;   - fd_close_current is used because fd_lock is already held.
+;   - fd_close_current is used because file_io_gate is already held.
 ; ------------------------------------------------------------
 
 .proc fd_dup2
@@ -1898,7 +1854,6 @@ fd_closeproc_fd:
     pha                         ; preserve oldfd
     phy                         ; preserve newfd
 
-    LOCK_ACQUIRE fd_lock
 
     ply                         ; Y = newfd
     pla                         ; A = oldfd
@@ -1915,7 +1870,6 @@ fd_closeproc_fd:
     pla                         ; discard saved newfd
                                 ; preserve Y = errno from fd_lookup
 
-    LOCK_RELEASE fd_lock
 
     sec
     rts
@@ -1931,7 +1885,6 @@ fd_closeproc_fd:
     cpy fd_index_tmp
     bne @different
 
-    LOCK_RELEASE fd_lock
 
     tya
     ldx #0
@@ -1964,7 +1917,6 @@ fd_closeproc_fd:
     ply                         ; discard newfd
     plx                         ; discard old object
 
-    LOCK_RELEASE fd_lock
 
     sec
     rts
@@ -1983,7 +1935,6 @@ fd_closeproc_fd:
 
     ply                         ; Y = newfd
 
-    LOCK_RELEASE fd_lock
 
     tya                         ; A = newfd
     ldx #0

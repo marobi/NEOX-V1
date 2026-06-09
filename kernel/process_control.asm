@@ -7,6 +7,8 @@
 
 .include "scheduler_defs.inc"
 .include "process.inc"
+.include "debug.inc"
+.include "syscall.inc"
 .include "signal.inc"
 
 .export proc_find_free_pid
@@ -19,6 +21,9 @@
 .import sched_lock_leave
 .import fd_init_process
 .import fd_close_process
+.import file_io_gate_acquire
+.import file_io_gate_release
+.import file_io_gate_phase
 
 .import current_pid
 .import proc_state
@@ -139,8 +144,9 @@
     lda #EXIT_OK
     sta proc_exit_code,x
 
-    ; Initial resume mode.
-    lda #PROC_RESUME_RTS
+    ; Initial process frame format.  New processes are bootstrapped
+    ; once, then every saved runnable frame is RTI-compatible.
+    lda #PROC_FRAME_RTI
     sta proc_resume_mode,x
 
     ; Initial process flags.
@@ -189,9 +195,41 @@
     ; Store exit code while X still contains target PID.
     sta proc_exit_code,x
 
-    ; fd_close_process clobbers X.
+    ; fd_close_process touches FD/open-object/pipe state.
+    ; Acquire file_io_gate here because process termination is not
+    ; entered through ksys_io.asm.
+    phx
+    jsr file_io_gate_acquire
+    bcs @gate_acquired
+
+    ; DEBUG-BEGIN: temporary file-io-proc-term-acq-fail diagnostic
+    lda #DBG_FILE_IO_PROC_TERM_ACQ_FAIL
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary file-io-proc-term-acq-fail diagnostic
+    plx
+    rts
+
+@gate_acquired:
+    ; DEBUG-BEGIN: temporary file-io-proc-term-acq diagnostic
+    lda #DBG_FILE_IO_PROC_TERM_ACQ
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary file-io-proc-term-acq diagnostic
+
+    ; file_io_gate_acquire clobbers X with current_pid.
+    ; Restore the target PID before closing that process's FDs,
+    ; but keep it saved for the rest of proc_terminate.
+    plx
     phx
     jsr fd_close_process
+    php
+    pha
+    phx
+    phy
+    jsr file_io_gate_release
+    ply
+    plx
+    pla
+    plp
     plx
 
     ; Clear wait state.

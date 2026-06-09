@@ -57,46 +57,76 @@ rp_lock:
     .res 1
 
 ; ------------------------------------------------------------
-; FD/open-object table lock
+; File I/O syscall serialization gate
 ;
 ; Purpose:
-;   Protects FD tables and open-object tables.
+;   Serializes FD/open-object/pipe/console syscall paths:
+;     read, write, close, pipe, dup, dup2.
 ;
-; Rule:
-;   This lock must be short-lived.
-;   It must not be held across backend read/write dispatch.
+; Policy:
+;   This is a sleepable gate, not an IRQ-preemption blocker.
+;   It must not be held across sched_yield. A syscall that must
+;   block releases the gate, sets WAIT_LOCK / LOCK_ID_FILE_IO,
+;   yields, and retries.
+;
+; FIFO queue:
+;   file_io_gate_wait_head / tail hold waiting PIDs or $FF.
+;   file_io_gate_next[pid] links waiting PIDs.
 ; ------------------------------------------------------------
 
-.export fd_lock
+.export file_io_gate
+.export file_io_gate_owner
+.export file_io_gate_phase
+.export file_io_gate_wait_head
+.export file_io_gate_wait_tail
+.export file_io_gate_next
 
-fd_lock:
+.export proc_gate
+.export proc_gate_owner
+.export proc_gate_phase
+.export proc_gate_wait_head
+.export proc_gate_wait_tail
+.export proc_gate_next
+
+file_io_gate:
     .res 1
 
-; ------------------------------------------------------------
-; ksys_io_lock
-;
-; Purpose:
-;   Global serialization owner for ksys_read / ksys_write.
-;
-; Current policy:
-;   Protects one nonblocking read/write dispatch attempt.
-;
-; Important:
-;   This lock must not be held across backend waits/yields.
-;
-; Wait rule:
-;   A process that cannot acquire this lock must not spin.
-;   It blocks on:
-;
-;       WAIT_KSYS_IO, object 0
-;
-;   and calls sched_yield.
-; ------------------------------------------------------------
-
-.export ksys_io_lock
-
-ksys_io_lock:
+file_io_gate_owner:
     .res 1
+
+file_io_gate_phase:
+    .res 1
+
+file_io_gate_wait_head:
+    .res 1
+
+file_io_gate_wait_tail:
+    .res 1
+
+file_io_gate_next:
+    .res MAX_PROCS
+
+; Future process-management syscall gate.
+; The state is present now so the same generated gate primitive can
+; be build-tested before process syscalls are routed through it.
+
+proc_gate:
+    .res 1
+
+proc_gate_owner:
+    .res 1
+
+proc_gate_phase:
+    .res 1
+
+proc_gate_wait_head:
+    .res 1
+
+proc_gate_wait_tail:
+    .res 1
+
+proc_gate_next:
+    .res MAX_PROCS
 
 ; ------------------------------------------------------------
 ; Scheduler core state
@@ -126,9 +156,9 @@ ksys_io_lock:
 ;   Process characteristics flags.
 ;
 ; proc_resume_mode[pid]:
-;   Resume path for the saved stack:
-;     PROC_RESUME_RTI
-;     PROC_RESUME_RTS
+;   Debug/compatibility byte for the saved frame format.
+;   Only PROC_FRAME_RTI / PROC_RESUME_RTI is valid for runnable
+;   saved process stacks.
 ;
 ; proc_parent_pid[pid]:
 ;   PID of creator/owner process.
@@ -183,6 +213,11 @@ proc_signal_pending:
 ;   Preemption/scheduler guard.
 ;   This is not a general-purpose subsystem mutex.
 ;
+; sched_lock_owner / phase / depth / underflow:
+;   Monitor-visible diagnostics for scheduler-lock correctness.
+;   Owner is diagnostic only; scheduler handoff may enter in one
+;   process/context and leave in another.
+;
 ; console_owner_pid:
 ;   Identifies which process currently owns console input.
 ;   $FF = none / monitor-side default.
@@ -193,17 +228,33 @@ proc_signal_pending:
 ; active_context:
 ;   Actual MMU context currently executing on the 6502.
 ;   This is distinct from current_pid/proc_context because the
-;   scheduler may update current_pid before BIOS_CONTEXT_JUMP has
+;   scheduler may update current_pid before a context handoff has
 ;   completed the physical context switch.
 ; ------------------------------------------------------------
 ; ------------------------------------------------------------
 
 .export sched_lock
+.export sched_lock_owner
+.export sched_lock_phase
+.export sched_lock_depth
+.export sched_lock_underflow
 .export console_owner_pid
 .export monitor_active
 .export active_context
 
 sched_lock:
+    .res 1
+
+sched_lock_owner:
+    .res 1
+
+sched_lock_phase:
+    .res 1
+
+sched_lock_depth:
+    .res 1
+
+sched_lock_underflow:
     .res 1
 
 console_owner_pid:
@@ -268,10 +319,11 @@ open_dev:
 ;
 ; wait_reason[pid]:
 ;   WAIT_NONE, WAIT_CONSOLE, WAIT_DEVICE, WAIT_PIPE,
-;   WAIT_TIMER, WAIT_PROC, WAIT_KSYS_IO, ...
+;   WAIT_TIMER, WAIT_PROC, WAIT_LOCK, ...
 ;
 ; wait_object[pid]:
-;   reason-specific object id.
+;   reason-specific object id. For WAIT_LOCK this is one of
+;   LOCK_ID_FILE_IO / LOCK_ID_PROC.
 ; ------------------------------------------------------------
 
 .export wait_reason
@@ -387,9 +439,6 @@ init_task_ptr:
 ; ------------------------------------------------------------
 ; Pipe state
 ;
-; pipe_lock:
-;   Shared-memory lock byte.
-;
 ; pipe_state/head/tail/count/readers/writers:
 ;   Pipe metadata indexed by pipe id.
 ;
@@ -402,7 +451,6 @@ init_task_ptr:
 ;   Indexed by open object number.
 ; ------------------------------------------------------------
 
-.export pipe_lock
 .export pipe_state
 .export pipe_head
 .export pipe_tail
@@ -413,9 +461,6 @@ init_task_ptr:
 
 .export open_pipe
 .export open_pipe_mode
-
-pipe_lock:
-    .res 1
 
 pipe_state:
     .res MAX_PIPES
@@ -443,22 +488,6 @@ open_pipe:
 
 open_pipe_mode:
     .res OPEN_MAX
-
-; ------------------------------------------------------------
-; Scheduler global accounting
-;
-; sched_ticks_*:
-;   Total scheduler ticks.
-; ------------------------------------------------------------
-
-.export sched_ticks_lo
-.export sched_ticks_hi
-
-sched_ticks_lo:
-    .res 1
-
-sched_ticks_hi:
-    .res 1
 
 ; ============================================================
 ; RP-visible debug state
@@ -544,7 +573,6 @@ dbg_sched_saved_mode:
 
 .export dbg_sched_loaded_pid
 .export dbg_sched_loaded_sp
-.export dbg_sched_resume_mode
 
 dbg_sched_loaded_pid:
     .res 1
@@ -552,11 +580,12 @@ dbg_sched_loaded_pid:
 dbg_sched_loaded_sp:
     .res 1
 
-dbg_sched_resume_mode:
-    .res 1
-
+.export dbg_sched_resume_mode
 .export dbg_sched_resume_pid
 .export dbg_sched_resume_context
+
+dbg_sched_resume_mode:
+    .res 1
 
 dbg_sched_resume_pid:
     .res 1
@@ -593,27 +622,15 @@ dbg_proc_state_new:
 ; locks themselves.
 ; ------------------------------------------------------------
 
-.export ksys_io_owner
-.export fd_lock_owner
-.export pipe_lock_owner
 .export rp_lock_owner
-
-ksys_io_owner:
-    .res 1
-
-fd_lock_owner:
-    .res 1
-
-pipe_lock_owner:
-    .res 1
 
 rp_lock_owner:
     .res 1
 
 ; ------------------------------------------------------------
-; Ksys I/O debug fields
+; Sleepable gate debug fields
 ;
-; ksys_io_phase examples:
+; file_io_gate_phase examples:
 ;   $00 = idle
 ;   $11 = read acquired
 ;   $12 = read calling fd/backend
@@ -625,17 +642,14 @@ rp_lock_owner:
 ;   $24 = write releasing
 ; ------------------------------------------------------------
 
-.export ksys_io_phase
-.export dbg_io_wait_reason
-.export dbg_io_wait_object
+.export dbg_gate_wait_reason
+.export dbg_gate_wait_object
 
-ksys_io_phase:
+
+dbg_gate_wait_reason:
     .res 1
 
-dbg_io_wait_reason:
-    .res 1
-
-dbg_io_wait_object:
+dbg_gate_wait_object:
     .res 1
 
 ; ------------------------------------------------------------
@@ -666,3 +680,20 @@ dbg_timer_now_lo:
 
 dbg_timer_now_hi:
     .res 1
+
+; DEBUG-BEGIN: temporary IRQ preemption selection diagnostic storage
+.export dbg_irq_preempt_count
+.export dbg_irq_current_pid
+.export dbg_irq_selected_pid
+.export dbg_irq_saved_sp
+.export dbg_irq_loaded_sp
+.export dbg_irq_skip_reason
+
+dbg_irq_preempt_count: .res 1
+dbg_irq_current_pid:   .res 1
+dbg_irq_selected_pid:  .res 1
+dbg_irq_saved_sp:      .res 1
+dbg_irq_loaded_sp:     .res 1
+dbg_irq_skip_reason:   .res 1
+; DEBUG-END: temporary IRQ preemption selection diagnostic storage
+

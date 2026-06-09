@@ -21,8 +21,6 @@
 .import proc_exit_current
 .import sched_yield
 
-.import sched_handoff
-
 .import timer_start_current
 
 

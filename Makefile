@@ -72,6 +72,7 @@ SYSCALL_SRCS := \
 KERNEL_SRCS := \
 	kernel/zero_page.asm \
 	kernel/shared_state.asm \
+	kernel/gate.asm \
 	kernel/entry_table.asm \
 	kernel/main.asm \
 	kernel/irq.asm \

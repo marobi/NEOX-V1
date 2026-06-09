@@ -17,6 +17,7 @@
 
 .include "fd.inc"
 .include "pipe.inc"
+.include "debug.inc"
 .include "syscall.inc"
 .include "lock.inc"
 
@@ -31,7 +32,6 @@
 .export pipe_create
 .export pipe_create_between_fd
 
-.import fd_lock
 .import current_pid
 
 .import fd_alloc_open
@@ -44,7 +44,6 @@
 .import fd_attach_pid_fd_read
 .import fd_attach_pid_fd_write
 
-.import pipe_lock
 .import pipe_state
 .import pipe_head
 .import pipe_tail
@@ -59,15 +58,19 @@
 .importzp pipe_ptr
 .importzp pipe_buf_ptr
 
+.import file_io_gate_acquire
+.import file_io_gate_release
+.import file_io_gate_phase
+
 .segment "KERN_BSS"
 
 ; ------------------------------------------------------------
 ; Pipe-private scratch
 ;
-; These variables are protected by pipe_lock.
+; These variables are protected by file_io_gate.
 ;
 ; Rules:
-;   - valid only while pipe_lock is held
+;   - valid only while file_io_gate is held
 ;   - never live across sched_yield
 ;   - never live across a call into another backend subsystem
 ;   - pipe_read / pipe_write are nonblocking primitives
@@ -180,7 +183,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; ------------------------------------------------------------
 
 .proc pipe_init_tables
-    stz pipe_lock
 
     ldx #$00
 @clear_pipes:
@@ -230,9 +232,9 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;
 ; Notes:
 ;   - Reentrant: no module-global scratch.
-;   - fd_lock is held while FD/open-object state is allocated.
-;   - pipe_lock is held only while pipe table/endpoint state is touched.
-;   - pipe_close_endpoint is called only when pipe_lock is not held.
+;   - file_io_gate is held while FD/open-object state is allocated.
+;   - file_io_gate is held while pipe table/endpoint state is touched.
+;   - pipe_close_endpoint expects file_io_gate to be held.
 ; ------------------------------------------------------------
 
 .proc pipe_create
@@ -245,7 +247,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     pha                         ; read open object
     pha                         ; errno
 
-    LOCK_ACQUIRE fd_lock
 
     ; --------------------------------------------------------
     ; Allocate and initialize read endpoint open object.
@@ -297,7 +298,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ; Allocate pipe table entry and attach endpoint metadata.
     ; --------------------------------------------------------
 
-    LOCK_ACQUIRE pipe_lock
 
     jsr pipe_alloc
     bcc @pipe_ok
@@ -306,7 +306,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tsx
     sta $0101,x                 ; errno
 
-    LOCK_RELEASE pipe_lock
     jmp @fail_writeobj
 
 @pipe_ok:
@@ -336,7 +335,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ldy #PIPE_END_WRITE
     jsr pipe_endpoint_init
 
-    LOCK_RELEASE pipe_lock
 
     ; --------------------------------------------------------
     ; Allocate read fd and attach it.
@@ -402,7 +400,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ; Success.
     ; --------------------------------------------------------
 
-    LOCK_RELEASE fd_lock
 
     ; Save return values above the local frame.
     tsx
@@ -437,14 +434,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
 @fail_readfd:
     ; Undo read fd attachment.
-    ; fd_lock is still held.
+    ; file_io_gate is still held.
     tsx
     lda $0105,x
     jsr fd_detach_current
 
 @fail_endpoints:
-    ; No pipe_lock is held here.
-    ; pipe_close_endpoint acquires pipe_lock internally.
+    ; file_io_gate is held here.
+    ; pipe_close_endpoint expects file_io_gate to be held.
 
     tsx
     lda $0103,x                 ; write open object
@@ -480,7 +477,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jsr fd_free_open
 
 @fail_fdlock:
-    LOCK_RELEASE fd_lock
 
     ; Load errno before dropping frame.
     tsx
@@ -529,6 +525,49 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; ------------------------------------------------------------
 
 .proc pipe_create_between_fd
+    ; This entry-table helper can be called outside ksys_io.asm,
+    ; so it acquires file_io_gate itself.
+    pha
+    phx
+    phy
+    jsr file_io_gate_acquire
+    bcs @gate_acquired
+
+    ; DEBUG-BEGIN: temporary file-io-pipe-link-acq-fail diagnostic
+    lda #DBG_FILE_IO_PIPE_LINK_ACQ_FAIL
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary file-io-pipe-link-acq-fail diagnostic
+    ply
+    plx
+    pla
+    ldy #EINVAL
+    sec
+    rts
+
+@gate_acquired:
+    ; DEBUG-BEGIN: temporary file-io-pipe-link-acq diagnostic
+    lda #DBG_FILE_IO_PIPE_LINK_ACQ
+    sta file_io_gate_phase
+    ; DEBUG-END: temporary file-io-pipe-link-acq diagnostic
+    ply
+    plx
+    pla
+
+    jsr pipe_create_between_fd_inner
+
+    php
+    pha
+    phx
+    phy
+    jsr file_io_gate_release
+    ply
+    plx
+    pla
+    plp
+    rts
+.endproc
+
+.proc pipe_create_between_fd_inner
     ; Stack frame:
     ;   $0101,x = errno
     ;   $0102,x = pipe index
@@ -565,7 +604,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jmp @fail_frame
 
 @pids_ok:
-    LOCK_ACQUIRE fd_lock
 
     ; --------------------------------------------------------
     ; Validate reader fd is free.
@@ -656,12 +694,10 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ; Allocate pipe and initialize endpoint metadata.
     ; --------------------------------------------------------
 
-    LOCK_ACQUIRE pipe_lock
 
     jsr pipe_alloc
     bcc @pipe_ok
 
-    LOCK_RELEASE pipe_lock
 
     tya
     tsx
@@ -713,7 +749,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ldy #PIPE_END_WRITE
     jsr pipe_endpoint_init
 
-    LOCK_RELEASE pipe_lock
 
     ; --------------------------------------------------------
     ; Attach read endpoint to reader PID/fd.
@@ -736,7 +771,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jsr fd_attach_pid_fd_read
     bcc @read_attach_ok
 
-    ; Should be unreachable because fd_lock is still held and the
+    ; Should be unreachable because file_io_gate is still held and the
     ; fd slot was prechecked.
     tya
     tsx
@@ -765,7 +800,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jsr fd_attach_pid_fd_write
     bcc @write_attach_ok
 
-    ; Should be unreachable because fd_lock is still held and the
+    ; Should be unreachable because file_io_gate is still held and the
     ; fd slot was prechecked.
     tya
     tsx
@@ -773,7 +808,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jmp @fail_fd
 
 @write_attach_ok:
-    LOCK_RELEASE fd_lock
 
     ; Drop stack frame.
     pla                         ; errno
@@ -788,7 +822,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @fail_fd:
-    LOCK_RELEASE fd_lock
 
 @fail_frame:
     tsx
@@ -814,7 +847,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; Allocate a pipe table entry.
 ;
 ; Caller:
-;   must hold pipe_lock
+;   must hold file_io_gate
 ;
 ; Return:
 ;   C clear, A = pipe index
@@ -864,7 +897,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   A = pipe index
 ;
 ; Caller:
-;   must hold pipe_lock
+;   must hold file_io_gate
 ;
 ; Return:
 ;   C clear
@@ -895,7 +928,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   Y = PIPE_END_READ or PIPE_END_WRITE
 ;
 ; Caller:
-;   pipe_lock held
+;   file_io_gate held
 ;
 ; Return:
 ;   C clear
@@ -930,7 +963,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   C clear
 ;
 ; Locking:
-;   pipe_lock protects pipe-private scratch and pipe tables.
+;   file_io_gate protects pipe-private scratch and pipe tables.
 ;
 ; Notes:
 ;   - This does not touch proc_fd_obj/proc_fd_flags.
@@ -945,7 +978,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
 .proc pipe_close_endpoint
     sta pipe_obj
 
-    LOCK_ACQUIRE pipe_lock
 
     ldx pipe_obj
 
@@ -953,7 +985,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     cmp #PIPE_NONE
     bne @have_pipe
 
-    LOCK_RELEASE pipe_lock
     clc
     rts
 
@@ -998,7 +1029,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jsr pipe_free
 
 @done:
-    LOCK_RELEASE pipe_lock
 
     clc
     rts
@@ -1027,13 +1057,11 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   empty + no writers      -> EOF / 0 bytes
 ;
 ; Locking:
-;   pipe_lock protects pipe-private scratch and pipe tables.
+;   file_io_gate protects pipe-private scratch and pipe tables.
 ;
 ; Important:
-;   pipe-private scratch must not be written before pipe_lock
-;   is acquired. A preemptive IRQ could otherwise allow another
-;   process to enter pipe_read/pipe_write and overwrite the same
-;   scratch before this call owns the pipe subsystem.
+;   pipe-private scratch is safe because ksys_io owns file_io_gate
+;   before dispatching into the pipe backend.
 ;
 ; Clobbers:
 ;   A, X, Y, flags
@@ -1054,16 +1082,13 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @save_inputs:
-    ; Preserve call inputs across LOCK_ACQUIRE.
-    ; LOCK_ACQUIRE clobbers A/flags, and the subsystem scratch
-    ; cannot be used until pipe_lock is held.
+    ; Preserve call inputs before populating pipe-private scratch.
     pha                         ; requested length low
     phx                         ; requested length high
     phy                         ; open object
 
-    LOCK_ACQUIRE pipe_lock
 
-    ; Now it is safe to populate pipe-private scratch.
+    ; file_io_gate is already held by the syscall wrapper.
     ply
     sty pipe_obj
 
@@ -1110,7 +1135,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     lda pipe_writers,x
     bne @err_eagain
 
-    LOCK_RELEASE pipe_lock
 
     lda #$00
     tax
@@ -1169,15 +1193,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
     bra @read_loop
 
 @done:
-    ; Save return value across LOCK_RELEASE.
-    ; After releasing pipe_lock, pipe_done_* is no longer protected.
+    ; Save return value before restoring backend ABI registers.
+    ; Save pipe_done_* before returning through the backend ABI.
     lda pipe_done_lo
     pha
 
     lda pipe_done_hi
     pha
 
-    LOCK_RELEASE pipe_lock
 
     pla
     tax                         ; X = bytes read high
@@ -1187,14 +1210,12 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @err_ebadf:
-    LOCK_RELEASE pipe_lock
 
     ldy #EBADF
     sec
     rts
 
 @err_eagain:
-    LOCK_RELEASE pipe_lock
 
     ldy #EAGAIN
     sec
@@ -1225,13 +1246,11 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   full + some bytes written -> short success
 ;
 ; Locking:
-;   pipe_lock protects pipe-private scratch and pipe tables.
+;   file_io_gate protects pipe-private scratch and pipe tables.
 ;
 ; Important:
-;   pipe-private scratch must not be written before pipe_lock
-;   is acquired. A preemptive IRQ could otherwise allow another
-;   process to enter pipe_read/pipe_write and overwrite the same
-;   scratch before this call owns the pipe subsystem.
+;   pipe-private scratch is safe because ksys_io owns file_io_gate
+;   before dispatching into the pipe backend.
 ;
 ; Clobbers:
 ;   A, X, Y, flags
@@ -1252,16 +1271,13 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @save_inputs:
-    ; Preserve call inputs across LOCK_ACQUIRE.
-    ; LOCK_ACQUIRE clobbers A/flags, and the subsystem scratch
-    ; cannot be used until pipe_lock is held.
+    ; Preserve call inputs before populating pipe-private scratch.
     pha                         ; requested length low
     phx                         ; requested length high
     phy                         ; open object
 
-    LOCK_ACQUIRE pipe_lock
 
-    ; Now it is safe to populate pipe-private scratch.
+    ; file_io_gate is already held by the syscall wrapper.
     ply
     sty pipe_obj
 
@@ -1368,15 +1384,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
     bra @write_loop
 
 @done:
-    ; Save return value across LOCK_RELEASE.
-    ; After releasing pipe_lock, pipe_done_* is no longer protected.
+    ; Save return value before restoring backend ABI registers.
+    ; Save pipe_done_* before returning through the backend ABI.
     lda pipe_done_lo
     pha
 
     lda pipe_done_hi
     pha
 
-    LOCK_RELEASE pipe_lock
 
     pla
     tax                         ; X = bytes written high
@@ -1386,21 +1401,18 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @err_ebadf:
-    LOCK_RELEASE pipe_lock
 
     ldy #EBADF
     sec
     rts
 
 @err_eagain:
-    LOCK_RELEASE pipe_lock
 
     ldy #EAGAIN
     sec
     rts
 
 @err_epipe:
-    LOCK_RELEASE pipe_lock
 
     ldy #EPIPE
     sec

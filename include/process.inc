@@ -21,13 +21,16 @@ PROC_FLAG_IDLE          = $01
 PROC_FLAG_ATTACHED_CON  = $02
 
 ; ------------------------------------------------------------
-; Process resume mode
+; Process frame format
 ;
-; Defines how a saved process stack must be resumed.
+; All saved runnable process stacks use the IRQ-compatible
+; extended RTI frame:
+;     Y, X, A, P, PCL, PCH
+; PROC_FRAME_RTI is kept as the single monitor/debug value.
 ; ------------------------------------------------------------
 
-PROC_RESUME_RTI = $00
-PROC_RESUME_RTS = $01
+PROC_FRAME_RTI = $00
+PROC_RESUME_RTI = PROC_FRAME_RTI
 
 ; ------------------------------------------------------------
 ; Process wait reasons
@@ -43,14 +46,16 @@ WAIT_PIPE       = $03
 WAIT_TIMER      = $04
 WAIT_PROC       = $05
 
-; Global read/write syscall serialization wait.
+; Generic sleepable gate wait.
 ;
-; Used when a process wants to enter ksys_read / ksys_write but
-; another process already owns ksys_io_lock.
-;
-; wait_object = 0 for the current coarse global read/write lock.
-WAIT_KSYS_IO	= $06
+; wait_object identifies the gate object:
+;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+;   LOCK_ID_PROC    = future process-management syscall gate
+WAIT_LOCK       = $06
 
-EXIT_OK			= $00
+LOCK_ID_FILE_IO = $00
+LOCK_ID_PROC    = $01
+
+EXIT_OK         = $00
 
 .endif

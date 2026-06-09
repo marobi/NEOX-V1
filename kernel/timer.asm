@@ -47,8 +47,6 @@
 .import system_ticks_hi
 .import proc_ticks_lo
 .import proc_ticks_hi
-.import idle_ticks_lo
-.import idle_ticks_hi
 
 .segment "KERN_TEXT"
 
