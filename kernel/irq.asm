@@ -44,7 +44,6 @@
 
 .include "bios.inc"
 .include "mailbox.inc"
-.include "debug.inc"
 
 .export irq_entry
 .export nmi_entry
@@ -60,7 +59,6 @@
 .import monitor_active
 
 .import rp_lock
-
 .import file_io_gate
 .import proc_gate
 
@@ -127,62 +125,27 @@
     jmp supervisor_enter_from_irq	; must be JMP
 	
 @timer:
+    ; Freeze-style monitor:
+    ; timer IRQs are already acknowledged by BIOS_ACK_IRQ before
+    ; reaching this branch. While MICMON is active, do not advance
+    ; system_ticks and do not run scheduler tick accounting.
     lda monitor_active
-    beq @not_monitor
+    bne irq_restore
 
-    ; DEBUG-BEGIN: temporary IRQ preemption skipped by monitor flag
-    lda #DBG_IRQ_SKIP_MONITOR
-    sta dbg_irq_skip_reason
-    ; DEBUG-END: temporary IRQ preemption skipped by monitor flag
-    jmp irq_restore
-
-@not_monitor:
+    ; Count every hardware timer IRQ outside monitor mode.
     jsr scheduler_irq_tick
 
+    ; Only context-switch when no shared-scratch kernel region is active.
+    ; Preemptive model rule:
+    ;   file_io_gate/proc_gate protect module-global syscall scratch.
+    ;   Until that scratch is removed or made per-process, timer IRQ
+    ;   must not preempt into another syscall while a gate is owned.
     lda sched_lock
-    beq @sched_free
+    ora rp_lock
+    ora file_io_gate
+    ora proc_gate
+    bne irq_restore
 
-    ; DEBUG-BEGIN: temporary IRQ preemption skipped by sched_lock
-    lda #DBG_IRQ_SKIP_SCHED
-    sta dbg_irq_skip_reason
-    ; DEBUG-END: temporary IRQ preemption skipped by sched_lock
-    jmp irq_restore
-
-@sched_free:
-    lda rp_lock
-    beq @rp_free
-
-    ; DEBUG-BEGIN: temporary IRQ preemption skipped by rp_lock
-    lda #DBG_IRQ_SKIP_RP
-    sta dbg_irq_skip_reason
-    ; DEBUG-END: temporary IRQ preemption skipped by rp_lock
-    jmp irq_restore
-
-@rp_free:
-    lda file_io_gate
-    beq @fileio_free
-
-    ; DEBUG-BEGIN: temporary IRQ preemption skipped by file_io_gate
-    lda #DBG_IRQ_SKIP_FILEIO
-    sta dbg_irq_skip_reason
-    ; DEBUG-END: temporary IRQ preemption skipped by file_io_gate
-    jmp irq_restore
-
-@fileio_free:
-    lda proc_gate
-    beq @preempt
-
-    ; DEBUG-BEGIN: temporary IRQ preemption skipped by proc_gate
-    lda #DBG_IRQ_SKIP_PROC
-    sta dbg_irq_skip_reason
-    ; DEBUG-END: temporary IRQ preemption skipped by proc_gate
-    jmp irq_restore
-
-@preempt:
-    ; DEBUG-BEGIN: temporary IRQ preemption entered scheduler
-    lda #DBG_IRQ_ENTER_SWITCH
-    sta dbg_irq_skip_reason
-    ; DEBUG-END: temporary IRQ preemption entered scheduler
     jmp sched_context_switch
 .endproc
 

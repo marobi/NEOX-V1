@@ -3,33 +3,39 @@
 ; NEOX - scheduler preemption guard helpers
 ;
 ; Purpose:
-;   Provides the small helper routines used to prevent timer-IRQ
-;   driven preemption while the kernel is inside a scheduler-
-;   critical section.
+;   Provides the small non-sleeping guard used to prevent timer-
+;   IRQ driven preemption while the kernel is inside scheduler-
+;   critical state.
 ;
 ; Model:
-;   - sched_lock is the real preemption guard counter.
-;   - sched_lock_depth mirrors the intended nesting depth for
-;     monitor/debug validation.
-;   - sched_lock_owner is diagnostic only.  It is not enforced
-;     because a scheduler handoff may enter the guard in one
-;     process/context and leave it after selecting another.
-;   - underflow/overflow are recorded, not trapped, so the RP
-;     monitor remains usable.
+;   - sched_lock bit 0 is the real guard bit.
+;   - sched_lock_try_enter uses W65C02 TSB to test-and-set bit 0.
+;   - C clear on return means this caller acquired the guard.
+;   - C set on return means the guard was already held; the caller
+;     must not enter scheduler-critical code and must not call leave.
+;   - sched_lock_leave uses W65C02 TRB to clear bit 0.
+;   - This is deliberately not a FIFO/sleepable gate. The scheduler
+;     cannot block on itself and IRQ handlers cannot sleep/yield.
+;   - This lock is not recursive.
+;   - sched_lock_depth is diagnostic only: 0 = unlocked, 1 = locked.
 ;
-; Usage rule:
-;   Every sched_lock_enter must be balanced by a corresponding
-;   sched_lock_leave on all exit paths.
+; IRQ semantics:
+;   - On successful try_enter, IRQ remains masked until leave or a
+;     final BIOS handoff. This is the scheduler no-preemption window.
+;   - On busy try_enter, the caller's previous P is restored and C=1
+;     is returned.
+;   - leave preserves the caller's A and P, including the caller's I
+;     flag state.
 ; ============================================================
 
 .setcpu "65C02"
 
 .include "debug.inc"
 
-.export sched_lock_enter
+.export sched_lock_try_enter
 .export sched_lock_leave
 
-.import current_pid
+.import active_pid
 .import sched_debug_marker
 .import sched_lock
 .import sched_lock_owner
@@ -37,42 +43,38 @@
 .import sched_lock_depth
 .import sched_lock_underflow
 
+SCHED_LOCK_BIT = $01
+
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
-; sched_lock_enter
+; sched_lock_try_enter
 ;
-; Enter a scheduler-critical section.
+; Try to enter a scheduler-critical section.
 ;
-; Preserves: A, X, Y, P
+; Return:
+;   C clear = acquired; IRQ is masked and remains masked.
+;   C set   = busy; caller did not acquire and must not leave.
+;
+; Clobbers: A, P
+; Preserves: X, Y
 ; ------------------------------------------------------------
 
-.proc sched_lock_enter
+.proc sched_lock_try_enter
     php
-    pha
-    phx
-    phy
+    sei
 
-    lda sched_lock
-    beq @outermost
+    lda #SCHED_LOCK_BIT
+    tsb sched_lock
+    bne @busy
 
-    cmp #$ff
-    beq @overflow
-
-    inc sched_lock
-    inc sched_lock_depth
-
-    ; DEBUG-BEGIN: temporary scheduler lock nested-entry diagnostic
-    lda #DBG_SCHED_LOCK_NESTED
-    sta sched_lock_phase
-    ; DEBUG-END: temporary scheduler lock nested-entry diagnostic
-    bra @done
-
-@outermost:
-    inc sched_lock
+    ; The lock is now owned by this caller.  Discard the saved P
+    ; instead of PLP: restoring P here would re-enable IRQs inside
+    ; the scheduler critical section.
+    pla
 
     ; DEBUG-BEGIN: temporary scheduler lock owner/enter diagnostic
-    lda current_pid
+    lda active_pid
     sta sched_lock_owner
 
     lda #DBG_SCHED_LOCK_ENTER
@@ -81,22 +83,24 @@
     lda #$01
     sta sched_lock_depth
     ; DEBUG-END: temporary scheduler lock owner/enter diagnostic
-    bra @done
 
-@overflow:
-    ; DEBUG-BEGIN: temporary scheduler lock overflow diagnostic
+    clc
+    rts
+
+@busy:
+    ; The bit was already set before TSB.  Keep IRQ masked while the
+    ; busy diagnostic is recorded, then restore the caller's P because
+    ; this caller did not acquire the scheduler guard.
+    ; DEBUG-BEGIN: temporary scheduler lock busy diagnostic
     lda #DBG_MARK_SCHED_LOCK_OVERFLOW
     sta sched_debug_marker
 
     lda #DBG_SCHED_LOCK_NESTED
     sta sched_lock_phase
-    ; DEBUG-END: temporary scheduler lock overflow diagnostic
+    ; DEBUG-END: temporary scheduler lock busy diagnostic
 
-@done:
-    ply
-    plx
-    pla
     plp
+    sec
     rts
 .endproc
 
@@ -105,53 +109,35 @@
 ;
 ; Leave a scheduler-critical section.
 ;
+; Contract:
+;   Only callers that received C clear from sched_lock_try_enter may
+;   call this routine.
+;
 ; Preserves: A, X, Y, P
 ; ------------------------------------------------------------
 
 .proc sched_lock_leave
     php
     pha
-    phx
-    phy
+    sei
 
     lda sched_lock
+    and #SCHED_LOCK_BIT
     beq @underflow
 
-    dec sched_lock
+    lda #SCHED_LOCK_BIT
+    trb sched_lock
 
-    lda sched_lock_depth
-    beq @depth_underflow
-
-    dec sched_lock_depth
-    lda sched_lock_depth
-    beq @released_outermost
-
-    ; DEBUG-BEGIN: temporary scheduler lock nested-leave diagnostic
-    lda #DBG_SCHED_LOCK_LEAVE
-    sta sched_lock_phase
-    ; DEBUG-END: temporary scheduler lock nested-leave diagnostic
-    bra @done
-
-@released_outermost:
     ; DEBUG-BEGIN: temporary scheduler lock outer-release diagnostic
     lda #DBG_OWNER_NONE
     sta sched_lock_owner
+
     stz sched_lock_phase
+    stz sched_lock_depth
     ; DEBUG-END: temporary scheduler lock outer-release diagnostic
     bra @done
 
-@depth_underflow:
-    ; The real lock byte was nonzero, but the diagnostic depth was
-    ; already zero.  Record this as underflow and leave the decremented
-    ; real lock byte in place.
-    jsr @record_underflow
-    bra @done
-
 @underflow:
-    jsr @record_underflow
-    bra @done
-
-@record_underflow:
     ; DEBUG-BEGIN: temporary scheduler lock underflow diagnostic
     lda #DBG_MARK_SCHED_LOCK_UNDERFLOW
     sta sched_debug_marker
@@ -159,17 +145,15 @@
     lda #DBG_SCHED_LOCK_BAD_LEAVE
     sta sched_lock_phase
 
+    stz sched_lock_depth
+
     lda sched_lock_underflow
     cmp #$ff
-    beq @uf_done
+    beq @done
     inc sched_lock_underflow
     ; DEBUG-END: temporary scheduler lock underflow diagnostic
-@uf_done:
-    rts
 
 @done:
-    ply
-    plx
     pla
     plp
     rts

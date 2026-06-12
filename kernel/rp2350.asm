@@ -47,8 +47,6 @@
 
 .import rp_lock
 
-.import sched_lock_enter
-.import sched_lock_leave
 
 .segment "KERN_TEXT"
 

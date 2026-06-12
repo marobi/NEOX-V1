@@ -102,9 +102,7 @@ t1_read_args:
     sta t1_wr_stdout_args + rw_args::len
     stz t1_wr_stdout_args + rw_args::len + 1
 
-    ldx #<t1_wr_stdout_args
-    ldy #>t1_wr_stdout_args
-    jsr sys_write
+    SYSCALL t1_wr_stdout_args, sys_write
     rts
 .endproc
 
@@ -318,9 +316,7 @@ t1_read_args:
 
 .proc t1_write_ping
 @again:
-    ldx #<t1_write_args
-    ldy #>t1_write_args
-    jsr sys_write
+    SYSCALL t1_write_args, sys_write
     bcc @ok
 
     cpy #EAGAIN
@@ -357,9 +353,7 @@ t1_read_args:
 
 .proc t1_read_pong
 @again:
-    ldx #<t1_read_args
-    ldy #>t1_read_args
-    jsr sys_read
+    SYSCALL t1_read_args, sys_read
     bcc @ok
 
     cpy #EAGAIN

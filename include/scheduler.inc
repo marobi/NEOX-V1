@@ -15,7 +15,8 @@ __SCHEDULER_INC__ = 1
 .import sched_context_switch
 .import sched_yield
 
-.import current_pid
+.import active_pid
+.import sched_cursor_pid
 .import proc_state
 .import proc_context
 .import proc_sp

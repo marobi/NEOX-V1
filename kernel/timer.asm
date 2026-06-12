@@ -31,7 +31,7 @@
 .export timer_start_current
 .export scheduler_wake_timers
 
-.import current_pid
+.import active_pid
 .import proc_state
 .import wait_reason
 
@@ -47,6 +47,8 @@
 .import system_ticks_hi
 .import proc_ticks_lo
 .import proc_ticks_hi
+.import idle_ticks_lo
+.import idle_ticks_hi
 
 .segment "KERN_TEXT"
 
@@ -147,7 +149,7 @@
 ;   C set   = no timer slot available
 ;
 ; Purpose:
-;   Allocate a timer slot for current_pid and block the current
+;   Allocate a timer slot for active_pid and block the current
 ;   process until:
 ;
 ;       system_ticks + A
@@ -162,17 +164,21 @@
 ; ------------------------------------------------------------
 
 .proc timer_start_current
-    ; Preserve requested duration and caller IRQ state.
-    pha
+    ; Preemptive model rule:
+    ;   protect the complete timer/process-state transaction before
+    ;   the first stack/scratch/shared-state operation that matters.
+    ;   The requested duration is kept on the current task stack while
+    ;   IRQs are disabled; no module-global scratch is used here.
     php
     sei
+    pha                         ; saved duration, above saved P
 
     jsr timer_alloc
     bcc @slot_ok
 
-    ; No slot available.
-    plp
+    ; No slot available: discard saved duration and restore caller P.
     pla
+    plp
     sec
     rts
 
@@ -182,12 +188,12 @@
     tay
 
     ; Mark timer slot as owned by current process.
-    lda current_pid
+    lda active_pid
     sta timer_pid,x
 
     ; Compute absolute wake tick:
     ;   wake = system_ticks + duration
-    pla
+    pla                         ; A = saved duration
     clc
     adc system_ticks_lo
     sta timer_until_lo,x
@@ -199,12 +205,19 @@
     ; Block current process on WAIT_TIMER while IRQs are still
     ; disabled. This prevents a timer IRQ from freeing the slot
     ; before the process is visibly blocked.
-    ldx current_pid
+    ldx active_pid
     lda #WAIT_TIMER
     ; Y already contains timer slot.
     jsr proc_set_wait
 
-    plp
+    ; Success path intentionally keeps IRQs disabled for the immediate
+    ; handoff in ksys_sleep:
+    ;       jsr timer_start_current
+    ;       jmp sched_yield
+    ; Restoring caller P here would create a preemption window where
+    ; active_pid is already PROC_BLOCKED but has not entered the
+    ; scheduler handoff yet.
+    pla                         ; discard saved caller P byte
     clc
     rts
 .endproc

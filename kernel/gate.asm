@@ -28,7 +28,7 @@
 .export proc_gate_acquire
 .export proc_gate_release
 
-.import current_pid
+.import active_pid
 .import proc_set_wait
 .import proc_wake
 .import sched_yield
@@ -168,9 +168,9 @@
 ;
 ; Behavior:
 ;   If the gate is free, acquire it and return.
-;   If another PID owns it, enqueue current_pid FIFO, block on
+;   If another PID owns it, enqueue active_pid FIFO, block on
 ;   WAIT_LOCK / lock_id, yield, and retry when woken.
-;   If current_pid already owns it, trap.
+;   If active_pid already owns it, trap.
 ;
 ; Return:
 ;   C set = acquired
@@ -187,12 +187,12 @@
 
     ; DEBUG-BEGIN: detect recursive sleepable gate acquire
     lda owner_byte
-    cmp current_pid
+    cmp active_pid
     bne @wait_for_owner
 
     lda #DBG_MARK_GATE_RECURSE
     sta sched_debug_marker
-    lda current_pid
+    lda active_pid
     sta sched_debug_pid
 
     ; Do not hard-hang the system here.  A recursive acquire is
@@ -205,7 +205,7 @@
     ; DEBUG-END: detect recursive sleepable gate acquire
 
 @wait_for_owner:
-    ldx current_pid
+    ldx active_pid
     jsr enqueue_proc
 
     lda #WAIT_LOCK
@@ -222,7 +222,7 @@
     bra @retry
 
 @acquired:
-    ldx current_pid
+    ldx active_pid
     stx owner_byte
 
     plp
@@ -245,13 +245,13 @@
 
     ; DEBUG-BEGIN: detect invalid sleepable gate release
     lda owner_byte
-    cmp current_pid
+    cmp active_pid
     beq @owner_ok
 
     ; DEBUG-BEGIN: temporary gate release diagnostic
     lda #DBG_MARK_GATE_RELEASE
     sta sched_debug_marker
-    lda current_pid
+    lda active_pid
     sta sched_debug_pid
     ; DEBUG-END: temporary gate release diagnostic
 

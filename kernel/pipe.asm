@@ -32,7 +32,7 @@
 .export pipe_create
 .export pipe_create_between_fd
 
-.import current_pid
+.import active_pid
 
 .import fd_alloc_open
 .import fd_free_open
@@ -212,7 +212,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; ------------------------------------------------------------
 ; pipe_create
 ;
-; Create an anonymous pipe for current_pid.
+; Create an anonymous pipe for active_pid.
 ;
 ; Return:
 ;   C clear = success

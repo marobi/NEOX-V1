@@ -21,15 +21,14 @@
 .export leave_monitor
 .export supervisor_enter_from_irq
 
-.import current_pid
+.import active_pid
 .import active_context
 
 .import console_monitor_enter
 .import console_monitor_exit
 
-.import sched_lock_enter
+.import sched_lock_try_enter
 .import sched_lock_leave
-
 .import irq_restore
 
 MONITOR_CONTEXT     = $00
@@ -63,16 +62,15 @@ supervisor_saved_return_mode:
 ;   irq_entry has already pushed A, X, Y.
 ;   Below that is the hardware IRQ return frame.
 ;
-; The saved return context is active_context, not
-; proc_context[current_pid]. During scheduler handoff current_pid
-; may already point to the selected process while the CPU is still
-; executing in the previous context.
+; The saved return context is active_context, not a lookup
+; through scheduler cursor state. active_pid is the interrupted
+; process identity at this boundary.
 ; ------------------------------------------------------------
 
 .proc supervisor_enter_from_irq
     sei
 
-    ldy current_pid
+    ldy active_pid
     sty supervisor_saved_pid
 
     lda active_context
@@ -84,18 +82,27 @@ supervisor_saved_return_mode:
     lda #SUP_RETURN_IRQ
     sta supervisor_saved_return_mode
 
-    jsr sched_lock_enter
+    jsr sched_lock_try_enter
+    bcs @busy_restore_irq
 
     jsr console_monitor_enter
 
     ; The interrupted context was saved in supervisor_saved_context.
     ; From this point the active execution context becomes MICMON.
+    ; Publish PID 0 together with context 0 so monitor-side ps never
+    ; observes an impossible user PID / supervisor-context pair.
+    stz active_pid
     lda #MONITOR_CONTEXT
     sta active_context
 
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
     jmp BIOS_CONTEXT_JUMP
+
+@busy_restore_irq:
+    ; sched_lock was already held.  Do not enter monitor from inside
+    ; a scheduler-critical section; restore the interrupted context.
+    jmp irq_restore
 .endproc
 
 ; ------------------------------------------------------------
@@ -108,7 +115,7 @@ supervisor_saved_return_mode:
 ; ------------------------------------------------------------
 
 .proc enter_monitor
-    ldy current_pid
+    ldy active_pid
     sty supervisor_saved_pid
 
     lda active_context
@@ -120,18 +127,27 @@ supervisor_saved_return_mode:
     lda #SUP_RETURN_RTS
     sta supervisor_saved_return_mode
 
-    jsr sched_lock_enter
+    jsr sched_lock_try_enter
+    bcs @busy_rts
 
     jsr console_monitor_enter
 
     ; The return context was saved in supervisor_saved_context.
     ; From this point the active execution context becomes MICMON.
+    ; Publish PID 0 together with context 0 so monitor-side ps never
+    ; observes an impossible user PID / supervisor-context pair.
+    stz active_pid
     lda #MONITOR_CONTEXT
     sta active_context
 
     ldx #<MONITOR_ENTRY
     ldy #>MONITOR_ENTRY
     jmp BIOS_CONTEXT_JUMP
+
+@busy_rts:
+    ; Manual monitor entry cannot proceed while scheduler state is
+    ; locked.  The try-lock restored the caller's P on failure.
+    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -158,6 +174,8 @@ supervisor_saved_return_mode:
     beq @return_irq
 
 @return_rts:
+    lda supervisor_saved_pid
+    sta active_pid
     lda supervisor_saved_context
     sta active_context
     ldx #<resume_rts_from_monitor
@@ -165,6 +183,8 @@ supervisor_saved_return_mode:
     jmp BIOS_CONTEXT_JUMP
 
 @return_irq:
+    lda supervisor_saved_pid
+    sta active_pid
     lda supervisor_saved_context
     sta active_context
     ldx #<irq_restore

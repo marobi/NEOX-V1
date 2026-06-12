@@ -29,7 +29,7 @@
 .export console_monitor_enter
 .export console_monitor_exit
 
-.import current_pid
+.import active_pid
 .import sched_lock
 .import console_owner_pid
 
@@ -143,7 +143,7 @@ console_ops:
     cmp #$FF
     bne @owner_known
 
-    lda current_pid
+    lda active_pid
     cmp #IDLE_PID
     beq @zero_read
 
@@ -151,7 +151,7 @@ console_ops:
     bra @owner_ok
 
 @owner_known:
-    cmp current_pid
+    cmp active_pid
     bne @zero_read
 
 @owner_ok:

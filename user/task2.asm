@@ -80,9 +80,8 @@ t2_write_args:
     sta t2_wr_stdout_args + rw_args::len
     stz t2_wr_stdout_args + rw_args::len + 1
 
-    ldx #<t2_wr_stdout_args
-    ldy #>t2_wr_stdout_args
-    jmp sys_write
+    SYSCALL t2_wr_stdout_args, sys_write
+    rts
 .endproc
 
 .proc t2_print_start
@@ -108,9 +107,7 @@ t2_write_args:
 
 .proc t2_read_ping
 @again:
-    ldx #<t2_read_args
-    ldy #>t2_read_args
-    jsr sys_read
+    SYSCALL t2_read_args, sys_read
     bcc @ok
 
     cpy #EAGAIN
@@ -161,9 +158,7 @@ t2_write_args:
 
 .proc t2_write_pong
 @again:
-    ldx #<t2_write_args
-    ldy #>t2_write_args
-    jsr sys_write
+    SYSCALL t2_write_args, sys_write
     bcc @ok
 
     cpy #EAGAIN

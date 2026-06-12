@@ -150,4 +150,37 @@ DBG_IRQ_ENTER_SWITCH = $06
 .import dbg_irq_skip_reason
 ; DEBUG-END: temporary IRQ preemption selection diagnostic imports
 
+
+; DEBUG-BEGIN: temporary pingpong read return diagnostic imports
+.import dbg_read_ret_pid
+.import dbg_read_ret_fd
+.import dbg_read_ret_len_lo
+.import dbg_read_ret_len_hi
+.import dbg_read_ret_carry
+.import dbg_read_ret_lo
+.import dbg_read_ret_hi
+.import dbg_read_ret_errno
+.import dbg_read_ret_phase
+; DEBUG-END: temporary pingpong read return diagnostic imports
+
+; DEBUG-BEGIN: temporary scheduler final handoff frame snapshot imports
+.import dbg_handoff_pid
+.import dbg_handoff_context
+.import dbg_handoff_sp
+.import dbg_handoff_p
+.import dbg_handoff_pcl
+.import dbg_handoff_pch
+.import dbg_handoff_src
+; DEBUG-END: temporary scheduler final handoff frame snapshot imports
+
+; DEBUG-BEGIN: temporary scheduler save-time private-stack frame snapshot imports
+.import dbg_save_frame_pid
+.import dbg_save_frame_context
+.import dbg_save_frame_sp
+.import dbg_save_frame_p
+.import dbg_save_frame_pcl
+.import dbg_save_frame_pch
+.import dbg_save_frame_src
+; DEBUG-END: temporary scheduler save-time private-stack frame snapshot imports
+
 .endif

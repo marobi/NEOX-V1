@@ -131,8 +131,12 @@ proc_gate_next:
 ; ------------------------------------------------------------
 ; Scheduler core state
 ;
-; current_pid:
-;   PID of the currently active context.
+; active_pid:
+;   PID whose CPU/MMU context is actually executing.
+;
+; sched_cursor_pid:
+;   Scheduler-local round-robin cursor / last selected PID.
+;   It must not be used as caller identity.
 ;
 ; proc_state[pid]:
 ;   Process lifecycle / scheduler state:
@@ -165,7 +169,8 @@ proc_gate_next:
 ;   $FF = no parent / kernel-owned.
 ; ------------------------------------------------------------
 
-.export current_pid
+.export active_pid
+.export sched_cursor_pid
 .export proc_state
 .export proc_context
 .export proc_sp
@@ -176,7 +181,10 @@ proc_gate_next:
 .export proc_parent_pid
 .export proc_signal_pending
 
-current_pid:
+active_pid:
+    .res 1
+
+sched_cursor_pid:
     .res 1
 
 proc_state:
@@ -210,13 +218,18 @@ proc_signal_pending:
 ; Scheduler / monitor state
 ;
 ; sched_lock:
-;   Preemption/scheduler guard.
-;   This is not a general-purpose subsystem mutex.
+;   Non-sleeping scheduler preemption guard. Bit 0 is acquired with
+;   W65C02 TSB by sched_lock_try_enter and cleared with TRB by
+;   sched_lock_leave.  Try-enter returns C clear only when this caller
+;   acquired the bit; callers must not enter scheduler-critical code
+;   or call leave when C is set.  This is not a FIFO gate and must
+;   never block or yield.  It is deliberately non-recursive.
 ;
 ; sched_lock_owner / phase / depth / underflow:
 ;   Monitor-visible diagnostics for scheduler-lock correctness.
 ;   Owner is diagnostic only; scheduler handoff may enter in one
-;   process/context and leave in another.
+;   process/context and leave after another PID has been selected.
+;   Depth is diagnostic only: 0 = unlocked, 1 = locked.
 ;
 ; console_owner_pid:
 ;   Identifies which process currently owns console input.
@@ -227,9 +240,8 @@ proc_signal_pending:
 ;
 ; active_context:
 ;   Actual MMU context currently executing on the 6502.
-;   This is distinct from current_pid/proc_context because the
-;   scheduler may update current_pid before a context handoff has
-;   completed the physical context switch.
+;   This is paired with active_pid and changes only at the
+;   final scheduler/context handoff boundary.
 ; ------------------------------------------------------------
 ; ------------------------------------------------------------
 
@@ -696,4 +708,62 @@ dbg_irq_saved_sp:      .res 1
 dbg_irq_loaded_sp:     .res 1
 dbg_irq_skip_reason:   .res 1
 ; DEBUG-END: temporary IRQ preemption selection diagnostic storage
+
+; DEBUG-BEGIN: temporary pingpong read return diagnostic storage
+.export dbg_read_ret_pid
+.export dbg_read_ret_fd
+.export dbg_read_ret_len_lo
+.export dbg_read_ret_len_hi
+.export dbg_read_ret_carry
+.export dbg_read_ret_lo
+.export dbg_read_ret_hi
+.export dbg_read_ret_errno
+.export dbg_read_ret_phase
+
+dbg_read_ret_pid:    .res 1
+dbg_read_ret_fd:     .res 1
+dbg_read_ret_len_lo: .res 1
+dbg_read_ret_len_hi: .res 1
+dbg_read_ret_carry:  .res 1
+dbg_read_ret_lo:     .res 1
+dbg_read_ret_hi:     .res 1
+dbg_read_ret_errno:  .res 1
+dbg_read_ret_phase:  .res 1
+; DEBUG-END: temporary pingpong read return diagnostic storage
+
+; DEBUG-BEGIN: temporary scheduler final handoff frame snapshot
+.export dbg_handoff_pid
+.export dbg_handoff_context
+.export dbg_handoff_sp
+.export dbg_handoff_p
+.export dbg_handoff_pcl
+.export dbg_handoff_pch
+.export dbg_handoff_src
+
+dbg_handoff_pid:     .res 1
+dbg_handoff_context: .res 1
+dbg_handoff_sp:      .res 1
+dbg_handoff_p:       .res 1
+dbg_handoff_pcl:     .res 1
+dbg_handoff_pch:     .res 1
+dbg_handoff_src:     .res 1
+; DEBUG-END: temporary scheduler final handoff frame snapshot
+
+; DEBUG-BEGIN: temporary scheduler save-time private-stack frame snapshot
+.export dbg_save_frame_pid
+.export dbg_save_frame_context
+.export dbg_save_frame_sp
+.export dbg_save_frame_p
+.export dbg_save_frame_pcl
+.export dbg_save_frame_pch
+.export dbg_save_frame_src
+
+dbg_save_frame_pid:     .res 1
+dbg_save_frame_context: .res 1
+dbg_save_frame_sp:      .res 1
+dbg_save_frame_p:       .res 1
+dbg_save_frame_pcl:     .res 1
+dbg_save_frame_pch:     .res 1
+dbg_save_frame_src:     .res 1
+; DEBUG-END: temporary scheduler save-time private-stack frame snapshot
 

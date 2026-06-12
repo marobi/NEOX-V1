@@ -55,7 +55,8 @@
 .import tasks_init
 .import idle_loop
 
-.import current_pid
+.import active_pid
+.import sched_cursor_pid
 .import console_owner_pid
 .import proc_state
 
@@ -146,7 +147,8 @@
     ; Mark IDLE_PID execution 
     ; --------------------------------------------------------
     ldx #IDLE_PID
-    stx current_pid
+    stx active_pid
+    stx sched_cursor_pid
 	
     lda #PROC_RUNNING
     sta proc_state,x

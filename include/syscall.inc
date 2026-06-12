@@ -112,6 +112,11 @@ RW_ARGS_SIZE = .sizeof(rw_args)
 ; ------------------------------------------------------------
 
 .macro SYSCALL argblk, entry
+    ; Keep the register argument pointer stable across the tiny
+    ; user-side setup window. The kernel read/write wrapper copies
+    ; the argument block immediately and re-enables IRQs after that
+    ; snapshot, before taking file_io_gate.
+    sei
     ldx #<argblk
     ldy #>argblk
     jsr entry

@@ -17,7 +17,7 @@
 .export proc_send_signal
 .export proc_apply_signal
 
-.import sched_lock_enter
+.import sched_lock_try_enter
 .import sched_lock_leave
 .import fd_init_process
 .import fd_close_process
@@ -25,7 +25,7 @@
 .import file_io_gate_release
 .import file_io_gate_phase
 
-.import current_pid
+.import active_pid
 .import proc_state
 .import proc_context
 .import proc_sp
@@ -108,7 +108,8 @@
     jsr proc_find_free_pid
     bcc @fail
 
-    jsr sched_lock_enter
+    jsr sched_lock_try_enter
+    bcs @fail
 
     ; Save MMU context id.
     ldy #proc_create_args::context
@@ -125,7 +126,7 @@
     sta proc_entryH,x
 
     ; Record parent PID.
-    lda current_pid
+    lda active_pid
     sta proc_parent_pid,x
 
     ; Initial task stack.
@@ -215,7 +216,7 @@
     sta file_io_gate_phase
     ; DEBUG-END: temporary file-io-proc-term-acq diagnostic
 
-    ; file_io_gate_acquire clobbers X with current_pid.
+    ; file_io_gate_acquire clobbers X with active_pid.
     ; Restore the target PID before closing that process's FDs,
     ; but keep it saved for the rest of proc_terminate.
     plx

@@ -49,7 +49,7 @@
 
 ;---------------------------------------------------
 
-.import current_pid
+.import active_pid
 
 .importzp io_ptr
 
@@ -266,7 +266,7 @@ fd_closeproc_fd:
 .proc fd_attach_current
     sta fd_flags_tmp
     txa
-    ldx current_pid
+    ldx active_pid
     jmp fd_attach
 .endproc
 
@@ -428,7 +428,7 @@ fd_closeproc_fd:
 .proc fd_check_perm
     sta fd_flags_tmp
 
-    lda current_pid
+    lda active_pid
     jsr fd_calc_pid_offset
 
     clc
@@ -460,7 +460,7 @@ fd_closeproc_fd:
 ; Internal helper.
 ;
 ; Purpose:
-;   Close fd for current_pid while file_io_gate is already held.
+;   Close fd for active_pid while file_io_gate is already held.
 ;
 ; Input:
 ;   A = fd
@@ -485,7 +485,7 @@ fd_closeproc_fd:
 @fd_ok:
     sta fd_index_tmp
 
-    lda current_pid
+    lda active_pid
     jsr fd_calc_pid_offset
 
     clc
@@ -550,7 +550,7 @@ fd_closeproc_fd:
 ;
 ; Notes:
 ;   Rollback helper only.
-;   It clears current_pid's fd slot and decrements open_refcnt.
+;   It clears active_pid's fd slot and decrements open_refcnt.
 ;   It does not run backend close effects.
 ; ------------------------------------------------------------
 
@@ -771,7 +771,7 @@ fd_closeproc_fd:
 @fd_ok:
     sta fd_index_tmp
 
-    lda current_pid
+    lda active_pid
     jsr fd_calc_pid_offset
 
     clc
@@ -981,7 +981,7 @@ fd_closeproc_fd:
 ; fd_close
 ;
 ; Purpose:
-;   Close one file descriptor for current_pid.
+;   Close one file descriptor for active_pid.
 ;
 ; Input:
 ;   A = fd number
@@ -996,7 +996,7 @@ fd_closeproc_fd:
 ; ------------------------------------------------------------
 
 .proc fd_close
-    ldx current_pid
+    ldx active_pid
     jmp fd_close_pid
 .endproc
 
@@ -1626,7 +1626,7 @@ fd_closeproc_fd:
 ; fd_get_flags_current
 ;
 ; Purpose:
-;   Fetch proc_fd_flags[current_pid][fd_index_tmp].
+;   Fetch proc_fd_flags[active_pid][fd_index_tmp].
 ;
 ; Input:
 ;   fd_index_tmp = fd index
@@ -1639,7 +1639,7 @@ fd_closeproc_fd:
 ; ------------------------------------------------------------
 
 .proc fd_get_flags_current
-    lda current_pid
+    lda active_pid
     jsr fd_calc_pid_offset
 
     clc
@@ -1661,7 +1661,7 @@ fd_closeproc_fd:
 ; fd_find_free_current
 ;
 ; Purpose:
-;   Find the lowest free fd slot for current_pid.
+;   Find the lowest free fd slot for active_pid.
 ;
 ; Output:
 ;   C clear = found
@@ -1675,7 +1675,7 @@ fd_closeproc_fd:
 ; ------------------------------------------------------------
 
 .proc fd_find_free_current
-    lda current_pid
+    lda active_pid
     jsr fd_calc_pid_offset
 
     clc
@@ -1787,13 +1787,13 @@ fd_closeproc_fd:
     plx                         ; X = old object
 
     txa                         ; A = old object
-    ldx current_pid             ; X = PID
+    ldx active_pid             ; X = PID
 
     ; Preserve new fd for return.
     phy                         ; stack: new fd
 
     ; Attach:
-    ;   X = current_pid
+    ;   X = active_pid
     ;   Y = new fd
     ;   A = old object
     jsr fd_attach
@@ -1927,7 +1927,7 @@ fd_closeproc_fd:
 
     ; Attach newfd to the old object.
     txa                         ; A = old object
-    ldx current_pid             ; X = PID
+    ldx active_pid             ; X = PID
 
     phy                         ; preserve newfd across fd_attach
 

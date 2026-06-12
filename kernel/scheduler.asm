@@ -51,13 +51,13 @@
 
 .import idle_loop
 
-.import sched_lock_enter
-.import sched_lock_leave
+.import sched_lock_try_enter
 
 .import fd_init_process
 .import fd_close_process
 
-.import current_pid
+.import active_pid
+.import sched_cursor_pid
 .import proc_state
 .import proc_context
 .import proc_sp
@@ -98,6 +98,8 @@
 
 .import monitor_active
 
+.import irq_restore
+
 ; ------------------------------------------------------------
 .segment "KERN_BSS"
 
@@ -106,8 +108,52 @@ sched_wake_reason_tmp:
 
 sched_wake_object_tmp:
     .res 1
+
+; Scheduler-local scratch used only while sched_lock is held.
+; It is not shared/RP-visible because it is an internal commit helper.
+sched_selected_tmp:
+    .res 1
+
+; Handoff scratch used to publish active_pid/active_context only
+; after IRQs are masked and immediately before BIOS context transfer.
+sched_handoff_pid:
+    .res 1
+
+sched_handoff_context:
+    .res 1
 	
 .segment "KERN_TEXT"
+
+
+; ------------------------------------------------------------
+; SCHED_HANDOFF_RELEASE
+;
+; Inline-only final scheduler unlock used immediately before the
+; BIOS context handoff.  Do not replace this with jsr
+; sched_lock_leave: the final handoff path has a strict A/X/Y BIOS
+; register ABI and must keep the register setup explicit.
+;
+; This macro is for final handoff paths only.  Normal scheduler
+; critical-section exits must use sched_lock_leave.
+; ------------------------------------------------------------
+.macro SCHED_HANDOFF_RELEASE
+    ; IRQ must stay masked until BIOS_CONTEXT_RTI restores the
+    ; selected task P, or until BIOS_CONTEXT_JUMP transfers into the
+    ; selected context.
+    sei
+
+    lda sched_lock
+    and #$01
+    bne :+
+    inc sched_lock_underflow
+:
+    lda #$01
+    trb sched_lock
+    lda #DBG_OWNER_NONE
+    sta sched_lock_owner
+    stz sched_lock_phase
+    stz sched_lock_depth
+.endmacro
 
 ; ------------------------------------------------------------
 ; scheduler_tick
@@ -207,42 +253,49 @@ sched_wake_object_tmp:
 ;   Commit X as the current running process.
 ;
 ; Policy:
-;   PROC_RUNNING is exclusive. On a single CPU, only current_pid
+;   PROC_RUNNING is exclusive. On a single CPU, only active_pid
 ;   may be RUNNING.
 ;
 ;   This routine owns the transition:
 ;
-;       old current_pid -> READY, if it was RUNNING
+;       old active_pid -> READY, if it was RUNNING
 ;       selected X      -> RUNNING
-;       current_pid     -> X
+;       sched_cursor_pid -> X
 ;
 ; Important:
 ;   Call this before loading the selected process stack/context.
 ; ------------------------------------------------------------
 
 .proc proc_set_running
-    phx
+    ; Enforce the single-RUNNING invariant directly.  Earlier code
+    ; only demoted active_pid.  Once a stale RUNNING process exists,
+    ; that leaves two RUNNING tasks visible and corrupts later picks.
+    ; This routine is called only with sched_lock held.
+    stx sched_selected_tmp
 
-    ; Demote old current_pid if it is currently RUNNING.
-    ; PID 0 is the idle task, not an empty slot, so it becomes
-    ; READY when another process is selected.
-    ldx current_pid
+    ldx #IDLE_PID
+
+@scan_running:
+    cpx sched_selected_tmp
+    beq @next_pid
 
     lda proc_state,x
     cmp #PROC_RUNNING
-    bne @set_selected
+    bne @next_pid
 
     lda #PROC_READY
     jsr proc_set_state
 
-@set_selected:
-    ; Restore selected PID.
-    plx
+@next_pid:
+    inx
+    cpx #MAX_PROCS
+    bne @scan_running
 
+    ldx sched_selected_tmp
     lda #PROC_RUNNING
     jsr proc_set_state
 
-    stx current_pid
+    stx sched_cursor_pid
     rts
 .endproc
 
@@ -283,7 +336,7 @@ sched_wake_object_tmp:
 ;
 ; Policy:
 ;   Scans normal task PIDs in round-robin order, starting after
-;   current_pid. This avoids always waking the lowest PID first.
+;   sched_cursor_pid. This avoids always waking the lowest PID first.
 ;
 ; Example:
 ;   lda #WAIT_LOCK
@@ -306,8 +359,8 @@ sched_wake_object_tmp:
     sta sched_wake_reason_tmp
     sty sched_wake_object_tmp
 
-    ; Start scan after current_pid for round-robin fairness.
-    ldx current_pid
+    ; Start scan after sched_cursor_pid for round-robin fairness.
+    ldx sched_cursor_pid
 
     cpx #FIRST_TASK_PID
     bcc @start_first
@@ -413,7 +466,7 @@ sched_wake_object_tmp:
 ; ------------------------------------------------------------
 
 .proc proc_exit_current
-    ldx current_pid
+    ldx active_pid
     cpx #IDLE_PID
     beq @yield
 
@@ -463,7 +516,7 @@ sched_wake_object_tmp:
 ;   X
 ; ------------------------------------------------------------
 .proc sched_account_tick
-    ldx current_pid
+    ldx active_pid
 
     inc proc_ticks_lo,x
     bne @done
@@ -596,7 +649,8 @@ sched_wake_object_tmp:
     stz system_ticks_lo
     stz system_ticks_hi
 
-    stz current_pid
+    stz active_pid
+    stz sched_cursor_pid
     stz sched_lock
     ; DEBUG-BEGIN: scheduler lock diagnostics initialization
     lda #DBG_OWNER_NONE
@@ -606,6 +660,18 @@ sched_wake_object_tmp:
     stz sched_lock_underflow
     ; DEBUG-END: scheduler lock diagnostics initialization
 	stz active_context
+
+    ; DEBUG-BEGIN: temporary scheduler final handoff frame snapshot init
+    lda #DBG_PID_NONE
+    sta dbg_handoff_pid
+    sta dbg_handoff_context
+    sta dbg_handoff_sp
+    sta dbg_handoff_p
+    sta dbg_handoff_pcl
+    sta dbg_handoff_pch
+    lda #DBG_MODE_NONE
+    sta dbg_handoff_src
+    ; DEBUG-END: temporary scheduler final handoff frame snapshot init
 
 	stz monitor_active
 	
@@ -664,7 +730,7 @@ sched_wake_object_tmp:
 ; ------------------------------------------------------------
 
 .proc scheduler_set_current_context
-    ldx current_pid
+    ldx active_pid
     sta proc_context,x
     rts
 .endproc
@@ -690,13 +756,13 @@ sched_wake_object_tmp:
 ;
 ; Notes:
 ;   - PID 0 is excluded from normal scheduling.
-;   - Bounded scan prevents infinite loop when current_pid = 0.
+;   - Bounded scan prevents infinite loop when sched_cursor_pid = 0.
 ;   - Uses sched_ptr as a temporary 1-byte scan counter.
 ;   - Clobbers sched_ptr.
 ; ------------------------------------------------------------
 
 .proc sched_pick_next
-    ldx current_pid
+    ldx sched_cursor_pid
 
     cpx #FIRST_TASK_PID
     bcc @start_first
@@ -770,10 +836,12 @@ sched_wake_object_tmp:
     sta sched_debug_marker
     ; DEBUG-END: stale RUNNING diagnostic
 
-    ; DEBUG-BEGIN: halt on illegal scheduler state
-@halt:
-    bra @halt
-    ; DEBUG-END: halt on illegal scheduler state
+    ; A RUNNING normal process while no READY/NEW task was found is
+    ; not a valid steady-state scheduler result, but halting here makes
+    ; recovery impossible and hides the original boundary violation.
+    ; Resume the RUNNING PID and keep the EE marker visible for ps.
+    sec
+    rts
 
 @found:
     sec
@@ -804,6 +872,10 @@ sched_wake_object_tmp:
     jsr sched_pick_next
 
     ; DEBUG-BEGIN: scheduler selected PID snapshot
+    stx dbg_irq_selected_pid
+    ; DEBUG-END: scheduler selected PID snapshot
+
+    ; DEBUG-BEGIN: scheduler selected PID snapshot
     lda #DBG_MARK_PICK
     sta sched_debug_marker
 
@@ -812,7 +884,7 @@ sched_wake_object_tmp:
 
     stx dbg_sched_selected_pid
 
-    lda current_pid
+    lda active_pid
     sta dbg_sched_current_pid
     ; DEBUG-END: scheduler selected PID snapshot
 
@@ -831,7 +903,7 @@ sched_wake_object_tmp:
     ; Commit selected PID as RUNNING.
     ;
     ; proc_set_running returns with:
-    ;   X = current_pid
+    ;   X = selected PID / sched_cursor_pid
     jsr proc_set_running
 
     ; DEBUG-BEGIN: scheduler committed selected PID
@@ -842,7 +914,7 @@ sched_wake_object_tmp:
     stx dbg_sched_loaded_pid
     stx dbg_sched_resume_pid
 
-    lda current_pid
+    lda sched_cursor_pid
     sta sched_debug_state_new
     ; DEBUG-END: scheduler committed selected PID
 
@@ -850,6 +922,7 @@ sched_wake_object_tmp:
     lda proc_sp,x
     sta sched_debug_state_new
     sta dbg_sched_loaded_sp
+    sta dbg_irq_loaded_sp
 
     ; DEBUG-BEGIN: scheduler resume source mode snapshot
     lda dbg_sched_path
@@ -868,8 +941,15 @@ sched_wake_object_tmp:
 
     lda proc_context,x
     sta dbg_sched_resume_context
-    sta active_context
+    sta sched_handoff_context
+    stx sched_handoff_pid
     ; DEBUG-END: scheduler load/resume snapshot
+
+    ; Do not publish active_pid/active_context yet.  Until the BIOS
+    ; context handoff actually runs, the CPU is still executing on the
+    ; old context.  Publishing early lets a monitor IRQ observe a mixed
+    ; identity/context pair and later syscalls can be decoded under the
+    ; wrong process identity.
 
     ; Load selected process stack while sched_lock is still held.
     ; All saved runnable tasks use the same IRQ-compatible extended
@@ -897,20 +977,36 @@ sched_wake_object_tmp:
     and #$fb
     sta $0104,x
 
+    ; DEBUG-BEGIN: temporary scheduler final handoff frame snapshot
+    lda sched_handoff_pid
+    sta dbg_handoff_pid
+    lda sched_handoff_context
+    sta dbg_handoff_context
+    stx dbg_handoff_sp
+    lda $0104,x
+    sta dbg_handoff_p
+    lda $0105,x
+    sta dbg_handoff_pcl
+    lda $0106,x
+    sta dbg_handoff_pch
+    lda dbg_sched_resume_mode
+    sta dbg_handoff_src
+    ; DEBUG-END: temporary scheduler final handoff frame snapshot
+
     ; DEBUG-BEGIN: scheduler RTI resume snapshot
     lda #DBG_MARK_RESUME_RTI
     sta sched_debug_marker
     ; DEBUG-END: scheduler RTI resume snapshot
 
-    ; A = target context for BIOS_CONTEXT_RTI.  This is the last
-    ; scheduler-owned value needed for the final restore.
-    lda active_context
+    ; Publish identity/context only in the final masked handoff window.
+    ; The macro keeps the final BIOS handoff ABI explicit while avoiding
+    ; duplicated inline unlock code.
+    SCHED_HANDOFF_RELEASE
 
-    ; Nothing after sched_lock_leave may inspect scheduler state.
-    ; SEI closes the post-unlock/pre-RTI window; RTI restores the
-    ; selected task's saved P byte with IRQ enabled.
-    sei
-    jsr sched_lock_leave
+    lda sched_handoff_pid
+    sta active_pid
+    lda sched_handoff_context
+    sta active_context
     jmp BIOS_CONTEXT_RTI
 
 @start_new:
@@ -927,19 +1023,43 @@ sched_wake_object_tmp:
 
     lda proc_context,x
     sta dbg_sched_resume_context
-    sta active_context
-    ; DEBUG-END
+    sta sched_handoff_context
+    stx sched_handoff_pid
+    ; DEBUG-END: scheduler bootstrap resume snapshot
 
-    ; Prepare BIOS_CONTEXT_JUMP arguments before releasing
-    ; sched_lock.  sched_lock_leave preserves A/X/Y.
-    lda active_context
+    ; Bootstrap handoff is fully prepared.  The BIOS jump ABI is:
+    ;   A = target context
+    ;   X = target low byte
+    ;   Y = target high byte
+    ;
+    ; DEBUG-BEGIN: temporary scheduler final handoff frame snapshot
+    lda sched_handoff_pid
+    sta dbg_handoff_pid
+    lda sched_handoff_context
+    sta dbg_handoff_context
+    lda #DBG_PID_NONE
+    sta dbg_handoff_sp
+    sta dbg_handoff_p
+    lda #.lobyte(first_run_entry)
+    sta dbg_handoff_pcl
+    lda #.hibyte(first_run_entry)
+    sta dbg_handoff_pch
+    lda dbg_sched_resume_mode
+    sta dbg_handoff_src
+    ; DEBUG-END: temporary scheduler final handoff frame snapshot
+
+    ; Keep this boundary explicit.  Do not call sched_lock_leave after
+    ; loading the BIOS ABI registers.
+    SCHED_HANDOFF_RELEASE
+
+    lda sched_handoff_pid
+    sta active_pid
+    lda sched_handoff_context
+    sta active_context
+
     ldx #.lobyte(first_run_entry)
     ldy #.hibyte(first_run_entry)
-
-    ; Bootstrap handoff is fully prepared.  Only the BIOS jump may
-    ; execute after releasing sched_lock.
-    sei
-    jsr sched_lock_leave
+    lda sched_handoff_context
     jmp BIOS_CONTEXT_JUMP
 
 @resume_idle:
@@ -962,19 +1082,33 @@ sched_wake_object_tmp:
     sta dbg_sched_resume_context
     ; DEBUG-END: scheduler idle bootstrap snapshot
 
-    ; Publish idle context before BIOS_CONTEXT_JUMP.
+    ; DEBUG-BEGIN: temporary scheduler final handoff frame snapshot
+    lda #IDLE_PID
+    sta dbg_handoff_pid
+    sta dbg_handoff_context
+    lda #DBG_PID_NONE
+    sta dbg_handoff_sp
+    sta dbg_handoff_p
+    lda #.lobyte(idle_loop)
+    sta dbg_handoff_pcl
+    lda #.hibyte(idle_loop)
+    sta dbg_handoff_pch
+    lda dbg_sched_resume_mode
+    sta dbg_handoff_src
+    ; DEBUG-END: temporary scheduler final handoff frame snapshot
+
+    ; Idle handoff is fully prepared.  The BIOS jump ABI is:
+    ;   A = target context
+    ;   X = target low byte
+    ;   Y = target high byte
+    SCHED_HANDOFF_RELEASE
+
+    stz active_pid
     stz active_context
 
-    ; Prepare BIOS_CONTEXT_JUMP arguments before releasing
-    ; sched_lock.  sched_lock_leave preserves A/X/Y.
-    lda #IDLE_PID
     ldx #.lobyte(idle_loop)
     ldy #.hibyte(idle_loop)
-
-    ; Idle handoff is fully prepared.  Only the BIOS jump may
-    ; execute after releasing sched_lock.
-    sei
-    jsr sched_lock_leave
+    lda #IDLE_PID
     jmp BIOS_CONTEXT_JUMP
 .endproc
 
@@ -989,7 +1123,7 @@ sched_wake_object_tmp:
 ; return frame.
 ;
 ; Responsibilities:
-;   - save current normal task state, if current_pid != 0
+;   - save current normal task state, if active_pid != 0
 ;   - account timer tick
 ;   - wake timer/console waiters
 ;   - jump to shared dispatch/resume path
@@ -999,11 +1133,15 @@ sched_wake_object_tmp:
 ; ------------------------------------------------------------
 
 .proc sched_context_switch
-    ; IRQ handler only enters here when sched_lock and subsystem
-    ; locks were zero. From this point until final task handoff,
-    ; block nested preemptive scheduling.
-    jsr sched_lock_enter
+    ; IRQ handler normally enters here only when sched_lock and
+    ; subsystem locks were zero.  Still use the real try-lock result
+    ; as the authority: if the guard is already held, this IRQ must
+    ; resume the interrupted context unchanged.
+    jsr sched_lock_try_enter
+    bcc @irq_lock_acquired
+    jmp @skip_locked
 
+@irq_lock_acquired:
     ; DEBUG-BEGIN: scheduler IRQ entry
     lda #DBG_MARK_IRQ_ENTRY
     sta sched_debug_marker
@@ -1011,13 +1149,19 @@ sched_wake_object_tmp:
     lda #DBG_PATH_IRQ
     sta dbg_sched_path
 
-    lda current_pid
+    lda active_pid
     sta sched_debug_pid
     sta dbg_sched_current_pid
+    sta dbg_irq_current_pid
+
+    inc dbg_irq_preempt_count
+
+    lda #DBG_IRQ_ENTER_SWITCH
+    sta dbg_irq_skip_reason
     ; DEBUG-END: scheduler IRQ entry
 
     ; Current interrupted owner.
-    ldy current_pid
+    ldy active_pid
 
     ; DEBUG-BEGIN: scheduler IRQ current owner state
     sty sched_debug_old_pid
@@ -1045,9 +1189,26 @@ sched_wake_object_tmp:
 
     sty dbg_sched_saved_pid
     stx dbg_sched_saved_sp
+    stx dbg_irq_saved_sp
 
     lda #DBG_MODE_IRQ_RTI
     sta dbg_sched_saved_mode
+
+    ; DEBUG-BEGIN: temporary scheduler save-time private-stack frame snapshot
+    ; Captured while the interrupted task's private stack page is still mapped.
+    sty dbg_save_frame_pid
+    lda proc_context,y
+    sta dbg_save_frame_context
+    stx dbg_save_frame_sp
+    lda $0104,x
+    sta dbg_save_frame_p
+    lda $0105,x
+    sta dbg_save_frame_pcl
+    lda $0106,x
+    sta dbg_save_frame_pch
+    lda #DBG_MODE_IRQ_RTI
+    sta dbg_save_frame_src
+    ; DEBUG-END: temporary scheduler save-time private-stack frame snapshot
     ; DEBUG-END: scheduler IRQ save snapshot
 
     txa
@@ -1086,6 +1247,13 @@ sched_wake_object_tmp:
     jsr scheduler_wake_timers
 
     jmp sched_switch_context
+
+@skip_locked:
+    ; DEBUG-BEGIN: temporary scheduler IRQ sched-lock busy skip diagnostic
+    lda #DBG_IRQ_SKIP_SCHED
+    sta dbg_irq_skip_reason
+    ; DEBUG-END: temporary scheduler IRQ sched-lock busy skip diagnostic
+    jmp irq_restore
 .endproc
 
 ; ------------------------------------------------------------
@@ -1112,8 +1280,11 @@ sched_wake_object_tmp:
     ; Short atomic entry section.
     ; --------------------------------------------------------
     sei
-    jsr sched_lock_enter
+    jsr sched_lock_try_enter
+    bcc @yield_lock_acquired
+    jmp @lock_busy
 
+@yield_lock_acquired:
     ; DEBUG-BEGIN: scheduler yield entry
     lda #DBG_MARK_YIELD
     sta sched_debug_marker
@@ -1121,13 +1292,13 @@ sched_wake_object_tmp:
     lda #DBG_PATH_YIELD
     sta dbg_sched_path
 
-    lda current_pid
+    lda active_pid
     sta sched_debug_pid
     sta dbg_sched_current_pid
     ; DEBUG-END: scheduler yield entry
 
     ; Current yielding owner.
-    ldy current_pid
+    ldy active_pid
 
     ; DEBUG-BEGIN: scheduler yield current owner state
     sty sched_debug_old_pid
@@ -1175,6 +1346,23 @@ sched_wake_object_tmp:
 
     lda #DBG_MODE_YIELD_RTI
     sta dbg_sched_saved_mode
+
+    ; DEBUG-BEGIN: temporary scheduler save-time private-stack frame snapshot
+    ; Captured after the synthetic YLD RTI frame was built, while the
+    ; yielding task's private stack page is still mapped.
+    sty dbg_save_frame_pid
+    lda proc_context,y
+    sta dbg_save_frame_context
+    stx dbg_save_frame_sp
+    lda $0104,x
+    sta dbg_save_frame_p
+    lda $0105,x
+    sta dbg_save_frame_pcl
+    lda $0106,x
+    sta dbg_save_frame_pch
+    lda #DBG_MODE_YIELD_RTI
+    sta dbg_save_frame_src
+    ; DEBUG-END: temporary scheduler save-time private-stack frame snapshot
     ; DEBUG-END: scheduler yield save snapshot
 
     txa
@@ -1223,6 +1411,20 @@ sched_wake_object_tmp:
     jsr scheduler_wake_timers
 
     jmp sched_switch_context
+
+@lock_busy:
+    ; Cooperative yield while sched_lock is held is a scheduler
+    ; recursion/invariant fault.  Returning would continue with a
+    ; caller that expected sched_yield not to return, so stop here
+    ; with an explicit marker instead of corrupting scheduler state.
+    ; DEBUG-BEGIN: temporary scheduler yield lock-busy trap diagnostic
+    lda #DBG_MARK_SCHED_LOCK_OVERFLOW
+    sta sched_debug_marker
+    lda #DBG_SCHED_LOCK_NESTED
+    sta sched_lock_phase
+    ; DEBUG-END: temporary scheduler yield lock-busy trap diagnostic
+@halt:
+    bra @halt
 .endproc
 
 ; ------------------------------------------------------------
@@ -1243,7 +1445,7 @@ sched_wake_object_tmp:
     txs
 
     ; Resolve entry address into private zero-page sched_ptr.
-    ldx current_pid
+    ldx active_pid
     lda proc_entryL,x
     sta sched_ptr
     lda proc_entryH,x

@@ -50,6 +50,7 @@
 .import file_io_gate_acquire
 .import file_io_gate_release
 .import file_io_gate_phase
+.import active_pid
 
 .import rp_console_read_start
 .import rp_console_read_finish
@@ -73,7 +74,7 @@
 ;   file_io_gate
 ;
 ; Rules:
-;   - valid only while file_io_gate is owned by current_pid
+;   - valid only while file_io_gate is owned by active_pid
 ;   - not live across sched_yield
 ; ------------------------------------------------------------
 
@@ -91,6 +92,53 @@ ksys_rw_buf_lo:
 
 ksys_rw_buf_hi:
     .res 1
+
+; Per-PID read/write syscall argument snapshot.
+;
+; Read/write syscalls receive X/Y -> rw_args in the caller context.
+; The complete argument block is copied immediately at syscall entry
+; while IRQs are masked, before file_io_gate_acquire can block/yield.
+; Later FD/backend code must use only this per-PID snapshot, never
+; dereference the caller rw_args pointer after a scheduler boundary.
+ksys_rw_fd_by_pid:
+    .res MAX_PROCS
+
+ksys_rw_buf_lo_by_pid:
+    .res MAX_PROCS
+
+ksys_rw_buf_hi_by_pid:
+    .res MAX_PROCS
+
+ksys_rw_len_lo_by_pid:
+    .res MAX_PROCS
+
+ksys_rw_len_hi_by_pid:
+    .res MAX_PROCS
+
+; Short-lived entry scratch used only while IRQs are masked during
+; argument-block snapshot. It is not live across yield.
+ksys_rw_entry_lo:
+    .res 1
+
+ksys_rw_entry_hi:
+    .res 1
+
+; DEBUG-BEGIN: temporary filtered read-result diagnostic scratch
+; Private scratch used only to decide whether the shared Last read
+; diagnostic should be updated. It prevents normal console EAGAIN
+; polling from overwriting a real non-EAGAIN read failure.
+ksys_dbg_read_lo:
+    .res 1
+
+ksys_dbg_read_hi:
+    .res 1
+
+ksys_dbg_read_errno:
+    .res 1
+
+ksys_dbg_read_carry:
+    .res 1
+; DEBUG-END: temporary filtered read-result diagnostic scratch
 
 .segment "KERN_TEXT"
 
@@ -195,10 +243,44 @@ ksys_rw_buf_hi:
 ; ------------------------------------------------------------
 
 .proc ksys_read
-    ; Preserve syscall argument pointer across possible
-    ; WAIT_LOCK + sched_yield in file_io_gate_acquire.
-    phx
-    phy
+    ; Snapshot the complete caller rw_args block immediately at
+    ; syscall entry.  Do not keep only a pointer: file_io_gate_acquire
+    ; may block/yield, and the caller's context/address view is not a
+    ; valid late-dereference boundary in a preemptive kernel.
+    php
+    sei
+    stx ksys_rw_entry_lo
+    sty ksys_rw_entry_hi
+
+    lda ksys_rw_entry_lo
+    sta io_ptr
+    lda ksys_rw_entry_hi
+    sta io_ptr+1
+
+    ldx active_pid
+
+    ldy #rw_args::fd
+    lda (io_ptr),y
+    sta ksys_rw_fd_by_pid,x
+
+    ldy #rw_args::buf_ptr
+    lda (io_ptr),y
+    sta ksys_rw_buf_lo_by_pid,x
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_buf_hi_by_pid,x
+
+    ldy #rw_args::len
+    lda (io_ptr),y
+    sta ksys_rw_len_lo_by_pid,x
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_len_hi_by_pid,x
+    plp
+    ; The user-side syscall macro masks IRQs only while it loads
+    ; X/Y and enters the kernel. Re-enable after the argument block
+    ; has been copied; file_io_gate itself is the syscall serializer.
+    cli
 
     jsr file_io_gate_acquire
     bcs @gate_acquired
@@ -207,8 +289,6 @@ ksys_rw_buf_hi:
     lda #DBG_FILE_IO_READ_ACQ_FAIL
     sta file_io_gate_phase
     ; DEBUG-END: temporary file-io-read-acq-fail diagnostic
-    ply
-    plx
     ldy #EINVAL
     sec
     rts
@@ -219,32 +299,19 @@ ksys_rw_buf_hi:
     sta file_io_gate_phase
     ; DEBUG-END: temporary file-io-read-acq diagnostic
 
-    ply
-    plx
-
-    ; io_ptr temporarily points to rw_args.
-    stx io_ptr
-    sty io_ptr+1
-
-    ; Decode fd.
-    ldy #rw_args::fd
-    lda (io_ptr),y
+    ; Copy the per-PID syscall-entry snapshot into gate-protected
+    ; module scratch. From here until release, these scratch values are
+    ; owned by the current file_io_gate holder.
+    ldx active_pid
+    lda ksys_rw_fd_by_pid,x
     sta ksys_rw_fd_tmp
-
-    ; Decode caller buffer pointer.
-    ldy #rw_args::buf_ptr
-    lda (io_ptr),y
+    lda ksys_rw_buf_lo_by_pid,x
     sta ksys_rw_buf_lo
-    iny
-    lda (io_ptr),y
+    lda ksys_rw_buf_hi_by_pid,x
     sta ksys_rw_buf_hi
-
-    ; Decode requested length.
-    ldy #rw_args::len
-    lda (io_ptr),y
+    lda ksys_rw_len_lo_by_pid,x
     sta ksys_rw_len_lo
-    iny
-    lda (io_ptr),y
+    lda ksys_rw_len_hi_by_pid,x
     sta ksys_rw_len_hi
 
     ; FD/backend layer expects io_ptr to point to caller buffer.
@@ -253,15 +320,12 @@ ksys_rw_buf_hi:
     lda ksys_rw_buf_hi
     sta io_ptr+1
 
-    ldy ksys_rw_fd_tmp
-    lda ksys_rw_len_lo
-    ldx ksys_rw_len_hi
-
     ; DEBUG-BEGIN: temporary file-io-read-call diagnostic
     lda #DBG_FILE_IO_READ_CALL
     sta file_io_gate_phase
     ; DEBUG-END: temporary file-io-read-call diagnostic
 
+    ldy ksys_rw_fd_tmp
     lda ksys_rw_len_lo
     ldx ksys_rw_len_hi
     jsr fd_read
@@ -271,6 +335,68 @@ ksys_rw_buf_hi:
     pha
     phx
     phy
+
+    ; DEBUG-BEGIN: temporary filtered read return diagnostic
+    ; Capture only real read failures: C set, non-console FD, errno != EAGAIN.
+    ; This prevents normal console polling from hiding pipe-read failures.
+    pla
+    sta ksys_dbg_read_errno
+
+    pla
+    sta ksys_dbg_read_hi
+
+    pla
+    sta ksys_dbg_read_lo
+
+    pla
+    pha                         ; keep original P byte on stack again
+    and #$01
+    sta ksys_dbg_read_carry
+
+    lda ksys_dbg_read_lo
+    pha
+    lda ksys_dbg_read_hi
+    pha
+    lda ksys_dbg_read_errno
+    pha
+    ; Stack is again: top -> Y, X, A, P.
+
+    lda ksys_dbg_read_carry
+    beq @skip_read_diag_update
+
+    lda ksys_rw_fd_tmp
+    beq @skip_read_diag_update
+
+    lda ksys_dbg_read_errno
+    cmp #EAGAIN
+    beq @skip_read_diag_update
+
+    lda active_pid
+    sta dbg_read_ret_pid
+
+    lda ksys_rw_fd_tmp
+    sta dbg_read_ret_fd
+
+    lda ksys_rw_len_lo
+    sta dbg_read_ret_len_lo
+    lda ksys_rw_len_hi
+    sta dbg_read_ret_len_hi
+
+    lda ksys_dbg_read_carry
+    sta dbg_read_ret_carry
+
+    lda ksys_dbg_read_lo
+    sta dbg_read_ret_lo
+    lda ksys_dbg_read_hi
+    sta dbg_read_ret_hi
+    lda ksys_dbg_read_errno
+    sta dbg_read_ret_errno
+
+    lda file_io_gate_phase
+    sta dbg_read_ret_phase
+
+@skip_read_diag_update:
+    ; DEBUG-END: temporary filtered read return diagnostic
 
     ; DEBUG-BEGIN: temporary file-io-read-ret diagnostic
     lda #DBG_FILE_IO_READ_RET
@@ -297,10 +423,42 @@ ksys_rw_buf_hi:
 ; ------------------------------------------------------------
 
 .proc ksys_write
-    ; Preserve syscall argument pointer across possible
-    ; WAIT_LOCK + sched_yield in file_io_gate_acquire.
-    phx
-    phy
+    ; Snapshot the complete caller rw_args block immediately at
+    ; syscall entry, before file_io_gate_acquire can block/yield.
+    php
+    sei
+    stx ksys_rw_entry_lo
+    sty ksys_rw_entry_hi
+
+    lda ksys_rw_entry_lo
+    sta io_ptr
+    lda ksys_rw_entry_hi
+    sta io_ptr+1
+
+    ldx active_pid
+
+    ldy #rw_args::fd
+    lda (io_ptr),y
+    sta ksys_rw_fd_by_pid,x
+
+    ldy #rw_args::buf_ptr
+    lda (io_ptr),y
+    sta ksys_rw_buf_lo_by_pid,x
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_buf_hi_by_pid,x
+
+    ldy #rw_args::len
+    lda (io_ptr),y
+    sta ksys_rw_len_lo_by_pid,x
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_len_hi_by_pid,x
+    plp
+    ; The user-side syscall macro masks IRQs only while it loads
+    ; X/Y and enters the kernel. Re-enable after the argument block
+    ; has been copied; file_io_gate itself is the syscall serializer.
+    cli
 
     jsr file_io_gate_acquire
     bcs @gate_acquired
@@ -309,8 +467,6 @@ ksys_rw_buf_hi:
     lda #DBG_FILE_IO_WRITE_ACQ_FAIL
     sta file_io_gate_phase
     ; DEBUG-END: temporary file-io-write-acq-fail diagnostic
-    ply
-    plx
     ldy #EINVAL
     sec
     rts
@@ -321,32 +477,19 @@ ksys_rw_buf_hi:
     sta file_io_gate_phase
     ; DEBUG-END: temporary file-io-write-acq diagnostic
 
-    ply
-    plx
-
-    ; io_ptr temporarily points to rw_args.
-    stx io_ptr
-    sty io_ptr+1
-
-    ; Decode fd.
-    ldy #rw_args::fd
-    lda (io_ptr),y
+    ; Copy the per-PID syscall-entry snapshot into gate-protected
+    ; module scratch. From here until release, these scratch values are
+    ; owned by the current file_io_gate holder.
+    ldx active_pid
+    lda ksys_rw_fd_by_pid,x
     sta ksys_rw_fd_tmp
-
-    ; Decode caller buffer pointer.
-    ldy #rw_args::buf_ptr
-    lda (io_ptr),y
+    lda ksys_rw_buf_lo_by_pid,x
     sta ksys_rw_buf_lo
-    iny
-    lda (io_ptr),y
+    lda ksys_rw_buf_hi_by_pid,x
     sta ksys_rw_buf_hi
-
-    ; Decode requested length.
-    ldy #rw_args::len
-    lda (io_ptr),y
+    lda ksys_rw_len_lo_by_pid,x
     sta ksys_rw_len_lo
-    iny
-    lda (io_ptr),y
+    lda ksys_rw_len_hi_by_pid,x
     sta ksys_rw_len_hi
 
     ; FD/backend layer expects io_ptr to point to caller buffer.
@@ -355,15 +498,12 @@ ksys_rw_buf_hi:
     lda ksys_rw_buf_hi
     sta io_ptr+1
 
-    ldy ksys_rw_fd_tmp
-    lda ksys_rw_len_lo
-    ldx ksys_rw_len_hi
-
     ; DEBUG-BEGIN: temporary file-io-write-call diagnostic
     lda #DBG_FILE_IO_WRITE_CALL
     sta file_io_gate_phase
     ; DEBUG-END: temporary file-io-write-call diagnostic
 
+    ldy ksys_rw_fd_tmp
     lda ksys_rw_len_lo
     ldx ksys_rw_len_hi
     jsr fd_write

@@ -17,7 +17,7 @@
 .export ksys_sleep
 
 .import idle_loop
-.import current_pid
+.import active_pid
 .import proc_exit_current
 .import sched_yield
 
