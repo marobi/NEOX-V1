@@ -1389,16 +1389,12 @@ fd_closeproc_fd:
     pha
     phx
 
-    ; DEBUG-BEGIN: temporary fd_read entry diagnostic
     lda #DBG_FILE_IO_FD_READ_ENTER
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read entry diagnostic
 
     ; Resolve fd -> open object.
-    ; DEBUG-BEGIN: temporary fd_read lookup-call diagnostic
     lda #DBG_FILE_IO_FD_READ_LOOKUP_CALL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read lookup-call diagnostic
 
     tya
     jsr fd_lookup
@@ -1410,18 +1406,14 @@ fd_closeproc_fd:
     rts
 
 @fd_ok:
-    ; DEBUG-BEGIN: temporary fd_read lookup-return diagnostic
     lda #DBG_FILE_IO_FD_READ_LOOKUP_RET
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read lookup-return diagnostic
 
     ; Save open object across permission check.
     phx
 
-    ; DEBUG-BEGIN: temporary fd_read permission-call diagnostic
     lda #DBG_FILE_IO_FD_READ_PERM_CALL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read permission-call diagnostic
 
     lda #FD_FLAG_READ
     jsr fd_check_perm
@@ -1435,17 +1427,13 @@ fd_closeproc_fd:
     rts
 
 @perm_ok:
-    ; DEBUG-BEGIN: temporary fd_read permission-return diagnostic
     lda #DBG_FILE_IO_FD_READ_PERM_RET
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read permission-return diagnostic
 
     plx                         ; X = open object
 
-    ; DEBUG-BEGIN: temporary fd_read object-type diagnostic
     lda #DBG_FILE_IO_FD_READ_TYPE
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read object-type diagnostic
 
     lda open_type,x
     cmp #OBJ_PIPE
@@ -1467,10 +1455,8 @@ fd_closeproc_fd:
     txa
     pha
 
-    ; DEBUG-BEGIN: temporary fd_read pipe-backend diagnostic
     lda #DBG_FILE_IO_FD_READ_PIPE
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read pipe-backend diagnostic
 
     ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
     lda io_ptr
@@ -1488,10 +1474,8 @@ fd_closeproc_fd:
     jmp pipe_read
 
 @device_ok:
-    ; DEBUG-BEGIN: temporary fd_read device-backend diagnostic
     lda #DBG_FILE_IO_FD_READ_DEV
     sta file_io_gate_phase
-    ; DEBUG-END: temporary fd_read device-backend diagnostic
 
     lda #DEVOP_READ
     jsr dev_resolve_op

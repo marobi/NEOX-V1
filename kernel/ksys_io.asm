@@ -123,22 +123,6 @@ ksys_rw_entry_lo:
 ksys_rw_entry_hi:
     .res 1
 
-; DEBUG-BEGIN: temporary filtered read-result diagnostic scratch
-; Private scratch used only to decide whether the shared Last read
-; diagnostic should be updated. It prevents normal console EAGAIN
-; polling from overwriting a real non-EAGAIN read failure.
-ksys_dbg_read_lo:
-    .res 1
-
-ksys_dbg_read_hi:
-    .res 1
-
-ksys_dbg_read_errno:
-    .res 1
-
-ksys_dbg_read_carry:
-    .res 1
-; DEBUG-END: temporary filtered read-result diagnostic scratch
 
 .segment "KERN_TEXT"
 
@@ -285,19 +269,15 @@ ksys_dbg_read_carry:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-read-acq-fail diagnostic
     lda #DBG_FILE_IO_READ_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-read-acq-fail diagnostic
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-read-acq diagnostic
     lda #DBG_FILE_IO_READ_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-read-acq diagnostic
 
     ; Copy the per-PID syscall-entry snapshot into gate-protected
     ; module scratch. From here until release, these scratch values are
@@ -320,10 +300,8 @@ ksys_dbg_read_carry:
     lda ksys_rw_buf_hi
     sta io_ptr+1
 
-    ; DEBUG-BEGIN: temporary file-io-read-call diagnostic
     lda #DBG_FILE_IO_READ_CALL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-read-call diagnostic
 
     ldy ksys_rw_fd_tmp
     lda ksys_rw_len_lo
@@ -336,77 +314,12 @@ ksys_dbg_read_carry:
     phx
     phy
 
-    ; DEBUG-BEGIN: temporary filtered read return diagnostic
-    ; Capture only real read failures: C set, non-console FD, errno != EAGAIN.
-    ; This prevents normal console polling from hiding pipe-read failures.
-    pla
-    sta ksys_dbg_read_errno
 
-    pla
-    sta ksys_dbg_read_hi
-
-    pla
-    sta ksys_dbg_read_lo
-
-    pla
-    pha                         ; keep original P byte on stack again
-    and #$01
-    sta ksys_dbg_read_carry
-
-    lda ksys_dbg_read_lo
-    pha
-    lda ksys_dbg_read_hi
-    pha
-    lda ksys_dbg_read_errno
-    pha
-    ; Stack is again: top -> Y, X, A, P.
-
-    lda ksys_dbg_read_carry
-    beq @skip_read_diag_update
-
-    lda ksys_rw_fd_tmp
-    beq @skip_read_diag_update
-
-    lda ksys_dbg_read_errno
-    cmp #EAGAIN
-    beq @skip_read_diag_update
-
-    lda active_pid
-    sta dbg_read_ret_pid
-
-    lda ksys_rw_fd_tmp
-    sta dbg_read_ret_fd
-
-    lda ksys_rw_len_lo
-    sta dbg_read_ret_len_lo
-    lda ksys_rw_len_hi
-    sta dbg_read_ret_len_hi
-
-    lda ksys_dbg_read_carry
-    sta dbg_read_ret_carry
-
-    lda ksys_dbg_read_lo
-    sta dbg_read_ret_lo
-    lda ksys_dbg_read_hi
-    sta dbg_read_ret_hi
-    lda ksys_dbg_read_errno
-    sta dbg_read_ret_errno
-
-    lda file_io_gate_phase
-    sta dbg_read_ret_phase
-
-@skip_read_diag_update:
-    ; DEBUG-END: temporary filtered read return diagnostic
-
-    ; DEBUG-BEGIN: temporary file-io-read-ret diagnostic
     lda #DBG_FILE_IO_READ_RET
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-read-ret diagnostic
 
-    ; DEBUG-BEGIN: temporary file-io-read-rel diagnostic
     lda #DBG_FILE_IO_READ_REL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-read-rel diagnostic
     jsr file_io_gate_release
 
     ply
@@ -463,19 +376,15 @@ ksys_dbg_read_carry:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-write-acq-fail diagnostic
     lda #DBG_FILE_IO_WRITE_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-write-acq-fail diagnostic
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-write-acq diagnostic
     lda #DBG_FILE_IO_WRITE_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-write-acq diagnostic
 
     ; Copy the per-PID syscall-entry snapshot into gate-protected
     ; module scratch. From here until release, these scratch values are
@@ -498,10 +407,8 @@ ksys_dbg_read_carry:
     lda ksys_rw_buf_hi
     sta io_ptr+1
 
-    ; DEBUG-BEGIN: temporary file-io-write-call diagnostic
     lda #DBG_FILE_IO_WRITE_CALL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-write-call diagnostic
 
     ldy ksys_rw_fd_tmp
     lda ksys_rw_len_lo
@@ -514,15 +421,11 @@ ksys_dbg_read_carry:
     phx
     phy
 
-    ; DEBUG-BEGIN: temporary file-io-write-ret diagnostic
     lda #DBG_FILE_IO_WRITE_RET
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-write-ret diagnostic
 
-    ; DEBUG-BEGIN: temporary file-io-write-rel diagnostic
     lda #DBG_FILE_IO_WRITE_REL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-write-rel diagnostic
     jsr file_io_gate_release
 
     ply
@@ -543,20 +446,16 @@ ksys_dbg_read_carry:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-close-acq-fail diagnostic
     lda #DBG_FILE_IO_CLOSE_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-close-acq-fail diagnostic
     pla
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-close-acq diagnostic
     lda #DBG_FILE_IO_CLOSE_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-close-acq diagnostic
     pla
 
     jsr fd_close
@@ -584,20 +483,16 @@ ksys_dbg_read_carry:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-dup-acq-fail diagnostic
     lda #DBG_FILE_IO_DUP_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-dup-acq-fail diagnostic
     pla
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-dup-acq diagnostic
     lda #DBG_FILE_IO_DUP_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-dup-acq diagnostic
     pla
 
     jsr fd_dup
@@ -626,10 +521,8 @@ ksys_dbg_read_carry:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-dup2-acq-fail diagnostic
     lda #DBG_FILE_IO_DUP2_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-dup2-acq-fail diagnostic
     ply
     pla
     ldy #EINVAL
@@ -637,10 +530,8 @@ ksys_dbg_read_carry:
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-dup2-acq diagnostic
     lda #DBG_FILE_IO_DUP2_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-dup2-acq diagnostic
     ply
     pla
 
@@ -670,19 +561,15 @@ ksys_dbg_read_carry:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-pipe-acq-fail diagnostic
     lda #DBG_FILE_IO_PIPE_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-pipe-acq-fail diagnostic
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-pipe-acq diagnostic
     lda #DBG_FILE_IO_PIPE_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-pipe-acq diagnostic
 
     jsr pipe_create
 

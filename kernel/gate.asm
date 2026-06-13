@@ -185,7 +185,6 @@
     tsb gate_byte
     beq @acquired
 
-    ; DEBUG-BEGIN: detect recursive sleepable gate acquire
     lda owner_byte
     cmp active_pid
     bne @wait_for_owner
@@ -202,18 +201,15 @@
     plp
     clc
     rts
-    ; DEBUG-END: detect recursive sleepable gate acquire
 
 @wait_for_owner:
     ldx active_pid
     jsr enqueue_proc
 
     lda #WAIT_LOCK
-    ; DEBUG-BEGIN: temporary gate wait-object diagnostic
     sta dbg_gate_wait_reason
     ldy #lock_id
     sty dbg_gate_wait_object
-    ; DEBUG-END: temporary gate wait-object diagnostic
     jsr proc_set_wait
 
     plp
@@ -243,24 +239,20 @@
     php
     sei
 
-    ; DEBUG-BEGIN: detect invalid sleepable gate release
     lda owner_byte
     cmp active_pid
     beq @owner_ok
 
-    ; DEBUG-BEGIN: temporary gate release diagnostic
     lda #DBG_MARK_GATE_RELEASE
     sta sched_debug_marker
     lda active_pid
     sta sched_debug_pid
-    ; DEBUG-END: temporary gate release diagnostic
 
     ; Do not hard-hang on bad release either.  Leave the gate state
     ; untouched and return C clear for checked callers/monitor output.
     plp
     clc
     rts
-    ; DEBUG-END: detect invalid sleepable gate release
 
 @owner_ok:
     lda #DBG_OWNER_NONE

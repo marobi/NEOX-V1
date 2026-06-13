@@ -60,6 +60,15 @@ $F000-$FFFF  BIOS
 
 The current kernel model is statically linked. There is no relocatable user executable format yet.
 
+The MMU model is central to the scheduler design:
+
+```text
+$0000-$7FFF  private per context
+$8000-$FFFF  shared across contexts
+```
+
+This means zero page and the hardware stack page `$0100-$01FF` are private to the active context. Kernel code, shared state, BIOS, monitor, RP registers, and fixed ROM areas live in the shared upper half.
+
 A later executable format may be added, but the present focus is kernel correctness, syscall behavior, process scheduling, IRQ/monitor behavior, and IPC.
 
 ## Toolchain
@@ -112,7 +121,30 @@ scheduler debug state
 
 Only one PID should be `RUN` at a time.
 
-During freeze-monitor snapshots it is valid to observe transitional scheduler state.
+The current scheduler baseline uses an explicit separation between the running process identity and scheduler selection state:
+
+```text
+active_pid       PID currently executing or interrupted
+active_context   MMU/private context currently active
+sched cursor     scheduler-private scan/selection state
+```
+
+This separation is required for preemptive scheduling. An IRQ can interrupt any task, so the interrupted task identity must not be confused with the scheduler's temporary scan cursor.
+
+Context switch handoff follows this invariant:
+
+```text
+1. save old task stack pointer while still in the old private context
+2. select target PID/context from shared scheduler state
+3. execute BIOS_CONTEXT_SWITCH with the target context
+4. only after the context switch, install the target stack with TXS
+5. release sched_lock as late as possible
+6. restore the target frame and resume with RTI, or JMP for first-run entry
+```
+
+The scheduler must not inspect or modify another task's private stack before switching to that task's context.
+
+During freeze-monitor snapshots it is valid to observe transitional scheduler state, for example `SCHED` held while the marker shows a load/handoff phase. A healthy snapshot still has coherent `Active PID` / `Active Context`, one `RUN` task, sane wait/object tables, and no scheduler lock underflow.
 
 ## IRQ Model
 
@@ -214,13 +246,27 @@ tell RP-side logic that raw monitor console mode is active
 
 `current_context == 0` alone is not sufficient to detect MICMON, because context 0 can also be used by idle/kernel/common code. RP-side monitor handling should use a dedicated monitor-active state, not infer monitor mode only from the MMU context.
 
+## BIOS Context Switching
+
+The BIOS exposes the context switch primitive as an inline macro in `bios.inc`:
+
+```text
+BIOS_CONTEXT_SWITCH
+```
+
+This macro is deliberately stack-free. No `JSR`/`RTS` may cross an MMU/private-context switch because the return address would be on the previous context's private stack.
+
+The macro only switches the private memory/MMU context. It does not restore registers, does not perform `RTI`, and does not jump into a task. Resume semantics belong to the scheduler or supervisor after the target context is active and the correct stack has been installed.
+
+The old model of BIOS-owned context-switch-and-resume routines is not used by the scheduler baseline. The scheduler owns the final handoff sequence.
+
 ## BIOS Monitor I/O
 
 BIOS provides raw monitor get/put-character routines for MICMON.
 
 They communicate with RP through a dedicated low-level raw monitor console path.
 
-This is a critical invariant. Earlier monitor designs deadlocked when MICMON output went through `sys_write`, because the monitor could interrupt a task that already owned `ksys_io_lock` or `fd_lock`.
+This is a critical invariant. Earlier monitor designs could deadlock when MICMON output went through `sys_write`, because the monitor could interrupt a task that already owned the normal kernel I/O serialization path. The current monitor path stays outside `file_io_gate`, FD dispatch, and RP mailbox syscalls.
 
 ## Syscall Model
 
@@ -331,13 +377,14 @@ Pipe B: Task 2 -> Task 1
 
 The current nonblocking ping-pong test uses `EAGAIN -> sys_yield -> retry`.
 
-Observed 10-second loop baselines during development were approximately:
+Observed ping-pong throughput around the first-freeze scheduler baseline:
 
 ```text
-loops ~= 220 .. 240 per sec, using 4 MC clock frequency
+4 MHz class run:  lps ~= $0650  (about 1616)
+8 MHz test run:   lps ~= $09C0  (about 2496)
 ```
 
-These figures are development measurements, not final performance targets.
+These figures are development measurements, not final performance targets. They are useful mainly as regression indicators while scheduler, syscall, and pipe behavior are changed.
 
 ## Shared State and Scratch Policy
 
@@ -378,48 +425,81 @@ pipe_done_hi  -> pipe.asm KERN_BSS
 
 Zero page is used only where it materially helps addressing or performance. General temporary variables, counters, IDs, and flags should not be placed in zero page by default.
 
-## Locking Policy
+## Locking and Gate Policy
 
-The kernel uses simple shared lock bytes for critical subsystems.
+The kernel uses small shared lock/gate primitives for critical subsystems.
+
+Current shared synchronization objects shown by `ps` are:
+
+```text
+SCHED     scheduler handoff lock
+FILE_IO   sleepable gate for syscall FD/open-object/pipe/console dispatch
+PROC      sleepable gate reserved for process-management serialization
+RP        RP mailbox/resource lock
+```
 
 Important rules:
 
 ```text
-Do not hold fd_lock across backend calls.
-Do not hold pipe_lock across sched_yield or blocking waits.
-Do not hold ksys_io_lock across sched_yield, WAIT_CONSOLE, WAIT_PIPE_READ, WAIT_PIPE_WRITE, or indefinite RP waits.
-Do not spin indefinitely when a real serialization lock cannot be acquired.
+Do not touch scheduler shared state without sched_lock or an IRQ-masked scheduler window.
+Do not use global/module-local syscall scratch before the owning gate is acquired.
+Do not use file_io_gate-protected scratch after file_io_gate_release.
+Do not hold file_io_gate across sched_yield or an indefinite wait.
+Do not hold rp_lock across an indefinite wait.
+Do not spin indefinitely when a real serialization gate cannot be acquired.
 Do not use normal kernel services from MICMON.
-Every lock byte must have one explicit initialization owner.
+Every shared lock/gate byte must have one explicit initialization owner.
 ```
 
-Monitor entry is allowed while locks are held because MICMON uses raw BIOS monitor I/O only and must not acquire the inspected locks.
+`file_io_gate` serializes file-descriptor lookup, open-object access, pipe table/buffer access, and the syscall read/write/close/pipe dispatch scratch that cannot be safely shared under preemption.
+
+Monitor entry is allowed while locks or gates are held because MICMON uses raw BIOS monitor I/O only and must not acquire the inspected kernel locks.
 
 ## Scheduler and Debug Output
 
-The `ps` monitor output includes scheduler debug state.
+The `ps` monitor output includes compact scheduler and synchronization state.
 
 Important fields:
 
 ```text
-Path / Marker       last scheduler path and debug marker
-Save PID/SP/Mode    last saved task stack and return mode
-Load PID/SP/Mode    last loaded task stack and return mode
-Resume PID/Ctx/Mode last resume target
-State change        last process state transition
+Active PID / Context     currently executing process identity and MMU context
+Locks/Gates              SCHED, FILE_IO, PROC, RP ownership and phase state
+Path / Marker            last scheduler path and handoff marker
+Save PID/SP/Src          last saved task stack and source path
+Load PID/SP              last loaded task stack
+Resume PID/Ctx/Src       last resume target and context
+IRQ preempt              IRQ preemption attempt/switch diagnostic snapshot
+State change             last process state transition
 ```
 
-The explicit scheduler debug section is the authoritative human-readable scheduler trace.
+`ps` may sample the kernel in the middle of a scheduler handoff. A held `SCHED` lock is therefore not automatically a deadlock. Interpret it together with the marker, active PID/context, selected PID, and lock underflow field.
 
-Legacy raw debug bytes, if still exposed, should not be interpreted as strongly typed fields. Some legacy fields are reused for different values, such as loaded stack pointer versus process state.
+Stale temporary diagnostics are intentionally kept out of the first-freeze baseline. Future useful counters may include committed cooperative switches, committed preemptive switches, and IRQ preemption attempts, but those are not part of the current freeze.
 
-## Current State
+## First Freeze Baseline
 
-The current working baseline includes:
+The current stable source state is the first freeze baseline.
+
+Confirmed characteristics:
+
+```text
+BIOS_CONTEXT_SWITCH is macro-only and stack-free
+scheduler no longer depends on BIOS_CONTEXT_RTI/JUMP-style resume semantics
+context switch happens before TXS or target stack access
+sched_lock is released after context switch and target stack installation
+monitor entry/leave works
+console focus on task 3 works
+ping-pong throughput is stable around lps=$0650 at the earlier baseline clock
+8 MHz test reached about lps=$09C0
+ps snapshots show sane FD/open-object/pipe tables
+ps snapshots show one RUN task and SCHED underflow 00
+```
+
+Current working capabilities include:
 
 - process switching
 - cooperative `sys_yield`
-- timer-driven scheduling when timer IRQ is enabled
+- timer-driven preemptive scheduling when timer IRQ is enabled
 - stable repeated freeze-style MICMON entry/leave
 - FD tables and open objects
 - console FD integration
@@ -428,6 +508,8 @@ The current working baseline includes:
 - two-pipe ping-pong test using `EAGAIN` and `sys_yield`
 - raw BIOS monitor I/O independent of syscalls and RP mailbox
 - RP/6502 IRQ handshake that avoids missed IRQ pulses
+
+The first freeze should be treated as the known-good scheduler/context-switch baseline before adding new diagnostics or larger subsystem changes.
 
 ## Assembly Conventions
 

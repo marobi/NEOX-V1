@@ -114,10 +114,8 @@
 	sta kernel_version+1
 	
 	; debug
-	; DEBUG-BEGIN: boot scheduler debug marker reset
 	stz sched_debug_marker
 	stx sched_debug_pid
-	; DEBUG-END: boot scheduler debug marker reset
 	; end debug
 	
     ; --------------------------------------------------------

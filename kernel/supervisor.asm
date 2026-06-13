@@ -16,6 +16,8 @@
 .setcpu "65C02"
 
 .include "bios.inc"
+.include "debug.inc"
+.include "sched_lock.inc"
 
 .export enter_monitor
 .export leave_monitor
@@ -27,8 +29,6 @@
 .import console_monitor_enter
 .import console_monitor_exit
 
-.import sched_lock_try_enter
-.import sched_lock_leave
 .import irq_restore
 
 MONITOR_CONTEXT     = $00
@@ -83,7 +83,7 @@ supervisor_saved_return_mode:
     sta supervisor_saved_return_mode
 
     jsr sched_lock_try_enter
-    bcs @busy_restore_irq
+    bcs busy_restore_irq
 
     jsr console_monitor_enter
 
@@ -95,11 +95,11 @@ supervisor_saved_return_mode:
     lda #MONITOR_CONTEXT
     sta active_context
 
-    ldx #<MONITOR_ENTRY
-    ldy #>MONITOR_ENTRY
-    jmp BIOS_CONTEXT_JUMP
+    lda #MONITOR_CONTEXT
+    BIOS_CONTEXT_SWITCH
+    jmp MONITOR_ENTRY
 
-@busy_restore_irq:
+busy_restore_irq:
     ; sched_lock was already held.  Do not enter monitor from inside
     ; a scheduler-critical section; restore the interrupted context.
     jmp irq_restore
@@ -128,7 +128,7 @@ supervisor_saved_return_mode:
     sta supervisor_saved_return_mode
 
     jsr sched_lock_try_enter
-    bcs @busy_rts
+    bcs busy_rts
 
     jsr console_monitor_enter
 
@@ -140,11 +140,11 @@ supervisor_saved_return_mode:
     lda #MONITOR_CONTEXT
     sta active_context
 
-    ldx #<MONITOR_ENTRY
-    ldy #>MONITOR_ENTRY
-    jmp BIOS_CONTEXT_JUMP
+    lda #MONITOR_CONTEXT
+    BIOS_CONTEXT_SWITCH
+    jmp MONITOR_ENTRY
 
-@busy_rts:
+busy_rts:
     ; Manual monitor entry cannot proceed while scheduler state is
     ; locked.  The try-lock restored the caller's P on failure.
     rts
@@ -161,35 +161,41 @@ supervisor_saved_return_mode:
 
     jsr console_monitor_exit
 
+    lda supervisor_saved_return_mode
+    cmp #SUP_RETURN_IRQ
+    beq return_irq
+
+return_rts:
+    lda supervisor_saved_pid
+    sta active_pid
+    lda supervisor_saved_context
+    sta active_context
+
+    lda supervisor_saved_context
+    BIOS_CONTEXT_SWITCH
+
     ldx supervisor_saved_sp
     txs
 
-    lda supervisor_saved_return_mode
-    pha
+    jsr sched_lock_leave
+
+    jmp resume_rts_from_monitor
+
+return_irq:
+    lda supervisor_saved_pid
+    sta active_pid
+    lda supervisor_saved_context
+    sta active_context
+
+    lda supervisor_saved_context
+    BIOS_CONTEXT_SWITCH
+
+    ldx supervisor_saved_sp
+    txs
 
     jsr sched_lock_leave
 
-    pla
-    cmp #SUP_RETURN_IRQ
-    beq @return_irq
-
-@return_rts:
-    lda supervisor_saved_pid
-    sta active_pid
-    lda supervisor_saved_context
-    sta active_context
-    ldx #<resume_rts_from_monitor
-    ldy #>resume_rts_from_monitor
-    jmp BIOS_CONTEXT_JUMP
-
-@return_irq:
-    lda supervisor_saved_pid
-    sta active_pid
-    lda supervisor_saved_context
-    sta active_context
-    ldx #<irq_restore
-    ldy #>irq_restore
-    jmp BIOS_CONTEXT_JUMP
+    jmp irq_restore
 .endproc
 
 ; ------------------------------------------------------------

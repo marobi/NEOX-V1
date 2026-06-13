@@ -73,7 +73,6 @@ SCHED_LOCK_BIT = $01
     ; the scheduler critical section.
     pla
 
-    ; DEBUG-BEGIN: temporary scheduler lock owner/enter diagnostic
     lda active_pid
     sta sched_lock_owner
 
@@ -82,7 +81,6 @@ SCHED_LOCK_BIT = $01
 
     lda #$01
     sta sched_lock_depth
-    ; DEBUG-END: temporary scheduler lock owner/enter diagnostic
 
     clc
     rts
@@ -91,13 +89,11 @@ SCHED_LOCK_BIT = $01
     ; The bit was already set before TSB.  Keep IRQ masked while the
     ; busy diagnostic is recorded, then restore the caller's P because
     ; this caller did not acquire the scheduler guard.
-    ; DEBUG-BEGIN: temporary scheduler lock busy diagnostic
     lda #DBG_MARK_SCHED_LOCK_OVERFLOW
     sta sched_debug_marker
 
     lda #DBG_SCHED_LOCK_NESTED
     sta sched_lock_phase
-    ; DEBUG-END: temporary scheduler lock busy diagnostic
 
     plp
     sec
@@ -128,17 +124,14 @@ SCHED_LOCK_BIT = $01
     lda #SCHED_LOCK_BIT
     trb sched_lock
 
-    ; DEBUG-BEGIN: temporary scheduler lock outer-release diagnostic
     lda #DBG_OWNER_NONE
     sta sched_lock_owner
 
     stz sched_lock_phase
     stz sched_lock_depth
-    ; DEBUG-END: temporary scheduler lock outer-release diagnostic
     bra @done
 
 @underflow:
-    ; DEBUG-BEGIN: temporary scheduler lock underflow diagnostic
     lda #DBG_MARK_SCHED_LOCK_UNDERFLOW
     sta sched_debug_marker
 
@@ -151,7 +144,6 @@ SCHED_LOCK_BIT = $01
     cmp #$ff
     beq @done
     inc sched_lock_underflow
-    ; DEBUG-END: temporary scheduler lock underflow diagnostic
 
 @done:
     pla

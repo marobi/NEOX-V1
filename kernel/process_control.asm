@@ -203,18 +203,14 @@
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-proc-term-acq-fail diagnostic
     lda #DBG_FILE_IO_PROC_TERM_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-proc-term-acq-fail diagnostic
     plx
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-proc-term-acq diagnostic
     lda #DBG_FILE_IO_PROC_TERM_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-proc-term-acq diagnostic
 
     ; file_io_gate_acquire clobbers X with active_pid.
     ; Restore the target PID before closing that process's FDs,

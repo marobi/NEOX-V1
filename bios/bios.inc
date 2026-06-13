@@ -1,10 +1,15 @@
 ;
-; BIOS jumptable + ...
+; BIOS jumptable + inline context switch primitive
 ;
 .ifndef __BIOS_INC__
 __BIOS_INC__ = 1
 
 BIOS_IO_PORT    =   $D000
+
+BIOS_KBD_PORT   = BIOS_IO_PORT
+BIOS_DSP_PORT   = BIOS_IO_PORT + 1
+BIOS_CMD_PORT   = BIOS_IO_PORT + 2
+BIOS_PARAM_PORT = BIOS_IO_PORT + 3
 
 BIOS_IRQ_SOURCE =   $E00C
 BIOS_IRQ_STATE  =   $E00F
@@ -13,10 +18,57 @@ BIOS_BASE         = $F000
 
 BIOS_GETCHAR      = BIOS_BASE
 BIOS_PUTCHAR      = BIOS_BASE+3
-BIOS_INKEY        = BIOS_BASE+6
-BIOS_STPKEY		  =	BIOS_BASE+9
-BIOS_CONTEXT_RTI  = BIOS_BASE+12
-BIOS_CONTEXT_JUMP = BIOS_BASE+15
-BIOS_ACK_IRQ      = BIOS_BASE+18
+
+BIOS_ACK_IRQ      = BIOS_BASE+6
+
+; BIOS command values used by the inline context switch macro.
+BIOS_CMD_NONE           = 0
+BIOS_CMD_ACK_IRQ        = 1
+BIOS_CMD_CONTEXT_SWITCH = 2
+
+; -----------------------------------------------------------------------------
+; BIOS_CONTEXT_SWITCH
+;
+; Inline, stack-free MMU/private-context switch primitive.
+;
+; Input:
+;   A = target context
+;
+; Effect:
+;   Switches private memory / MMU context to A.
+;
+; Clobbers:
+;   A, Y
+;
+; Preserves:
+;   X
+;
+; Rules:
+;   - macro only: no JSR/RTS may cross the context switch because the stack is
+;     private per context.
+;   - does not restore registers.
+;   - does not RTI or JMP into a task.
+;   - scheduler/context owner must perform TXS/RTI/JMP after this macro, when
+;     the target context's private stack is mapped.
+; -----------------------------------------------------------------------------
+.macro BIOS_CONTEXT_SWITCH
+    .local wait_cmd, wait_completion
+
+    ; Preserve target context without using stack. X is intentionally left
+    ; untouched so callers may carry the target SP across the switch.
+    tay
+
+wait_cmd:
+    lda BIOS_CMD_PORT
+    bne wait_cmd
+
+    sty BIOS_PARAM_PORT
+    lda #BIOS_CMD_CONTEXT_SWITCH
+    sta BIOS_CMD_PORT
+
+wait_completion:
+    lda BIOS_CMD_PORT
+    bne wait_completion
+.endmacro
 
 .endif

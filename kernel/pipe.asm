@@ -533,10 +533,8 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG-BEGIN: temporary file-io-pipe-link-acq-fail diagnostic
     lda #DBG_FILE_IO_PIPE_LINK_ACQ_FAIL
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-pipe-link-acq-fail diagnostic
     ply
     plx
     pla
@@ -545,10 +543,8 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @gate_acquired:
-    ; DEBUG-BEGIN: temporary file-io-pipe-link-acq diagnostic
     lda #DBG_FILE_IO_PIPE_LINK_ACQ
     sta file_io_gate_phase
-    ; DEBUG-END: temporary file-io-pipe-link-acq diagnostic
     ply
     plx
     pla

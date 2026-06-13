@@ -12,7 +12,7 @@
 ;
 ; Rule:
 ;   Debug fields are diagnostics only.
-;   They must never be used as temporary scratch required for
+;   They must never be used as scratch required for
 ;   correctness.
 ; ============================================================
 
@@ -100,7 +100,6 @@
     stz dbg_timer_now_lo
     stz dbg_timer_now_hi
 
-; DEBUG-BEGIN: temporary IRQ preemption selection diagnostic init
     stz dbg_irq_preempt_count
     lda #DBG_PID_NONE
     sta dbg_irq_current_pid
@@ -108,18 +107,7 @@
     stz dbg_irq_saved_sp
     stz dbg_irq_loaded_sp
     stz dbg_irq_skip_reason
-; DEBUG-END: temporary IRQ preemption selection diagnostic init
 
-; DEBUG-BEGIN: temporary scheduler save-time private-stack frame snapshot init
-    lda #DBG_PID_NONE
-    sta dbg_save_frame_pid
-    sta dbg_save_frame_context
-    sta dbg_save_frame_sp
-    sta dbg_save_frame_p
-    sta dbg_save_frame_pcl
-    sta dbg_save_frame_pch
-    stz dbg_save_frame_src
-; DEBUG-END: temporary scheduler save-time private-stack frame snapshot init
 
     rts
 .endproc

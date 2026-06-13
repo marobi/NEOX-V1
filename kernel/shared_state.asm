@@ -506,7 +506,7 @@ open_pipe_mode:
 ;
 ; Important:
 ;   These fields are diagnostics only.
-;   They must never be used as temporary scratch required for
+;   They must never be used as scratch required for
 ;   correctness.
 ;
 ;   They stay in shared_state.asm intentionally because the RP
@@ -693,7 +693,6 @@ dbg_timer_now_lo:
 dbg_timer_now_hi:
     .res 1
 
-; DEBUG-BEGIN: temporary IRQ preemption selection diagnostic storage
 .export dbg_irq_preempt_count
 .export dbg_irq_current_pid
 .export dbg_irq_selected_pid
@@ -707,63 +706,7 @@ dbg_irq_selected_pid:  .res 1
 dbg_irq_saved_sp:      .res 1
 dbg_irq_loaded_sp:     .res 1
 dbg_irq_skip_reason:   .res 1
-; DEBUG-END: temporary IRQ preemption selection diagnostic storage
 
-; DEBUG-BEGIN: temporary pingpong read return diagnostic storage
-.export dbg_read_ret_pid
-.export dbg_read_ret_fd
-.export dbg_read_ret_len_lo
-.export dbg_read_ret_len_hi
-.export dbg_read_ret_carry
-.export dbg_read_ret_lo
-.export dbg_read_ret_hi
-.export dbg_read_ret_errno
-.export dbg_read_ret_phase
 
-dbg_read_ret_pid:    .res 1
-dbg_read_ret_fd:     .res 1
-dbg_read_ret_len_lo: .res 1
-dbg_read_ret_len_hi: .res 1
-dbg_read_ret_carry:  .res 1
-dbg_read_ret_lo:     .res 1
-dbg_read_ret_hi:     .res 1
-dbg_read_ret_errno:  .res 1
-dbg_read_ret_phase:  .res 1
-; DEBUG-END: temporary pingpong read return diagnostic storage
 
-; DEBUG-BEGIN: temporary scheduler final handoff frame snapshot
-.export dbg_handoff_pid
-.export dbg_handoff_context
-.export dbg_handoff_sp
-.export dbg_handoff_p
-.export dbg_handoff_pcl
-.export dbg_handoff_pch
-.export dbg_handoff_src
-
-dbg_handoff_pid:     .res 1
-dbg_handoff_context: .res 1
-dbg_handoff_sp:      .res 1
-dbg_handoff_p:       .res 1
-dbg_handoff_pcl:     .res 1
-dbg_handoff_pch:     .res 1
-dbg_handoff_src:     .res 1
-; DEBUG-END: temporary scheduler final handoff frame snapshot
-
-; DEBUG-BEGIN: temporary scheduler save-time private-stack frame snapshot
-.export dbg_save_frame_pid
-.export dbg_save_frame_context
-.export dbg_save_frame_sp
-.export dbg_save_frame_p
-.export dbg_save_frame_pcl
-.export dbg_save_frame_pch
-.export dbg_save_frame_src
-
-dbg_save_frame_pid:     .res 1
-dbg_save_frame_context: .res 1
-dbg_save_frame_sp:      .res 1
-dbg_save_frame_p:       .res 1
-dbg_save_frame_pcl:     .res 1
-dbg_save_frame_pch:     .res 1
-dbg_save_frame_src:     .res 1
-; DEBUG-END: temporary scheduler save-time private-stack frame snapshot
 
