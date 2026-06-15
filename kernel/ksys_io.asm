@@ -14,9 +14,10 @@
 ;     - FD table, open-object table, pipe table and buffers
 ;     - console device dispatch
 ;
-;   No gate may be held across sched_yield. Current console waits
-;   are polling waits; when they become scheduler waits, the gate
-;   must be released before setting the wait state and yielding.
+;   No gate may be held across sched_yield. Console input waits
+;   block on WAIT_CONSOLE, empty pipe reads block on WAIT_PIPE_READ,
+;   and full pipe writes block on WAIT_PIPE_WRITE; file_io_gate is
+;   released before the blocked task enters sched_yield.
 ;
 ; Calling convention from syscall stubs:
 ;   X/Y -> rw_args block for read/write
@@ -35,6 +36,7 @@
 .include "syscall.inc"
 .include "fd.inc"
 .include "process.inc"
+.include "pipe.inc"
 
 .export ksys_io_init
 .export ksys_read
@@ -56,12 +58,18 @@
 .import rp_console_read_finish
 .import rp_console_write_finish
 
+.import fd_resolve_read
+.import fd_resolve_write
 .import fd_read
 .import fd_write
 .import fd_close
+.import open_pipe
 .import fd_dup
 .import fd_dup2
 .import pipe_create
+
+.import proc_set_wait
+.import sched_yield
 
 .importzp io_ptr
 
@@ -91,6 +99,21 @@ ksys_rw_buf_lo:
     .res 1
 
 ksys_rw_buf_hi:
+    .res 1
+
+; Non-zero while the current gate-protected read dispatch is known
+; to target the console device. Used to convert console EAGAIN into
+; WAIT_CONSOLE without accidentally blocking pipe EAGAIN here.
+ksys_rw_is_console:
+    .res 1
+
+; Non-zero while the current gate-protected read/write dispatch is
+; known to target a pipe. ksys_rw_pipe_idx stores the pipe table index
+; used as WAIT_PIPE_READ / WAIT_PIPE_WRITE wait_object.
+ksys_rw_is_pipe:
+    .res 1
+
+ksys_rw_pipe_idx:
     .res 1
 
 ; Per-PID read/write syscall argument snapshot.
@@ -266,6 +289,7 @@ ksys_rw_entry_hi:
     ; has been copied; file_io_gate itself is the syscall serializer.
     cli
 
+@retry_gate:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
@@ -300,6 +324,45 @@ ksys_rw_entry_hi:
     lda ksys_rw_buf_hi
     sta io_ptr+1
 
+    ; Classify the backend before dispatching. fd_read may return
+    ; EAGAIN for console or pipe. The syscall layer converts only
+    ; those known backends into blocking waits; all other EAGAIN
+    ; returns remain normal syscall failures.
+    stz ksys_rw_is_console
+    stz ksys_rw_is_pipe
+    lda #PIPE_NONE
+    sta ksys_rw_pipe_idx
+
+    ldy ksys_rw_fd_tmp
+    jsr fd_resolve_read
+    bcc @read_resolve_ok
+    jmp @read_resolve_fail
+
+@read_resolve_ok:
+    cmp #OBJ_DEVICE
+    beq @class_device
+
+    cmp #OBJ_PIPE
+    beq @class_pipe
+
+    bra @read_call
+
+@class_device:
+    cpy #DEV_CONSOLE
+    bne @read_call
+
+    lda #$01
+    sta ksys_rw_is_console
+    bra @read_call
+
+@class_pipe:
+    ; X = open object from fd_resolve_read.
+    lda open_pipe,x
+    sta ksys_rw_pipe_idx
+    lda #$01
+    sta ksys_rw_is_pipe
+
+@read_call:
     lda #DBG_FILE_IO_READ_CALL
     sta file_io_gate_phase
 
@@ -307,13 +370,75 @@ ksys_rw_entry_hi:
     lda ksys_rw_len_lo
     ldx ksys_rw_len_hi
     jsr fd_read
+    bcc @read_success
 
-    ; Preserve fd_read result before touching debug state.
+    ; Console backend reports EAGAIN when the console owner has no
+    ; input available. Pipe read reports EAGAIN when the pipe is empty
+    ; and writers are still present. Convert only those known backend
+    ; cases into blocking waits, release file_io_gate, yield, and retry
+    ; the original syscall from the per-PID snapshot after wake.
+    cpy #EAGAIN
+    bne @read_fail
+
+    lda ksys_rw_is_console
+    bne @wait_console
+
+    lda ksys_rw_is_pipe
+    bne @wait_pipe_read
+
+    bra @read_fail
+
+@wait_console:
+    lda #DBG_FILE_IO_READ_WAIT_CONSOLE
+    sta file_io_gate_phase
+
+    lda #WAIT_CONSOLE
+    ldy #$00
+    bra @block_read
+
+@wait_pipe_read:
+    lda #DBG_FILE_IO_READ_WAIT_PIPE
+    sta file_io_gate_phase
+
+    lda #WAIT_PIPE_READ
+    ldy ksys_rw_pipe_idx
+
+@block_read:
     php
+    sei
+
+    ldx active_pid
+    jsr proc_set_wait
+
+    lda #DBG_FILE_IO_READ_REL
+    sta file_io_gate_phase
+    jsr file_io_gate_release
+
+    ; Keep IRQs masked for the immediate scheduler handoff.  sched_yield
+    ; converts this continuation into an RTI frame with I cleared, so the
+    ; resumed task continues with IRQs enabled.
+    pla                         ; discard saved P byte
+    jsr sched_yield
+    jmp @retry_gate
+
+@read_success:
     pha
     phx
-    phy
 
+    lda #DBG_FILE_IO_READ_RET
+    sta file_io_gate_phase
+
+    lda #DBG_FILE_IO_READ_REL
+    sta file_io_gate_phase
+    jsr file_io_gate_release
+
+    plx
+    pla
+    clc
+    rts
+
+@read_fail:
+    phy
 
     lda #DBG_FILE_IO_READ_RET
     sta file_io_gate_phase
@@ -323,9 +448,18 @@ ksys_rw_entry_hi:
     jsr file_io_gate_release
 
     ply
-    plx
-    pla
-    plp
+    sec
+    rts
+
+@read_resolve_fail:
+    phy
+
+    lda #DBG_FILE_IO_READ_REL
+    sta file_io_gate_phase
+    jsr file_io_gate_release
+
+    ply
+    sec
     rts
 .endproc
 
@@ -373,6 +507,7 @@ ksys_rw_entry_hi:
     ; has been copied; file_io_gate itself is the syscall serializer.
     cli
 
+@retry_gate:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
@@ -407,6 +542,29 @@ ksys_rw_entry_hi:
     lda ksys_rw_buf_hi
     sta io_ptr+1
 
+    ; Classify pipe writes before dispatch. fd_write may return
+    ; EAGAIN for a full pipe with zero bytes written. Only known pipe
+    ; EAGAIN is converted into WAIT_PIPE_WRITE.
+    stz ksys_rw_is_pipe
+    lda #PIPE_NONE
+    sta ksys_rw_pipe_idx
+
+    ldy ksys_rw_fd_tmp
+    jsr fd_resolve_write
+    bcc @write_resolve_ok
+    jmp @write_resolve_fail
+
+@write_resolve_ok:
+    cmp #OBJ_PIPE
+    bne @write_call
+
+    ; X = open object from fd_resolve_write.
+    lda open_pipe,x
+    sta ksys_rw_pipe_idx
+    lda #$01
+    sta ksys_rw_is_pipe
+
+@write_call:
     lda #DBG_FILE_IO_WRITE_CALL
     sta file_io_gate_phase
 
@@ -414,11 +572,54 @@ ksys_rw_entry_hi:
     lda ksys_rw_len_lo
     ldx ksys_rw_len_hi
     jsr fd_write
+    bcc @write_success
 
-    ; Preserve fd_write result before touching debug state.
+    cpy #EAGAIN
+    bne @write_fail
+
+    lda ksys_rw_is_pipe
+    beq @write_fail
+
+@wait_pipe_write:
+    lda #DBG_FILE_IO_WRITE_WAIT_PIPE
+    sta file_io_gate_phase
+
     php
+    sei
+
+    lda #WAIT_PIPE_WRITE
+    ldy ksys_rw_pipe_idx
+    ldx active_pid
+    jsr proc_set_wait
+
+    lda #DBG_FILE_IO_WRITE_REL
+    sta file_io_gate_phase
+    jsr file_io_gate_release
+
+    ; Keep IRQs masked for the immediate scheduler handoff. sched_yield
+    ; converts this continuation into an RTI frame with I cleared, so the
+    ; resumed task continues with IRQs enabled.
+    pla                         ; discard saved P byte
+    jsr sched_yield
+    jmp @retry_gate
+
+@write_success:
     pha
     phx
+
+    lda #DBG_FILE_IO_WRITE_RET
+    sta file_io_gate_phase
+
+    lda #DBG_FILE_IO_WRITE_REL
+    sta file_io_gate_phase
+    jsr file_io_gate_release
+
+    plx
+    pla
+    clc
+    rts
+
+@write_fail:
     phy
 
     lda #DBG_FILE_IO_WRITE_RET
@@ -429,9 +630,18 @@ ksys_rw_entry_hi:
     jsr file_io_gate_release
 
     ply
-    plx
-    pla
-    plp
+    sec
+    rts
+
+@write_resolve_fail:
+    phy
+
+    lda #DBG_FILE_IO_WRITE_REL
+    sta file_io_gate_phase
+    jsr file_io_gate_release
+
+    ply
+    sec
     rts
 .endproc
 

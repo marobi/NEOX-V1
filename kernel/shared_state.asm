@@ -159,11 +159,6 @@ proc_gate_next:
 ; proc_flags[pid]:
 ;   Process characteristics flags.
 ;
-; proc_resume_mode[pid]:
-;   Debug/compatibility byte for the saved frame format.
-;   Only PROC_FRAME_RTI / PROC_RESUME_RTI is valid for runnable
-;   saved process stacks.
-;
 ; proc_parent_pid[pid]:
 ;   PID of creator/owner process.
 ;   $FF = no parent / kernel-owned.
@@ -177,7 +172,6 @@ proc_gate_next:
 .export proc_entryL
 .export proc_entryH
 .export proc_flags
-.export proc_resume_mode
 .export proc_parent_pid
 .export proc_signal_pending
 
@@ -203,9 +197,6 @@ proc_entryH:
     .res MAX_PROCS
 
 proc_flags:
-    .res MAX_PROCS
-
-proc_resume_mode:
     .res MAX_PROCS
 
 proc_parent_pid:
@@ -330,8 +321,9 @@ open_dev:
 ; Per-process wait state
 ;
 ; wait_reason[pid]:
-;   WAIT_NONE, WAIT_CONSOLE, WAIT_DEVICE, WAIT_PIPE,
-;   WAIT_TIMER, WAIT_PROC, WAIT_LOCK, ...
+;   WAIT_NONE, WAIT_CONSOLE, WAIT_DEVICE, WAIT_PIPE_READ,
+;   WAIT_TIMER, WAIT_PROC, WAIT_LOCK, WAIT_PIPE_WRITE, ...
+;   WAIT_PIPE remains a compatibility alias for WAIT_PIPE_READ.
 ;
 ; wait_object[pid]:
 ;   reason-specific object id. For WAIT_LOCK this is one of

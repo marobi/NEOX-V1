@@ -285,6 +285,36 @@ Current syscall work includes:
 
 The current priority is correctness of the kernel-side semantics, not POSIX completeness.
 
+## Blocking Model
+
+Blocking is implemented by the syscall layer, not by low-level device or pipe backend primitives. The general pattern is:
+
+```text
+try operation
+if the operation would block:
+    set process wait reason and wait object
+    release any sleepable gate owned by the syscall
+    call sched_yield
+    retry after the process is woken
+```
+
+Current blocking wait reasons validated in this checkpoint:
+
+```text
+WAIT_TIMER        sys_sleep / timer wake
+WAIT_CONSOLE      console read with no input available
+WAIT_PIPE_READ    pipe read on an empty pipe while writers still exist
+WAIT_PIPE_WRITE   pipe write on a full pipe while readers still exist
+```
+
+Console and pipe blocking both follow the same critical rule:
+
+```text
+never block while holding FILE_IO
+```
+
+`WAIT_CONSOLE` uses `wait_object = 0` for the console input wait. `WAIT_PIPE_READ` uses `wait_object = pipe index`, so the writer can wake readers waiting on the same pipe. `WAIT_PIPE_WRITE` also uses `wait_object = pipe index`, so the reader can wake writers waiting for space on the same pipe.
+
 ## File Descriptors
 
 NEOX uses per-process file-descriptor tables backed by a shared global open-object table.
@@ -315,7 +345,7 @@ The FD table and open-object table are shared kernel state.
 
 ## Pipes
 
-The current pipe implementation is static and nonblocking at the backend layer.
+The current pipe implementation is static. The pipe backend itself remains nonblocking; blocking semantics are implemented at the syscall layer.
 
 Pipe endpoints are represented by open objects:
 
@@ -342,22 +372,30 @@ pipe_write:
 
 The pipe core does not block internally and does not call `sched_yield`.
 
-This is an explicit decision. A previous attempt to block inside `pipe_read` / `pipe_write` was rejected because it required preserving pipe-local call state across a context switch and introduced unsafe lock/wait interactions.
-
-The intended model is syscall-layer blocking:
+This is intentional. Blocking inside `pipe_read` / `pipe_write` would require preserving pipe-local call state across a context switch and would mix backend state with scheduler wait logic. Instead, the syscall layer owns retryable blocking:
 
 ```text
-ksys_read / ksys_write
-    -> fd_read / fd_write
-        -> pipe_read / pipe_write
-    -> if EAGAIN:
-        set wait state
-        release locks
-        yield
-        retry later when woken
+ksys_read
+    -> fd_read
+        -> pipe_read
+    -> if pipe read returns EAGAIN and writers are still present:
+        save/read syscall arguments from the per-PID snapshot
+        set WAIT_PIPE_READ / wait_object = pipe index
+        release FILE_IO
+        sched_yield
+        retry the read after wake
+
+ksys_write
+    -> fd_write / pipe_write
+    -> if pipe is full and readers exist:
+        set WAIT_PIPE_WRITE
+        release FILE_IO
+        sched_yield
+        retry the write after wake
+    -> wakes readers blocked on the written pipe
 ```
 
-This keeps pipe backend primitives small, deterministic, and nonblocking.
+The important invariant is that a process blocked on a pipe must not own `FILE_IO`. `ps` should show blocked pipe readers as `BLK PIP <pipe-index>` and blocked pipe writers as `BLK PIW <pipe-index>` with `FILE_IO` free.
 
 ## Inter-Process Pipe Tests
 
@@ -375,13 +413,23 @@ Pipe B: Task 2 -> Task 1
   PID 1 fd 4 = read endpoint
 ```
 
-The current nonblocking ping-pong test uses `EAGAIN -> sys_yield -> retry`.
+Task simplification after blocking
+----------------------------------
 
-Observed ping-pong throughput around the first-freeze scheduler baseline:
+Blocking `read` / `write` syscalls now own the internal `EAGAIN` retry path. User tasks no longer need to poll `EAGAIN` and call `sys_yield` for console or pipe I/O. The sample ping-pong tasks and console echo task use normal blocking syscall style and only handle EOF, short transfer, or real errors.
+
+The current blocking checkpoint no longer relies on userspace polling for empty pipe reads. Empty pipe reads with writers present block in `ksys_read` as `WAIT_PIPE_READ`; a later pipe write wakes the blocked reader. Full pipe writes with readers present block in `ksys_write` as `WAIT_PIPE_WRITE`; a later pipe read wakes the blocked writer.
+
+Observed ping-pong throughput checkpoints:
 
 ```text
-4 MHz class run:  lps ~= $0650  (about 1616)
-8 MHz test run:   lps ~= $09C0  (about 2496)
+First freeze, 4 MHz:          lps ~= $0650  (about 1616)
+WAIT_CONSOLE, 4 MHz:          lps ~= $0780  (about 1920)
+
+First freeze, 8 MHz:          lps ~= $09C0  (about 2496)
+WAIT_CONSOLE, 8 MHz:          lps ~= $09B0  (about 2480)
+WAIT_PIPE_READ, 8 MHz:        lps ~= $0CF0  (about 3312)
+WAIT_PIPE_WRITE + simplified tasks, 8 MHz: lps ~= $0A50  (about 2640)
 ```
 
 These figures are development measurements, not final performance targets. They are useful mainly as regression indicators while scheduler, syscall, and pipe behavior are changed.
@@ -457,28 +505,27 @@ Monitor entry is allowed while locks or gates are held because MICMON uses raw B
 
 ## Scheduler and Debug Output
 
-The `ps` monitor output includes compact scheduler and synchronization state.
+The `ps` monitor output is intentionally compact in the current checkpoint. It is meant to show enough state to validate scheduler, wait, FD, and pipe correctness without disturbing timing more than necessary.
 
 Important fields:
 
 ```text
 Active PID / Context     currently executing process identity and MMU context
+Console Owner PID        current console input owner, or 255 when unowned
 Locks/Gates              SCHED, FILE_IO, PROC, RP ownership and phase state
-Path / Marker            last scheduler path and handoff marker
-Save PID/SP/Src          last saved task stack and source path
-Load PID/SP              last loaded task stack
-Resume PID/Ctx/Src       last resume target and context
-IRQ preempt              IRQ preemption attempt/switch diagnostic snapshot
-State change             last process state transition
+Process table            PID state, stack pointer, context, wait reason/object, FD table
+PID ticks                coarse runtime sampling per PID
 ```
 
-`ps` may sample the kernel in the middle of a scheduler handoff. A held `SCHED` lock is therefore not automatically a deadlock. Interpret it together with the marker, active PID/context, selected PID, and lock underflow field.
+`ps` may sample the kernel in the middle of a scheduler handoff. A held `SCHED` lock is therefore not automatically a deadlock. A healthy snapshot has coherent `Active PID` / `Active Context`, one `RUN` task, sane wait objects, free sleepable gates for blocked tasks, and `SCHED` underflow `00`.
 
-Stale temporary diagnostics are intentionally kept out of the first-freeze baseline. Future useful counters may include committed cooperative switches, committed preemptive switches, and IRQ preemption attempts, but those are not part of the current freeze.
+Stale temporary diagnostics are intentionally kept out of the freeze baseline. Future useful counters may include committed cooperative switches, committed preemptive switches, IRQ preemption attempts, and run-selection counts per PID.
 
-## First Freeze Baseline
+## Freeze Baselines
 
-The current stable source state is the first freeze baseline.
+### First Freeze
+
+The first freeze is the known-good scheduler/context-switch baseline.
 
 Confirmed characteristics:
 
@@ -489,10 +536,32 @@ context switch happens before TXS or target stack access
 sched_lock is released after context switch and target stack installation
 monitor entry/leave works
 console focus on task 3 works
-ping-pong throughput is stable around lps=$0650 at the earlier baseline clock
+ping-pong throughput is stable around lps=$0650 at 4 MHz
 8 MHz test reached about lps=$09C0
 ps snapshots show sane FD/open-object/pipe tables
 ps snapshots show one RUN task and SCHED underflow 00
+```
+
+The first freeze should be treated as the known-good scheduler/context-switch baseline before adding blocking semantics or larger subsystem changes.
+
+### Current Blocking Freeze
+
+The current freeze builds on the first freeze and adds validated syscall-layer blocking for console reads and pipe reads.
+
+Confirmed characteristics:
+
+```text
+WAIT_TIMER already present through sys_sleep / timer wake
+WAIT_CONSOLE validated
+WAIT_PIPE_READ validated
+console task blocks as BLK CON without holding FILE_IO
+pipe readers block as BLK PIP <pipe-index> without holding FILE_IO
+pipe write wakes blocked pipe readers
+compact ps output is used for normal validation
+SCHED underflow remains 00
+FD/open-object/pipe tables remain sane
+one real task is RUN while other tasks may be blocked on CON/PIP
+8 MHz ping-pong with WAIT_PIPE_READ reached about lps=$0CF0
 ```
 
 Current working capabilities include:
@@ -503,13 +572,14 @@ Current working capabilities include:
 - stable repeated freeze-style MICMON entry/leave
 - FD tables and open objects
 - console FD integration
-- static nonblocking pipes
+- `WAIT_CONSOLE` for console read blocking
+- static pipe backend with syscall-layer `WAIT_PIPE_READ`
 - inter-process pipes
-- two-pipe ping-pong test using `EAGAIN` and `sys_yield`
+- two-pipe ping-pong test using blocking pipe reads
 - raw BIOS monitor I/O independent of syscalls and RP mailbox
 - RP/6502 IRQ handshake that avoids missed IRQ pulses
 
-The first freeze should be treated as the known-good scheduler/context-switch baseline before adding new diagnostics or larger subsystem changes.
+Pipe write blocking is intentionally not part of this freeze yet.
 
 ## Assembly Conventions
 
@@ -520,3 +590,56 @@ The codebase targets W65C02 and ca65.
 NEOX is under active development.
 
 The current code is intended for bring-up, kernel design validation, and hardware testing. Interfaces and internal structures may still change as the scheduler, FD layer, pipe layer, syscall semantics, and monitor/RP integration mature.
+
+
+Stale-code cleanup after blocking freeze
+----------------------------------------
+
+After the blocking freeze, stale userspace `EAGAIN` retry/yield loops were removed from the sample tasks. Obsolete BIOS scratch state from the former BIOS-owned context-jump model was removed. Unused imports and unused zero-page scratch reservations were removed from kernel modules. The compact debug/`ps` state was intentionally kept.
+
+### RTI-only resume cleanup
+
+The per-process `proc_resume_mode` table has been removed. The scheduler no longer selects between resume mechanisms per process: all normal saved runnable task frames are RTI-compatible. The idle and first-run paths remain explicit scheduler paths, not per-process resume modes. Compact scheduler debug still keeps its source/mode fields for diagnostics only.
+
+### PROC gate lifecycle serialization
+
+Process lifecycle entry points now use the explicit `PROC` gate where appropriate:
+
+- `proc_create` acquires `proc_gate` before scanning/initialising a process slot and releases it after publishing or failing.
+- `proc_exit_current` acquires `proc_gate` before terminating the active process and releases it before entering `sched_yield`.
+- `proc_terminate` remains the low-level termination primitive. Internal scheduler-owned paths may call it directly where they already run under scheduler control.
+
+`PROC` gate is not held across `sched_yield`.
+
+## No-sleep pingpong checkpoint
+
+The asymmetric timer-pingpong experiment is not part of this checkpoint.
+Task 1 and task 2 again test blocking pipe read/write only; they do not call
+`sys_sleep` in the normal pingpong loop. Their failure stop loops also avoid
+`sys_sleep` while the timer/sleep IRQ-latency path is under review.
+
+`sys_sleep` / `WAIT_TIMER` remains implemented in the kernel, but it is not
+exercised by the normal task 1 / task 2 pingpong workload in this package.
+
+## Timer sleep redesign checkpoint
+
+`sys_sleep` now uses a scheduler-owned blocking transition instead of the old split model where `timer_start_current` marked the process blocked and `ksys_sleep` later entered `sched_yield`.
+
+Current timer sleep model:
+
+- `timer_start_current` arms a timer slot for `active_pid` and returns the timer slot in `Y`.
+- `sched_block_current` owns the actual blocking transition.
+- `sched_block_current` validates the armed timer slot before saving the syscall continuation.
+- The syscall continuation is saved as the standard RTI-compatible frame.
+- `WAIT_TIMER` and `wait_object = timer slot` are committed only after the continuation has been saved.
+- `scheduler_wake_timers` now wakes a process only when `wait_object[pid]` matches the expired timer slot.
+- Expired non-matching timer slots are treated as stale and freed without waking a process.
+- No `TIMER_RESERVED` state is used.
+
+This keeps one clear owner for the process block transition and avoids blocking a process on a timer slot that has already expired or been freed.
+
+## Timer sleep commit cleanup
+
+`timer_commit_current` now verifies that the armed timer slot is still pending before `sched_block_current` commits `WAIT_TIMER`. If the timer has already elapsed between arming and block commit, the slot is freed and `sys_sleep` returns success immediately instead of blocking on an already-due timer.
+
+No debug output was added.

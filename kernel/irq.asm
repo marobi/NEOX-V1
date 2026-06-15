@@ -55,7 +55,6 @@
 .import scheduler_irq_tick
 .import sched_context_switch
 .import sched_lock
-.import console_owner_pid
 .import monitor_active
 
 .import rp_lock

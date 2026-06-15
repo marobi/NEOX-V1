@@ -3,14 +3,14 @@
 ; NEOX - anonymous pipe core
 ; ca65 / W65C02
 ;
-; First implementation:
+; Pipe backend policy:
 ;   - 6502-only pipe buffer
-;   - nonblocking read/write
+;   - pipe_read remains a nonblocking primitive
+;   - ksys_read converts empty+writers EAGAIN into WAIT_PIPE_READ
 ;   - EOF when writers == 0
 ;   - EPIPE/EIO when readers == 0
 ;   - short write when buffer becomes full
-;
-; No scheduler blocking here yet.
+;   - ksys_write converts full+readers EAGAIN into WAIT_PIPE_WRITE
 ; ============================================================
 
 .setcpu "65C02"
@@ -20,6 +20,7 @@
 .include "debug.inc"
 .include "syscall.inc"
 .include "lock.inc"
+.include "process.inc"
 
 .export pipe_init_tables
 .export pipe_alloc
@@ -61,6 +62,7 @@
 .import file_io_gate_acquire
 .import file_io_gate_release
 .import file_io_gate_phase
+.import scheduler_wake_one
 
 .segment "KERN_BSS"
 
@@ -964,8 +966,10 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; Notes:
 ;   - This does not touch proc_fd_obj/proc_fd_flags.
 ;   - FD layer owns refcounts and open-object lifetime.
-;   - This is still nonblocking. Wake calls can be added later
-;     when syscall-layer blocking is implemented.
+;   - If the last writer closes while readers are blocked on an
+;     empty pipe, wake them so they can retry and observe EOF.
+;   - If the last reader closes while writers are blocked on a full
+;     pipe, wake them so they can retry and observe EPIPE.
 ;
 ; Clobbers:
 ;   A, X, Y, flags
@@ -1005,6 +1009,18 @@ pipe_done_hi:       .res 1      ; completed byte count high
     beq @maybe_free
 
     dec pipe_readers,x
+    bne @maybe_free
+
+    ; Last reader closed. Wake all writers blocked on this pipe so
+    ; they can retry pipe_write and receive EPIPE instead of sleeping
+    ; forever. file_io_gate is still held here.
+@wake_writers_for_epipe:
+    lda #WAIT_PIPE_WRITE
+    ldy pipe_idx
+    jsr scheduler_wake_one
+    bcc @wake_writers_for_epipe
+
+    ldx pipe_idx
     bra @maybe_free
 
 @check_write:
@@ -1015,6 +1031,18 @@ pipe_done_hi:       .res 1      ; completed byte count high
     beq @maybe_free
 
     dec pipe_writers,x
+    bne @maybe_free
+
+    ; Last writer closed. Wake all readers blocked on this pipe so
+    ; they can retry pipe_read and receive EOF instead of sleeping
+    ; forever. file_io_gate is still held here.
+@wake_readers_for_eof:
+    lda #WAIT_PIPE_READ
+    ldy pipe_idx
+    jsr scheduler_wake_one
+    bcc @wake_readers_for_eof
+
+    ldx pipe_idx
 
 @maybe_free:
     lda pipe_readers,x
@@ -1189,15 +1217,25 @@ pipe_done_hi:       .res 1      ; completed byte count high
     bra @read_loop
 
 @done:
-    ; Save return value before restoring backend ABI registers.
-    ; Save pipe_done_* before returning through the backend ABI.
+    ; Save pipe_done_* before waking writers and returning through the
+    ; backend ABI. If at least one byte was read, wake one writer blocked
+    ; on this pipe. file_io_gate is still held here, so the woken writer
+    ; cannot race the consumed pipe state before the reader returns.
     lda pipe_done_lo
     pha
 
     lda pipe_done_hi
     pha
 
+    lda pipe_done_lo
+    ora pipe_done_hi
+    beq @return_done
 
+    lda #WAIT_PIPE_WRITE
+    ldy pipe_idx
+    jsr scheduler_wake_one
+
+@return_done:
     pla
     tax                         ; X = bytes read high
 
@@ -1380,19 +1418,34 @@ pipe_done_hi:       .res 1      ; completed byte count high
     bra @write_loop
 
 @done:
-    ; Save return value before restoring backend ABI registers.
-    ; Save pipe_done_* before returning through the backend ABI.
+    ; If at least one byte was written, wake one reader blocked on
+    ; this pipe.  The syscall wrapper still owns file_io_gate here,
+    ; so the woken reader cannot race the pipe state before the writer
+    ; returns and releases the gate.
+    lda pipe_done_lo
+    ora pipe_done_hi
+    beq @return_done
+
     lda pipe_done_lo
     pha
 
     lda pipe_done_hi
     pha
 
+    lda #WAIT_PIPE_READ
+    ldy pipe_idx
+    jsr scheduler_wake_one
 
     pla
     tax                         ; X = bytes written high
 
     pla                         ; A = bytes written low
+    clc
+    rts
+
+@return_done:
+    lda pipe_done_lo
+    ldx pipe_done_hi
     clc
     rts
 

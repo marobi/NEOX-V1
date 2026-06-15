@@ -28,11 +28,11 @@ t2_msg_start:
 ;   "T2 PINGPONG FAIL " + one diagnostic code + CR
 ;
 ; Codes:
-;   R = sys_read returned error other than EAGAIN
+;   R = sys_read returned real error
 ;   A = sys_read returned low byte count != 1
 ;   X = sys_read returned high byte count != 0
 ;   B = sys_read returned byte other than 'P'
-;   W = sys_write returned error other than EAGAIN
+;   W = sys_write returned real error
 ;   C = sys_write returned low byte count != 1
 ;   H = sys_write returned high byte count != 0
 
@@ -101,26 +101,18 @@ t2_write_args:
 ; ------------------------------------------------------------
 ; t2_read_ping
 ;
-; Nonblocking pipe read.
-; EAGAIN yields to the scheduler, then retries.
+; Blocking pipe read. The kernel handles EAGAIN by blocking
+; and retrying the syscall; task code only handles EOF/real errors.
 ; ------------------------------------------------------------
 
 .proc t2_read_ping
-@again:
     SYSCALL t2_read_args, sys_read
     bcc @ok
 
-    cpy #EAGAIN
-    beq @wait
-
-    lda #'R'                ; read returned non-EAGAIN error
+    lda #'R'                ; read returned real error
     sta t2_fail_code
     sec
     rts
-
-@wait:
-    jsr sys_yield
-    bra @again
 
 @ok:
     cmp #1
@@ -152,26 +144,18 @@ t2_write_args:
 ; ------------------------------------------------------------
 ; t2_write_pong
 ;
-; Nonblocking pipe write.
-; EAGAIN yields to the scheduler, then retries.
+; Blocking pipe write. The kernel handles EAGAIN by blocking
+; and retrying the syscall; task code only handles real errors.
 ; ------------------------------------------------------------
 
 .proc t2_write_pong
-@again:
     SYSCALL t2_write_args, sys_write
     bcc @ok
 
-    cpy #EAGAIN
-    beq @wait
-
-    lda #'W'                ; write returned non-EAGAIN error
+    lda #'W'                ; write returned real error
     sta t2_fail_code
     sec
     rts
-
-@wait:
-    jsr sys_yield
-    bra @again
 
 @ok:
     cmp #1
@@ -208,13 +192,15 @@ t2_write_args:
     bcc :+
     jmp @fail
 :
+	lda #$04
+	jsr sys_sleep
     bra @loop
 
 @fail:
     jsr t2_print_fail
 
 @idle:
-    lda #100
-    jsr sys_sleep
+    ; Failure stop loop. Do not call sys_sleep from the pingpong
+    ; test tasks while the timer/sleep path is under IRQ-latency review.
     bra @idle
 .endproc

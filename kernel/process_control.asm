@@ -17,8 +17,9 @@
 .export proc_send_signal
 .export proc_apply_signal
 
-.import sched_lock_try_enter
-.import sched_lock_leave
+.import proc_gate_acquire
+.import proc_gate_release
+.import proc_gate_phase
 .import fd_init_process
 .import fd_close_process
 .import file_io_gate_acquire
@@ -32,7 +33,6 @@
 .import proc_entryL
 .import proc_entryH
 .import proc_flags
-.import proc_resume_mode
 .import proc_parent_pid
 .import proc_signal_pending
 .import proc_exit_code
@@ -91,6 +91,7 @@
 ; Notes:
 ;   - PID is allocated by the kernel.
 ;   - context 0 is reserved for idle/supervisor/monitor.
+;   - proc_gate serializes process lifecycle syscalls.
 ;   - state is written last so partially initialized slots are
 ;     never visible as runnable.
 ; ------------------------------------------------------------
@@ -99,17 +100,27 @@
     stx sched_ptr
     sty sched_ptr+1
 
+    jsr proc_gate_acquire
+    bcs @gate_acquired
+
+    ; Recursive/bad gate acquisition.  Leave process state unchanged.
+    sec
+    rts
+
+@gate_acquired:
+    ; DEBUG BEGIN: proc_gate phase marker
+    lda #DBG_PROC_GATE_CREATE
+    sta proc_gate_phase
+    ; DEBUG END: proc_gate phase marker
+
     ; Context 0 is reserved for idle/supervisor/monitor.
     ; Normal processes must not be created in context 0.
     ldy #proc_create_args::context
     lda (sched_ptr),y
-    beq @fail
+    beq @fail_release
 
     jsr proc_find_free_pid
-    bcc @fail
-
-    jsr sched_lock_try_enter
-    bcs @fail
+    bcc @fail_release
 
     ; Save MMU context id.
     ldy #proc_create_args::context
@@ -145,10 +156,8 @@
     lda #EXIT_OK
     sta proc_exit_code,x
 
-    ; Initial process frame format.  New processes are bootstrapped
-    ; once, then every saved runnable frame is RTI-compatible.
-    lda #PROC_FRAME_RTI
-    sta proc_resume_mode,x
+    ; New processes are bootstrapped once. After first run, every
+    ; saved runnable process frame is RTI-compatible.
 
     ; Initial process flags.
     lda #PROC_FLAG_NONE
@@ -161,11 +170,18 @@
     lda #PROC_NEW
     jsr proc_set_state
 
-    jsr sched_lock_leave
-
+    ; proc_gate_release may clobber X while waking a waiter.
+    ; Return the allocated PID in A after releasing the gate.
     txa
+    pha
+    jsr proc_gate_release
+    pla
+
     clc
     rts
+
+@fail_release:
+    jsr proc_gate_release
 
 @fail:
     sec
@@ -203,14 +219,18 @@
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
+    ; DEBUG BEGIN: file_io_gate phase marker
     lda #DBG_FILE_IO_PROC_TERM_ACQ_FAIL
     sta file_io_gate_phase
+    ; DEBUG END: file_io_gate phase marker
     plx
     rts
 
 @gate_acquired:
+    ; DEBUG BEGIN: file_io_gate phase marker
     lda #DBG_FILE_IO_PROC_TERM_ACQ
     sta file_io_gate_phase
+    ; DEBUG END: file_io_gate phase marker
 
     ; file_io_gate_acquire clobbers X with active_pid.
     ; Restore the target PID before closing that process's FDs,
@@ -247,7 +267,6 @@
     stz proc_entryL,x
     stz proc_entryH,x
     stz proc_flags,x
-    stz proc_resume_mode,x
 
     ; Mark parent invalid for an empty slot.
     lda #$FF

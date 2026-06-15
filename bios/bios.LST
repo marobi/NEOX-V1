@@ -310,74 +310,69 @@ Current file: bios.asm
 00002Dr 1  4C rr rr     	JMP EMPTY			; empty slot
 000030r 1               
 000030r 1               ; -----------------------------------------------------------------------------
-000030r 1               
-000030r 1               bios_jmp_vec:
-000030r 1  xx xx        	.res 2
-000032r 1               
-000032r 1               ; -----------------------------------------------------------------------------
-000032r 1               ; simple interface: read a key from input, only a-reg is used
-000032r 1               ;
-000032r 1               .proc _GETCHAR
-000032r 1               @retry:
-000032r 1  AD 00 D0     	lda BIOS_KBD_PORT
-000035r 1  F0 FB        	beq @retry
-000037r 1  9C 00 D0     	stz BIOS_KBD_PORT
-00003Ar 1  29 7F        	and #$7F
-00003Cr 1  18               clc
-00003Dr 1  60               rts
-00003Er 1               .endproc
-00003Er 1               
-00003Er 1               ; -----------------------------------------------------------------------------
-00003Er 1               ; simple interface: write a char to output, only a-reg is used
-00003Er 1               ;
-00003Er 1               .proc _PUTCHAR
-00003Er 1  48           	pha
-00003Fr 1               @busy:
-00003Fr 1  AD 01 D0     	lda BIOS_DSP_PORT
-000042r 1  D0 FB        	bne @busy
-000044r 1  68           	pla
-000045r 1  8D 01 D0     	sta BIOS_DSP_PORT
-000048r 1  18           	clc
-000049r 1  60               rts
-00004Ar 1               .endproc
-00004Ar 1               
-00004Ar 1               ; exec command  A=cmd, X=param (optional)
-00004Ar 1               ; wait for cmd == 0
-00004Ar 1               ; set new cmd
-00004Ar 1               ;
-00004Ar 1               .proc exec_cmd
-00004Ar 1  48           	pha
-00004Br 1               
-00004Br 1               @wait_cmd:
-00004Br 1  AD 02 D0     	lda BIOS_CMD_PORT
-00004Er 1  D0 FB        	bne @wait_cmd
-000050r 1  8E 03 D0     	stx BIOS_PARAM_PORT
-000053r 1  68           	pla
-000054r 1  8D 02 D0     	sta BIOS_CMD_PORT
-000057r 1               
-000057r 1  60           	rts
-000058r 1               .endproc
-000058r 1               
-000058r 1               ;
-000058r 1               ; ack IRQ
-000058r 1               ; registers preserved
-000058r 1               ;
-000058r 1               .proc ACK_IRQ
-000058r 1  48           	pha
-000059r 1  9C 0C E0     	stz BIOS_IRQ_SOURCE
-00005Cr 1               
-00005Cr 1               @wait_ack:
-00005Cr 1  AD 0F E0     	lda BIOS_IRQ_STATE
-00005Fr 1  D0 FB        	bne @wait_ack
-000061r 1  68           	pla
-000062r 1  60           	rts
-000063r 1               .endproc
-000063r 1               
-000063r 1               ; -----------------------------------------------------------------------------
-000063r 1               ; empty
-000063r 1               ;
-000063r 1               .proc EMPTY
-000063r 1  00           	BRK
-000064r 1  EA           	NOP
-000065r 1               .endproc
-000065r 1               
+000030r 1               ; simple interface: read a key from input, only a-reg is used
+000030r 1               ;
+000030r 1               .proc _GETCHAR
+000030r 1               @retry:
+000030r 1  AD 00 D0     	lda BIOS_KBD_PORT
+000033r 1  F0 FB        	beq @retry
+000035r 1  9C 00 D0     	stz BIOS_KBD_PORT
+000038r 1  29 7F        	and #$7F
+00003Ar 1  18               clc
+00003Br 1  60               rts
+00003Cr 1               .endproc
+00003Cr 1               
+00003Cr 1               ; -----------------------------------------------------------------------------
+00003Cr 1               ; simple interface: write a char to output, only a-reg is used
+00003Cr 1               ;
+00003Cr 1               .proc _PUTCHAR
+00003Cr 1  48           	pha
+00003Dr 1               @busy:
+00003Dr 1  AD 01 D0     	lda BIOS_DSP_PORT
+000040r 1  D0 FB        	bne @busy
+000042r 1  68           	pla
+000043r 1  8D 01 D0     	sta BIOS_DSP_PORT
+000046r 1  18           	clc
+000047r 1  60               rts
+000048r 1               .endproc
+000048r 1               
+000048r 1               ; exec command  A=cmd, X=param (optional)
+000048r 1               ; wait for cmd == 0
+000048r 1               ; set new cmd
+000048r 1               ;
+000048r 1               ;.proc exec_cmd
+000048r 1               ;	pha
+000048r 1               
+000048r 1               ;@wait_cmd:
+000048r 1               ;	lda BIOS_CMD_PORT
+000048r 1               ;	bne @wait_cmd
+000048r 1               ;	stx BIOS_PARAM_PORT
+000048r 1               ;	pla
+000048r 1               ;	sta BIOS_CMD_PORT
+000048r 1               
+000048r 1               ;	rts
+000048r 1               ;.endproc
+000048r 1               
+000048r 1               ;
+000048r 1               ; ack IRQ
+000048r 1               ; registers preserved
+000048r 1               ;
+000048r 1               .proc ACK_IRQ
+000048r 1  48           	pha
+000049r 1  9C 0C E0     	stz BIOS_IRQ_SOURCE
+00004Cr 1               
+00004Cr 1               @wait_ack:
+00004Cr 1  AD 0F E0     	lda BIOS_IRQ_STATE
+00004Fr 1  D0 FB        	bne @wait_ack
+000051r 1  68           	pla
+000052r 1  60           	rts
+000053r 1               .endproc
+000053r 1               
+000053r 1               ; -----------------------------------------------------------------------------
+000053r 1               ; empty
+000053r 1               ;
+000053r 1               .proc EMPTY
+000053r 1  00           	BRK
+000054r 1  EA           	NOP
+000055r 1               .endproc
+000055r 1               

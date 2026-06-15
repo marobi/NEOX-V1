@@ -26,11 +26,9 @@ PROC_FLAG_ATTACHED_CON  = $02
 ; All saved runnable process stacks use the IRQ-compatible
 ; extended RTI frame:
 ;     Y, X, A, P, PCL, PCH
-; PROC_FRAME_RTI is kept as the single monitor/debug value.
+; The scheduler has no per-process resume mode; normal task
+; resume is always RTI.
 ; ------------------------------------------------------------
-
-PROC_FRAME_RTI = $00
-PROC_RESUME_RTI = PROC_FRAME_RTI
 
 ; ------------------------------------------------------------
 ; Process wait reasons
@@ -42,7 +40,8 @@ PROC_RESUME_RTI = PROC_FRAME_RTI
 WAIT_NONE       = $00
 WAIT_CONSOLE    = $01
 WAIT_DEVICE     = $02
-WAIT_PIPE       = $03
+WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
 WAIT_TIMER      = $04
 WAIT_PROC       = $05
 
@@ -52,6 +51,10 @@ WAIT_PROC       = $05
 ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
 ;   LOCK_ID_PROC    = future process-management syscall gate
 WAIT_LOCK       = $06
+
+; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+; readers and writers can be woken by the correct readiness event.
+WAIT_PIPE_WRITE = $07
 
 LOCK_ID_FILE_IO = $00
 LOCK_ID_PROC    = $01

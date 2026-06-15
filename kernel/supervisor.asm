@@ -95,7 +95,7 @@ supervisor_saved_return_mode:
     lda #MONITOR_CONTEXT
     sta active_context
 
-    lda #MONITOR_CONTEXT
+    ; A still contains MONITOR_CONTEXT after publishing active_context.
     BIOS_CONTEXT_SWITCH
     jmp MONITOR_ENTRY
 
@@ -140,7 +140,7 @@ busy_restore_irq:
     lda #MONITOR_CONTEXT
     sta active_context
 
-    lda #MONITOR_CONTEXT
+    ; A still contains MONITOR_CONTEXT after publishing active_context.
     BIOS_CONTEXT_SWITCH
     jmp MONITOR_ENTRY
 
@@ -171,7 +171,7 @@ return_rts:
     lda supervisor_saved_context
     sta active_context
 
-    lda supervisor_saved_context
+    ; A still contains the saved context after publishing active_context.
     BIOS_CONTEXT_SWITCH
 
     ldx supervisor_saved_sp
@@ -187,7 +187,7 @@ return_irq:
     lda supervisor_saved_context
     sta active_context
 
-    lda supervisor_saved_context
+    ; A still contains the saved context after publishing active_context.
     BIOS_CONTEXT_SWITCH
 
     ldx supervisor_saved_sp

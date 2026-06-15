@@ -43,7 +43,6 @@
 .export rp_console_write_finish
 
 .importzp io_ptr
-.importzp rp_tmp
 
 .import rp_lock
 

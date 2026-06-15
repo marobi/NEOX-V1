@@ -17,9 +17,9 @@
 .export ksys_sleep
 
 .import idle_loop
-.import active_pid
 .import proc_exit_current
 .import sched_yield
+.import sched_block_current
 
 .import timer_start_current
 
@@ -36,9 +36,9 @@
 ;   Terminate the current process.
 ;
 ; Current scheduler model:
-;   Context switching is IRQ-driven. After marking this process
-;   dead, execution must not continue into user code, so this
-;   routine waits for the next timer IRQ to switch away.
+;   After marking this process dead, execution must not continue
+;   into user code. Transfer to the idle loop until the scheduler
+;   selects another runnable process.
 ; ------------------------------------------------------------
 
 .proc ksys_exit
@@ -54,8 +54,8 @@
 ;   Voluntary yield syscall.
 ;
 ; Current model:
-;   Scheduler switching is IRQ-only. This syscall is therefore a
-;   stable ABI placeholder until syscall-side scheduling exists.
+;   Cooperative scheduling enters the same scheduler handoff path
+;   used by preemptive scheduling.
 ; ------------------------------------------------------------
 
 .proc ksys_yield
@@ -72,10 +72,8 @@
 ;   Block current process until timer expiration.
 ;
 ; Notes:
-;   timer_start_current:
-;       - allocates timer slot
-;       - sets WAIT_TIMER
-;       - marks process BLOCKED
+;   timer_start_current reserves and arms a timer slot only.
+;   sched_block_current owns the actual process block transition.
 ; ------------------------------------------------------------
 
 .proc ksys_sleep
@@ -85,9 +83,10 @@
     jsr timer_start_current
     bcs @fail
 
-    ; timer_start_current made current process PROC_BLOCKED.
-    ; Now yield immediately using syscall-context scheduler path.
-    jmp sched_yield
+    ; Y = armed timer slot.  The scheduler-owned block primitive
+    ; saves the syscall continuation first, then commits WAIT_TIMER.
+    lda #WAIT_TIMER
+    jmp sched_block_current
 
 @fail:
     ldy #EAGAIN

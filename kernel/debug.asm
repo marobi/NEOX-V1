@@ -50,7 +50,7 @@
     ; Explicit scheduler debug.
     stz dbg_sched_path
 
-    lda #DBG_PID_NONE
+    ; A still contains DBG_PID_NONE.
     sta dbg_sched_current_pid
     sta dbg_sched_selected_pid
     sta dbg_sched_saved_pid
@@ -65,7 +65,7 @@
     stz dbg_sched_resume_context
 
     ; Explicit process-state debug.
-    lda #DBG_PID_NONE
+    ; A still contains DBG_PID_NONE.
     sta dbg_proc_state_pid
 
     stz dbg_proc_state_old
@@ -79,7 +79,7 @@
     stz sched_lock_underflow
 
     ; Lock/gate owners.
-    lda #DBG_OWNER_NONE
+    ; A still contains DBG_OWNER_NONE.
     sta file_io_gate_owner
     sta proc_gate_owner
     sta rp_lock_owner
@@ -101,7 +101,7 @@
     stz dbg_timer_now_hi
 
     stz dbg_irq_preempt_count
-    lda #DBG_PID_NONE
+    ; A still contains DBG_PID_NONE.
     sta dbg_irq_current_pid
     sta dbg_irq_selected_pid
     stz dbg_irq_saved_sp

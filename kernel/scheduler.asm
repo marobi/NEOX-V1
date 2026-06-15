@@ -13,10 +13,11 @@
 ;
 ; Blocking model:
 ;   - A task may mark itself PROC_BLOCKED.
-;   - The IRQ scheduler skips PROC_BLOCKED tasks.
+;   - The scheduler skips PROC_BLOCKED tasks.
 ;   - External readiness events wake blocked tasks by changing
 ;     them back to PROC_READY.
-;   - sched_context_switch is IRQ-only.
+;   - Both IRQ preemption and cooperative yield enter the same
+;     final context handoff path.
 ; ============================================================
 
 .setcpu "65C02"
@@ -36,6 +37,7 @@
 .export sched_context_switch
 .export sched_switch_context
 .export sched_yield
+.export sched_block_current
 .export first_run_entry
 
 .export proc_set_state
@@ -53,8 +55,6 @@
 .import idle_loop
 
 
-.import fd_init_process
-.import fd_close_process
 
 .import active_pid
 .import sched_cursor_pid
@@ -64,7 +64,6 @@
 .import proc_entryL
 .import proc_entryH
 .import proc_flags
-.import proc_resume_mode
 .import proc_parent_pid
 .import proc_signal_pending
 
@@ -79,10 +78,15 @@
 
 .import proc_apply_signal
 .import proc_terminate
+.import proc_gate_acquire
+.import proc_gate_release
+.import proc_gate_phase
 
 .import proc_exit_code
 
 .import timer_init
+.import timer_commit_current
+.import timer_free
 .import scheduler_wake_timers
 
 .import system_ticks_lo
@@ -107,6 +111,11 @@ sched_wake_object_tmp:
 ; Scheduler-local scratch used only while sched_lock is held.
 ; It is not shared/RP-visible because it is an internal commit helper.
 sched_selected_tmp:
+    .res 1
+
+; Scheduler-local bounded-scan counter.  This replaces the old misuse
+; of the zero-page sched_ptr pointer as a one-byte loop counter.
+sched_scan_count:
     .res 1
 
 ; Handoff scratch used to publish active_pid/active_context only
@@ -181,6 +190,7 @@ sched_handoff_sp:
 .proc proc_set_state
     pha
 
+    ; DEBUG BEGIN: process state transition snapshot
     stx sched_debug_state_pid
     stx dbg_proc_state_pid
 
@@ -191,6 +201,7 @@ sched_handoff_sp:
     pla
     sta sched_debug_state_new
     sta dbg_proc_state_new
+    ; DEBUG END: process state transition snapshot
 
     sta proc_state,x
 
@@ -340,7 +351,7 @@ sched_handoff_sp:
 
 @set_count:
     lda #(MAX_PROCS - FIRST_TASK_PID)
-    sta sched_ptr
+    sta sched_scan_count
 
 @check:
     lda proc_state,x
@@ -360,7 +371,7 @@ sched_handoff_sp:
     rts
 
 @next:
-    dec sched_ptr
+    dec sched_scan_count
     beq @none
 
     inx
@@ -436,7 +447,20 @@ sched_handoff_sp:
     cpx #IDLE_PID
     beq @yield
 
+    ; Process exit is a lifecycle operation.  Serialize it with
+    ; proc_gate, but release the gate before yielding away from the
+    ; terminating process.
+    jsr proc_gate_acquire
+    bcc @yield
+
+    ; DEBUG BEGIN: proc_gate phase marker
+    lda #DBG_PROC_GATE_EXIT
+    sta proc_gate_phase
+    ; DEBUG END: proc_gate phase marker
+
+    ldx active_pid
     jsr proc_terminate
+    jsr proc_gate_release
 
 @yield:
     jmp sched_yield
@@ -618,11 +642,13 @@ sched_handoff_sp:
     stz active_pid
     stz sched_cursor_pid
     stz sched_lock
+    ; DEBUG BEGIN: scheduler lock debug-state initialization
     lda #DBG_OWNER_NONE
     sta sched_lock_owner
     stz sched_lock_phase
     stz sched_lock_depth
     stz sched_lock_underflow
+    ; DEBUG END: scheduler lock debug-state initialization
 	stz active_context
 
 
@@ -640,7 +666,6 @@ sched_handoff_sp:
     stz proc_entryL,x
     stz proc_entryH,x
     stz proc_flags,x
-	stz proc_resume_mode,x
 	stz proc_signal_pending,x
 	
     lda #$FF
@@ -710,8 +735,7 @@ sched_handoff_sp:
 ; Notes:
 ;   - PID 0 is excluded from normal scheduling.
 ;   - Bounded scan prevents infinite loop when sched_cursor_pid = 0.
-;   - Uses sched_ptr as a 1-byte scan counter.
-;   - Clobbers sched_ptr.
+;   - Uses scheduler-local sched_scan_count as a bounded scan counter.
 ; ------------------------------------------------------------
 
 .proc sched_pick_next
@@ -729,15 +753,17 @@ sched_handoff_sp:
 
 @set_count:
     lda #(MAX_PROCS - FIRST_TASK_PID)
-    sta sched_ptr
+    sta sched_scan_count
 
 @check:
     jsr proc_apply_signal
 
     lda proc_state,x
 
+    ; DEBUG BEGIN: scheduler picker state snapshot
     stx sched_debug_state_pid
     sta sched_debug_state_old
+    ; DEBUG END: scheduler picker state snapshot
 	
     cmp #PROC_NEW
     beq @found
@@ -745,7 +771,7 @@ sched_handoff_sp:
     cmp #PROC_READY
     beq @found
 
-    dec sched_ptr
+    dec sched_scan_count
     beq @idle
 
     inx
@@ -778,12 +804,14 @@ sched_handoff_sp:
     rts
 
 @stale_running:
+    ; DEBUG BEGIN: stale RUNNING picker marker
     stx sched_debug_state_pid
     lda proc_state,x
     sta sched_debug_state_old
 
     lda #$EE
     sta sched_debug_marker
+    ; DEBUG END: stale RUNNING picker marker
 
     ; A RUNNING normal process while no READY/NEW task was found is
     ; not a valid steady-state scheduler result, but halting here makes
@@ -820,6 +848,7 @@ sched_handoff_sp:
 .proc sched_switch_context
     jsr sched_pick_next
 
+    ; DEBUG BEGIN: scheduler pick snapshot
     stx dbg_irq_selected_pid
 
     lda #DBG_MARK_PICK
@@ -832,6 +861,7 @@ sched_handoff_sp:
 
     lda active_pid
     sta dbg_sched_current_pid
+    ; DEBUG END: scheduler pick snapshot
 
     ; PID 0 is entered directly, not through proc_sp[0].
     cpx #IDLE_PID
@@ -851,6 +881,7 @@ sched_handoff_sp:
     ;   X = selected PID / sched_cursor_pid
     jsr proc_set_running
 
+    ; DEBUG BEGIN: selected-task load snapshot
     lda #DBG_MARK_SELECTED
     sta sched_debug_marker
 
@@ -865,7 +896,9 @@ sched_handoff_sp:
     sta sched_debug_state_new
     sta dbg_sched_loaded_sp
     sta dbg_irq_loaded_sp
+    ; DEBUG END: selected-task load snapshot
 
+    ; DEBUG BEGIN: selected-task resume source snapshot
     lda dbg_sched_path
     cmp #DBG_PATH_IRQ
     bne @resume_mode_yield
@@ -881,6 +914,7 @@ sched_handoff_sp:
 
     lda proc_context,x
     sta dbg_sched_resume_context
+    ; DEBUG END: selected-task resume source snapshot
     sta sched_handoff_context
     stx sched_handoff_pid
 
@@ -891,8 +925,10 @@ sched_handoff_sp:
     sta sched_handoff_sp
     tax
 
+    ; DEBUG BEGIN: selected-task stack-load marker
     lda #DBG_MARK_STACK_LOAD
     sta sched_debug_marker
+    ; DEBUG END: selected-task stack-load marker
 
     ; Publish identity/context in the final masked handoff window while
     ; sched_lock is still held.  IRQ remains masked until the selected
@@ -903,11 +939,13 @@ sched_handoff_sp:
     sta active_context
 
     ; Switch private memory first.  This macro is stack-free and does
-    ; not cross contexts with JSR/RTS.  X still contains target SP.
-    lda sched_handoff_context
+    ; not cross contexts with JSR/RTS.  X still contains target SP and
+    ; A still contains the target context after storing active_context.
     BIOS_CONTEXT_SWITCH
 
     ; Now the selected process private stack is mapped.
+    ; X still contains the selected process SP after TXS, so it can be
+    ; used directly for stack-frame indexing below.
     txs
 
     ; Force IRQ enabled in the selected task's saved P byte.
@@ -918,14 +956,15 @@ sched_handoff_sp:
     ;   SP+4 = P
     ;   SP+5 = PCL
     ;   SP+6 = PCH
-    tsx
     lda $0104,x
     and #$fb
     sta $0104,x
 
 
+    ; DEBUG BEGIN: selected-task RTI resume marker
     lda #DBG_MARK_RESUME_RTI
     sta sched_debug_marker
+    ; DEBUG END: selected-task RTI resume marker
 
     ; Release as late as possible: context is switched and the selected
     ; private stack is installed, but the task frame has not yet been
@@ -940,6 +979,7 @@ sched_handoff_sp:
 start_new:
     jsr proc_set_running
 
+    ; DEBUG BEGIN: new-task boot resume snapshot
     lda #DBG_MARK_RESUME_BOOT
     sta sched_debug_marker
 
@@ -950,6 +990,7 @@ start_new:
 
     lda proc_context,x
     sta dbg_sched_resume_context
+    ; DEBUG END: new-task boot resume snapshot
     sta sched_handoff_context
     stx sched_handoff_pid
 
@@ -963,7 +1004,7 @@ start_new:
     lda sched_handoff_context
     sta active_context
 
-    lda sched_handoff_context
+    ; A still contains the target context after publishing active_context.
     BIOS_CONTEXT_SWITCH
 
     ldx #$FF
@@ -977,6 +1018,7 @@ resume_idle:
     ldx #IDLE_PID
     jsr proc_set_running
 
+    ; DEBUG BEGIN: idle resume snapshot
     lda #DBG_MARK_RESUME_BOOT
     sta sched_debug_marker
 
@@ -990,16 +1032,27 @@ resume_idle:
     lda #IDLE_PID
     sta dbg_sched_resume_pid
     sta dbg_sched_resume_context
+    ; DEBUG END: idle resume snapshot
 
 
-    ; Idle runs in context 0.  Switch context first, install a clean
-    ; supervisor/idle stack, then release sched_lock and jump directly.
+    ; Idle runs in context 0.  If the scheduler is already executing in
+    ; context 0, do not issue a redundant RP BIOS context-switch command.
+    ; This keeps repeated idle-to-idle IRQ scheduler passes from waiting
+    ; on the RP polled BIOS command path while IRQs are masked.
+    lda active_context
+    beq idle_context_ready
+
+    stz active_pid
+    stz active_context
+    lda #IDLE_PID
+    BIOS_CONTEXT_SWITCH
+    bra idle_stack_ready
+
+idle_context_ready:
     stz active_pid
     stz active_context
 
-    lda #IDLE_PID
-    BIOS_CONTEXT_SWITCH
-
+idle_stack_ready:
     ldx #$FF
     txs
 
@@ -1038,6 +1091,7 @@ resume_idle:
     jmp @skip_locked
 
 @irq_lock_acquired:
+    ; DEBUG BEGIN: IRQ scheduler entry snapshot
     lda #DBG_MARK_IRQ_ENTRY
     sta sched_debug_marker
 
@@ -1053,19 +1107,21 @@ resume_idle:
 
     lda #DBG_IRQ_ENTER_SWITCH
     sta dbg_irq_skip_reason
+    ; DEBUG END: IRQ scheduler entry snapshot
 
     ; Current interrupted owner.
     ldy active_pid
 
+    ; DEBUG BEGIN: IRQ interrupted-task state snapshot
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+    ; DEBUG END: IRQ interrupted-task state snapshot
 
     ; --------------------------------------------------------
     ; PID 0 is not a normal saved task.
     ;
     ; Do not save proc_sp[0].
-    ; Do not set proc_resume_mode[0].
     ; Do not convert PID 0 to READY.
     ; --------------------------------------------------------
 
@@ -1075,6 +1131,7 @@ resume_idle:
     ; Save interrupted SP for normal task.
     tsx
 
+    ; DEBUG BEGIN: IRQ saved-frame snapshot
     sty sched_debug_old_pid
     stx sched_debug_state_old
 
@@ -1084,33 +1141,36 @@ resume_idle:
 
     lda #DBG_MODE_IRQ_RTI
     sta dbg_sched_saved_mode
+    ; DEBUG END: IRQ saved-frame snapshot
 
 
     txa
     sta proc_sp,y
 
-    ; This stack was saved from IRQ context.
-    lda #PROC_RESUME_RTI
-    sta proc_resume_mode,y
+    ; This stack was saved from IRQ context and is RTI-compatible.
 
     ; IRQ preemption: RUNNING -> READY.
     lda proc_state,y
     cmp #PROC_RUNNING
     bne @wake_events
 
+    ; DEBUG BEGIN: IRQ RUNNING-to-READY marker
     lda #DBG_MARK_IRQ_SAVE
     sta sched_debug_marker
 
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+    ; DEBUG END: IRQ RUNNING-to-READY marker
 
     tya
     tax
     jsr proc_set_ready
 
+    ; DEBUG BEGIN: IRQ post-ready state snapshot
     lda proc_state,x
     sta sched_debug_old_state
+    ; DEBUG END: IRQ post-ready state snapshot
 
 @wake_events:
     jsr sched_update_console_focus
@@ -1120,8 +1180,10 @@ resume_idle:
     jmp sched_switch_context
 
 @skip_locked:
+    ; DEBUG BEGIN: IRQ scheduler skip marker
     lda #DBG_IRQ_SKIP_SCHED
     sta dbg_irq_skip_reason
+    ; DEBUG END: IRQ scheduler skip marker
     jmp irq_restore
 .endproc
 
@@ -1154,6 +1216,7 @@ resume_idle:
     jmp @lock_busy
 
 @yield_lock_acquired:
+    ; DEBUG BEGIN: cooperative yield entry snapshot
     lda #DBG_MARK_YIELD
     sta sched_debug_marker
 
@@ -1163,13 +1226,16 @@ resume_idle:
     lda active_pid
     sta sched_debug_pid
     sta dbg_sched_current_pid
+    ; DEBUG END: cooperative yield entry snapshot
 
     ; Current yielding owner.
     ldy active_pid
 
+    ; DEBUG BEGIN: cooperative yield owner-state snapshot
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+    ; DEBUG END: cooperative yield owner-state snapshot
 
     ; PID 0 is not a normal saved task.
     cpy #IDLE_PID
@@ -1202,6 +1268,7 @@ resume_idle:
     inc $0106,x
 
 @pc_adjust_done:
+    ; DEBUG BEGIN: cooperative yield saved-frame snapshot
     sty sched_debug_old_pid
     stx sched_debug_state_old
 
@@ -1210,14 +1277,13 @@ resume_idle:
 
     lda #DBG_MODE_YIELD_RTI
     sta dbg_sched_saved_mode
+    ; DEBUG END: cooperative yield saved-frame snapshot
 
 
     txa
     sta proc_sp,y
 
     ; This stack is now an RTI-compatible frame.
-    lda #PROC_FRAME_RTI
-    sta proc_resume_mode,y
 
     ; If caller is still RUNNING, make it READY.
     ; Blocking syscalls set PROC_BLOCKED before calling this,
@@ -1226,19 +1292,23 @@ resume_idle:
     cmp #PROC_RUNNING
     bne @entry_done
 
+    ; DEBUG BEGIN: cooperative RUNNING-to-READY marker
     lda #DBG_MARK_YIELD
     sta sched_debug_marker
 
     sty sched_debug_old_pid
     lda proc_state,y
     sta sched_debug_old_state
+    ; DEBUG END: cooperative RUNNING-to-READY marker
 
     tya
     tax
     jsr proc_set_ready
 
+    ; DEBUG BEGIN: cooperative post-ready state snapshot
     lda proc_state,x
     sta sched_debug_old_state
+    ; DEBUG END: cooperative post-ready state snapshot
 
 @entry_done:
     ; --------------------------------------------------------
@@ -1260,13 +1330,170 @@ resume_idle:
     ; recursion/invariant fault.  Returning would continue with a
     ; caller that expected sched_yield not to return, so stop here
     ; with an explicit marker instead of corrupting scheduler state.
+    ; DEBUG BEGIN: cooperative yield lock failure marker
     lda #DBG_MARK_SCHED_LOCK_OVERFLOW
     sta sched_debug_marker
     lda #DBG_SCHED_LOCK_NESTED
     sta sched_lock_phase
+    ; DEBUG END: cooperative yield lock failure marker
 @halt:
     bra @halt
 .endproc
+
+; ------------------------------------------------------------
+; sched_block_current
+;
+; Input:
+;   A = wait reason
+;   Y = wait object
+;
+; Purpose:
+;   Scheduler-owned blocking transition for syscalls that must block
+;   the current process.  This routine saves/converts the current
+;   syscall continuation into the normal RTI-compatible frame first,
+;   then commits the wait reason/object, then enters the normal final
+;   context handoff path.
+;
+; Current user:
+;   ksys_sleep / WAIT_TIMER.
+;
+; Notes:
+;   This routine never returns directly.  The blocked syscall resumes
+;   when its wait condition wakes the process and the scheduler later
+;   restores its saved RTI frame.
+; ------------------------------------------------------------
+
+.proc sched_block_current
+    ; Store requested wait before clobbering A/Y for frame setup.
+    php
+    sei
+    sta sched_wake_reason_tmp
+    sty sched_wake_object_tmp
+
+    ; WAIT_TIMER has an armed timer slot.  Validate it before saving
+    ; the continuation.  If a very short sleep already expired and the
+    ; stale slot was freed, return success immediately instead of
+    ; blocking forever on a dead wait_object.
+    lda sched_wake_reason_tmp
+    cmp #WAIT_TIMER
+    bne @discard_entry_p
+
+    ldx sched_wake_object_tmp
+    jsr timer_commit_current
+    bcc @discard_entry_p
+
+    plp
+    clc
+    rts
+
+@discard_entry_p:
+    pla                         ; discard saved caller P byte
+
+    jsr sched_lock_try_enter
+    bcc @block_lock_acquired
+
+    ; If the only current caller armed a timer slot but cannot enter
+    ; the scheduler, release that slot before stopping.
+    lda sched_wake_reason_tmp
+    cmp #WAIT_TIMER
+    bne @lock_busy
+
+    ldx sched_wake_object_tmp
+    jsr timer_free
+
+@lock_busy:
+    ; DEBUG BEGIN: scheduler block-current lock failure marker
+    lda #DBG_MARK_SCHED_LOCK_OVERFLOW
+    sta sched_debug_marker
+    lda #DBG_SCHED_LOCK_NESTED
+    sta sched_lock_phase
+    ; DEBUG END: scheduler block-current lock failure marker
+@halt:
+    bra @halt
+
+@block_lock_acquired:
+    ; DEBUG BEGIN: scheduler block-current path marker
+    lda #DBG_MARK_YIELD
+    sta sched_debug_marker
+
+    lda #DBG_PATH_YIELD
+    sta dbg_sched_path
+
+    lda active_pid
+    sta sched_debug_pid
+    sta dbg_sched_current_pid
+    ; DEBUG END: scheduler block-current path marker
+
+    ; Current blocking owner.
+    ldy active_pid
+
+    ; DEBUG BEGIN: scheduler block-current save marker
+    sty sched_debug_old_pid
+    lda proc_state,y
+    sta sched_debug_old_state
+    ; DEBUG END: scheduler block-current save marker
+
+    ; PID 0 is not allowed to block.  If it reaches this path, keep the
+    ; scheduler alive by treating it as an immediate scheduler entry.
+    cpy #IDLE_PID
+    beq @entry_done
+
+    ; Convert current cooperative syscall continuation into the unified
+    ; extended RTI frame expected by scheduler RTI resume / irq_restore:
+    ;     Y, X, A, P, PCL, PCH
+    ;
+    ; Save a successful syscall return state for the eventual resume:
+    ;   C clear, I clear in saved P, A = 0.
+    clc
+    php
+    lda #0
+    pha
+    phx
+    phy
+
+    ; Stack now points at saved Y.  Clear I in saved P and convert
+    ; the JSR return address from PC-1 to exact RTI PC.
+    tsx
+
+    lda $0104,x
+    and #$fb
+    sta $0104,x
+
+    inc $0105,x
+    bne @pc_adjust_done
+    inc $0106,x
+
+@pc_adjust_done:
+    ; DEBUG BEGIN: scheduler block-current saved-frame marker
+    sty sched_debug_old_pid
+    stx sched_debug_state_old
+
+    sty dbg_sched_saved_pid
+    stx dbg_sched_saved_sp
+
+    lda #DBG_MODE_YIELD_RTI
+    sta dbg_sched_saved_mode
+    ; DEBUG END: scheduler block-current saved-frame marker
+
+    txa
+    sta proc_sp,y
+
+    ; WAIT_TIMER was validated before the continuation was saved.
+    ; Now commit the process wait state.
+@set_wait:
+    ldx active_pid
+    lda sched_wake_reason_tmp
+    ldy sched_wake_object_tmp
+    jsr proc_set_wait
+
+@entry_done:
+    jsr sched_update_console_focus
+    jsr scheduler_wake_console_input
+    jsr scheduler_wake_timers
+
+    jmp sched_switch_context
+.endproc
+
 
 ; ------------------------------------------------------------
 ; first_run_entry

@@ -310,24 +310,16 @@ t1_read_args:
 ; ------------------------------------------------------------
 ; t1_write_ping
 ;
-; Nonblocking pipe write.
-; EAGAIN yields to the scheduler, then retries.
+; Blocking pipe write. The kernel handles EAGAIN by blocking
+; and retrying the syscall; task code only handles real errors.
 ; ------------------------------------------------------------
 
 .proc t1_write_ping
-@again:
     SYSCALL t1_write_args, sys_write
     bcc @ok
 
-    cpy #EAGAIN
-    beq @wait
-
     sec
     rts
-
-@wait:
-    jsr sys_yield
-    bra @again
 
 @ok:
     cmp #1
@@ -347,24 +339,16 @@ t1_read_args:
 ; ------------------------------------------------------------
 ; t1_read_pong
 ;
-; Nonblocking pipe read.
-; EAGAIN yields to the scheduler, then retries.
+; Blocking pipe read. The kernel handles EAGAIN by blocking
+; and retrying the syscall; task code only handles EOF/real errors.
 ; ------------------------------------------------------------
 
 .proc t1_read_pong
-@again:
     SYSCALL t1_read_args, sys_read
     bcc @ok
 
-    cpy #EAGAIN
-    beq @wait
-
     sec
     rts
-
-@wait:
-    jsr sys_yield
-    bra @again
 
 @ok:
     cmp #1
@@ -444,7 +428,7 @@ t1_read_args:
     jsr t1_print_fail
 
 @idle:
-    lda #100
-    jsr sys_sleep
+    ; Failure stop loop. Do not call sys_sleep from the pingpong
+    ; test tasks while the timer/sleep path is under IRQ-latency review.
     bra @idle
 .endproc

@@ -9,8 +9,8 @@
 ;   - read one byte from STDIN
 ;   - echo it to STDOUT
 ;   - exit when the byte is 'Q'
-;   - retry EAGAIN through sys_yield
-;   - exit on any other read/write error or short transfer
+;   - blocking console read/write are handled by the kernel
+;   - exit on read/write error or short transfer
 ; ============================================================
 
 .setcpu "65C02"
@@ -46,23 +46,15 @@ t3_write_args:
 ;
 ; Return:
 ;   C clear = one byte read into t3_byte
-;   C set   = fatal read error or short transfer
+;   C set   = read error or short transfer
 ; ------------------------------------------------------------
 
 .proc t3_read_char
-@again:
     SYSCALL t3_read_args, sys_read
     bcc @ok
 
-    cpy #EAGAIN
-    beq @wait
-
     sec
     rts
-
-@wait:
-    jsr sys_yield
-    bra @again
 
 @ok:
     cmp #1
@@ -84,23 +76,15 @@ t3_write_args:
 ;
 ; Return:
 ;   C clear = one byte written from t3_byte
-;   C set   = fatal write error or short transfer
+;   C set   = write error or short transfer
 ; ------------------------------------------------------------
 
 .proc t3_write_char
-@again:
     SYSCALL t3_write_args, sys_write
     bcc @ok
 
-    cpy #EAGAIN
-    beq @wait
-
     sec
     rts
-
-@wait:
-    jsr sys_yield
-    bra @again
 
 @ok:
     cmp #1

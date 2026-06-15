@@ -62,7 +62,6 @@
 .import open_dev
 
 .import dev_resolve_op
-.import dev_call
 
 .importzp fd_ptr
 

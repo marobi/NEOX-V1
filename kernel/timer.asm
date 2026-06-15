@@ -29,26 +29,33 @@
 .export timer_alloc
 .export timer_free
 .export timer_start_current
+.export timer_commit_current
 .export scheduler_wake_timers
 
 .import active_pid
 .import proc_state
 .import wait_reason
+.import wait_object
 
 
 .import timer_pid
 .import timer_until_lo
 .import timer_until_hi
 
-.import proc_set_wait
 .import proc_wake
 
 .import system_ticks_lo
 .import system_ticks_hi
-.import proc_ticks_lo
-.import proc_ticks_hi
-.import idle_ticks_lo
-.import idle_ticks_hi
+
+.segment "KERN_BSS"
+
+; Timer wake scratch.  scheduler_wake_timers is called only from
+; scheduler-owned paths while scheduler serialization is active.
+timer_scan_slot_tmp:
+    .res 1
+
+timer_scan_pid_tmp:
+    .res 1
 
 .segment "KERN_TEXT"
 
@@ -145,30 +152,25 @@
 ;   A = relative sleep ticks
 ;
 ; Output:
-;   C clear = current process blocked on WAIT_TIMER
+;   C clear = timer slot armed for active_pid
+;             Y = timer slot
+;
 ;   C set   = no timer slot available
 ;
 ; Purpose:
-;   Allocate a timer slot for active_pid and block the current
-;   process until:
-;
-;       system_ticks + A
+;   Reserve and arm a timer slot for active_pid.  This routine does
+;   not mark the process blocked.  The scheduler-owned block primitive
+;   commits WAIT_TIMER after the syscall continuation has been saved.
 ;
 ; Race rule:
-;   The timer slot and process wait state must be installed as
-;   one atomic operation with IRQs disabled.
-;
-;   Otherwise scheduler_wake_timers can observe timer_pid[] before
-;   the process is PROC_BLOCKED, free the timer, and the process
-;   can then block forever on a dead timer slot.
+;   The slot is attached to active_pid before IRQs are restored.
+;   scheduler_wake_timers only wakes a process if wait_object[pid]
+;   matches this exact timer slot.  If a very short timer expires
+;   before the process commits WAIT_TIMER, the slot is freed as stale
+;   and sys_sleep returns as already elapsed.
 ; ------------------------------------------------------------
 
 .proc timer_start_current
-    ; Preemptive model rule:
-    ;   protect the complete timer/process-state transaction before
-    ;   the first stack/scratch/shared-state operation that matters.
-    ;   The requested duration is kept on the current task stack while
-    ;   IRQs are disabled; no module-global scratch is used here.
     php
     sei
     pha                         ; saved duration, above saved P
@@ -187,7 +189,9 @@
     txa
     tay
 
-    ; Mark timer slot as owned by current process.
+    ; Attach the slot to the current process.  The process is not
+    ; blocked yet; scheduler_wake_timers verifies wait_object before
+    ; waking, and frees expired non-matching slots as stale.
     lda active_pid
     sta timer_pid,x
 
@@ -202,23 +206,59 @@
     adc #0
     sta timer_until_hi,x
 
-    ; Block current process on WAIT_TIMER while IRQs are still
-    ; disabled. This prevents a timer IRQ from freeing the slot
-    ; before the process is visibly blocked.
-    ldx active_pid
-    lda #WAIT_TIMER
-    ; Y already contains timer slot.
-    jsr proc_set_wait
-
-    ; Success path intentionally keeps IRQs disabled for the immediate
-    ; handoff in ksys_sleep:
-    ;       jsr timer_start_current
-    ;       jmp sched_yield
-    ; Restoring caller P here would create a preemption window where
-    ; active_pid is already PROC_BLOCKED but has not entered the
-    ; scheduler handoff yet.
-    pla                         ; discard saved caller P byte
+    plp
     clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; timer_commit_current
+;
+; Input:
+;   X = armed timer slot
+;
+; Output:
+;   C clear = slot is still attached to active_pid and still pending
+;   C set   = slot is invalid or already expired/freed
+;
+; Purpose:
+;   Validate that the armed timer slot still belongs to active_pid and
+;   has not already expired before sched_block_current commits
+;   WAIT_TIMER.  If the timer is already due, free the slot and let
+;   sys_sleep return success immediately instead of blocking on a timer
+;   that should already have elapsed.
+; ------------------------------------------------------------
+
+.proc timer_commit_current
+    cpx #MAX_TIMER
+    bcs @fail
+
+    lda timer_pid,x
+    cmp active_pid
+    bne @fail
+
+    ; Use the same signed 16-bit expiry test as scheduler_wake_timers:
+    ;   expired if signed(system_ticks - timer_until) >= 0
+    sec
+    lda system_ticks_lo
+    sbc timer_until_lo,x
+
+    lda system_ticks_hi
+    sbc timer_until_hi,x
+    bmi @pending
+
+    ; The timer elapsed before the block transition committed.
+    ; Free the slot and report "already elapsed" to sched_block_current.
+    jsr timer_free
+    sec
+    rts
+
+@pending:
+    clc
+    rts
+
+@fail:
+    sec
     rts
 .endproc
 
@@ -255,8 +295,8 @@
     cmp #TIMER_NONE
     beq @next
 
-    ; Preserve sleeping PID while doing time comparison.
-    pha
+    sta timer_scan_pid_tmp
+    stx timer_scan_slot_tmp
 
     ; --------------------------------------------------------
     ; Overflow-safe expiry check:
@@ -274,43 +314,48 @@
     lda system_ticks_hi
     sbc timer_until_hi,x
 
-    bmi @restore
+    bmi @next
 
     ; --------------------------------------------------------
-    ; Timer expired.
+    ; Timer expired.  Wake only if the stored PID is still blocked
+    ; on WAIT_TIMER for this exact timer slot.  Mismatched expired
+    ; slots are stale and are freed without waking anything.
     ; --------------------------------------------------------
 
-    pla
-    tay                 ; Y = sleeping PID
-
-    ; Free timer slot before waking the process.
-    phx
-    jsr timer_free
-    plx
-
-    ; Wake stored PID if it is still blocked on WAIT_TIMER.
-    tya
-    tax
+    ldx timer_scan_pid_tmp
 
     lda proc_state,x
     cmp #PROC_BLOCKED
-    bne @restart_scan
+    bne @free_stale
 
     lda wait_reason,x
     cmp #WAIT_TIMER
-    bne @restart_scan
+    bne @free_stale
 
+    lda wait_object,x
+    cmp timer_scan_slot_tmp
+    bne @free_stale
+
+    ; Exact owner match: free slot, then wake the process.
+    ; Continue from the following timer slot afterwards.  proc_wake may
+    ; clobber X, so reload the saved slot index explicitly.
+    ldx timer_scan_slot_tmp
+    jsr timer_free
+
+    ldx timer_scan_pid_tmp
     jsr proc_wake
 
-@restart_scan:
-    ; proc_wake may clobber X.
-    ; Restarting is simple and safe because MAX_TIMER is small.
-    ldx #0
+    ldx timer_scan_slot_tmp
+    inx
     bra @scan
 
-@restore:
-    ; Timer not expired; discard preserved PID.
-    pla
+@free_stale:
+    ldx timer_scan_slot_tmp
+    jsr timer_free
+
+    ldx timer_scan_slot_tmp
+    inx
+    bra @scan
 
 @next:
     inx

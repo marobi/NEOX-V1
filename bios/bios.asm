@@ -31,11 +31,6 @@ BIOS:					; jump table (16 cmds)
 	JMP EMPTY			; empty slot
 	JMP EMPTY			; empty slot
 
-; -----------------------------------------------------------------------------	
-
-bios_jmp_vec:
-	.res 2
-	
 ; -----------------------------------------------------------------------------
 ; simple interface: read a key from input, only a-reg is used
 ;
@@ -67,18 +62,18 @@ bios_jmp_vec:
 ; wait for cmd == 0
 ; set new cmd
 ;
-.proc exec_cmd
-	pha
+;.proc exec_cmd
+;	pha
 
-@wait_cmd:
-	lda BIOS_CMD_PORT
-	bne @wait_cmd
-	stx BIOS_PARAM_PORT
-	pla
-	sta BIOS_CMD_PORT
+;@wait_cmd:
+;	lda BIOS_CMD_PORT
+;	bne @wait_cmd
+;	stx BIOS_PARAM_PORT
+;	pla
+;	sta BIOS_CMD_PORT
 	
-	rts
-.endproc
+;	rts
+;.endproc
 
 ;
 ; ack IRQ
