@@ -76,7 +76,7 @@
 .import wait_reason
 .import wait_object
 
-.import proc_apply_signal
+.import proc_apply_scheduler_signal
 .import proc_terminate
 .import proc_gate_acquire
 .import proc_gate_release
@@ -116,6 +116,11 @@ sched_selected_tmp:
 ; Scheduler-local bounded-scan counter.  This replaces the old misuse
 ; of the zero-page sched_ptr pointer as a one-byte loop counter.
 sched_scan_count:
+    .res 1
+
+; Scheduler-local signal scan cursor.  Signal application is kept out
+; of sched_pick_next so the picker remains a pure runnable selector.
+sched_signal_pid:
     .res 1
 
 ; Handoff scratch used to publish active_pid/active_context only
@@ -292,8 +297,18 @@ sched_handoff_sp:
 ; ------------------------------------------------------------
 
 .proc proc_wake
+    ; Stale wait queues may still contain a process that was killed
+    ; and marked PROC_ZOMBIE.  Never revive non-blocked/zombie tasks
+    ; from an old wake path.
+    lda proc_state,x
+    cmp #PROC_BLOCKED
+    bne @done
+
     jsr proc_clear_wait
     jmp proc_set_ready
+
+@done:
+    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -533,7 +548,7 @@ sched_handoff_sp:
 ;   - >0  = foreground process
 ;
 ; Safety:
-;   If RP points at an EMPTY process slot, ownership is cleared.
+;   If RP points at an EMPTY or ZOMBIE process slot, ownership is cleared.
 ; ------------------------------------------------------------
 
 .proc sched_update_console_focus
@@ -561,12 +576,15 @@ sched_handoff_sp:
     bcs @clear_focus
 
     ; --------------------------------------------------------
-    ; Reject EMPTY process slots.
+    ; Reject EMPTY/ZOMBIE process slots.
     ; --------------------------------------------------------
 
     tax
     lda proc_state,x
     cmp #PROC_EMPTY
+    beq @clear_focus
+
+    cmp #PROC_ZOMBIE
     beq @clear_focus
 
     ; --------------------------------------------------------
@@ -756,8 +774,6 @@ sched_handoff_sp:
     sta sched_scan_count
 
 @check:
-    jsr proc_apply_signal
-
     lda proc_state,x
 
     ; DEBUG BEGIN: scheduler picker state snapshot
@@ -822,6 +838,35 @@ sched_handoff_sp:
 
 @found:
     sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; scheduler_apply_pending_signals
+;
+; Purpose:
+;   Apply scheduler-safe pending process-control signals before
+;   runnable selection.
+;
+; Policy:
+;   - Scans normal task PIDs only; PID 0 is never signalled here.
+;   - Calls only proc_apply_scheduler_signal, which may handle
+;     SIG_HALT/SIG_CONT but deliberately does not apply SIG_KILL.
+;   - Keeps sched_pick_next free of process-control side effects.
+; ------------------------------------------------------------
+
+.proc scheduler_apply_pending_signals
+    ldx #FIRST_TASK_PID
+
+@scan:
+    stx sched_signal_pid
+    jsr proc_apply_scheduler_signal
+    ldx sched_signal_pid
+
+    inx
+    cpx #MAX_PROCS
+    bne @scan
+
     rts
 .endproc
 
@@ -1176,6 +1221,7 @@ idle_stack_ready:
     jsr sched_update_console_focus
     jsr scheduler_wake_console_input
     jsr scheduler_wake_timers
+    jsr scheduler_apply_pending_signals
 
     jmp sched_switch_context
 
@@ -1322,6 +1368,7 @@ idle_stack_ready:
     jsr sched_update_console_focus
     jsr scheduler_wake_console_input
     jsr scheduler_wake_timers
+    jsr scheduler_apply_pending_signals
 
     jmp sched_switch_context
 
@@ -1490,6 +1537,7 @@ idle_stack_ready:
     jsr sched_update_console_focus
     jsr scheduler_wake_console_input
     jsr scheduler_wake_timers
+    jsr scheduler_apply_pending_signals
 
     jmp sched_switch_context
 .endproc
