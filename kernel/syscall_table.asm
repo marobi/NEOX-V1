@@ -43,6 +43,7 @@
 .export k_dup
 .export k_dup2
 .export k_ticks
+.export k_signal
 
 .segment "SYSCALL_STUBS"
 
@@ -70,6 +71,7 @@
 ;	15 -> k_dup
 ;	16 -> k_dup2
 ;   17 -> k_ticks
+;   18 -> k_signal
 ; ------------------------------------------------------------
 
 syscall_table:
@@ -91,6 +93,7 @@ syscall_table:
     jmp k_dup
     jmp k_dup2
 	jmp k_ticks
+	jmp k_signal
 
 .segment "KERN_TEXT"
 
@@ -205,4 +208,8 @@ syscall_table:
 
 .proc k_ticks
     jmp KERN_ENTRY_KSYS_TICKS
+.endproc
+
+.proc k_signal
+    jmp KERN_ENTRY_KSYS_SIGNAL
 .endproc

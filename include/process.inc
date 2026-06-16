@@ -11,6 +11,7 @@ PROC_READY      = $02
 PROC_RUNNING    = $03
 PROC_BLOCKED    = $04
 PROC_STOPPED    = $05
+PROC_ZOMBIE     = $06
 
 ; ------------------------------------------------------------
 ; Flags byte bit definitions

@@ -132,6 +132,7 @@
     <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
     <None Include="include\kernel.inc" />
+    <None Include="include\klog.inc" />
     <None Include="include\lock.inc" />
     <None Include="include\mailbox.inc" />
     <None Include="include\pipe.inc" />
@@ -148,6 +149,7 @@
     <None Include="kernel\idle_task.asm" />
     <None Include="kernel\init_tasks.asm" />
     <None Include="kernel\irq.asm" />
+    <None Include="kernel\klog.asm" />
     <None Include="kernel\ksys_io.asm" />
     <None Include="kernel\ksys_proc.asm" />
     <None Include="kernel\main.asm" />

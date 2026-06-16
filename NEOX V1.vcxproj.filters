@@ -145,5 +145,11 @@
     <None Include="kernel\debug.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="kernel\klog.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="include\klog.inc">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
