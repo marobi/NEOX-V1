@@ -16,21 +16,15 @@
 .export proc_terminate
 .export proc_send_signal
 .export proc_apply_signal
-.export proc_apply_scheduler_signal
-.export proc_mark_zombie
-.export proc_reap_zombies
 
 .import proc_gate_acquire
 .import proc_gate_release
 .import proc_gate_phase
-.import proc_gate
-.import proc_gate_owner
 .import fd_init_process
 .import fd_close_process
 .import file_io_gate_acquire
 .import file_io_gate_release
 .import file_io_gate_phase
-.import file_io_gate
 
 .import active_pid
 .import proc_state
@@ -42,13 +36,11 @@
 .import proc_parent_pid
 .import proc_signal_pending
 .import proc_exit_code
-.import timer_free
 
 .import wait_reason
 .import wait_object
 
 .import proc_set_state
-.import proc_clear_wait
 
 .importzp sched_ptr
 
@@ -311,258 +303,12 @@
     cpy #PROC_EMPTY
     beq @fail
 
-    cpy #PROC_ZOMBIE
-    beq @fail
-
-    cmp #SIG_KILL
-    beq @kill
-
     sta proc_signal_pending,x
 
     clc
     rts
 
-@kill:
-    lda #$FF        ; killed by signal
-    jmp proc_mark_zombie
-
 @fail:
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; proc_mark_zombie
-;
-; Input:
-;   X = target PID
-;   A = exit code
-;
-; Return:
-;   C clear = process marked zombie
-;   C set   = invalid target
-;
-; Purpose:
-;   First-stage SIG_KILL handling.  This routine removes the process
-;   from runnable/waitable scheduling state, but deliberately does not
-;   close FDs or free the process slot.  Full cleanup is performed by
-;   proc_reap_zombies from the idle/non-critical path.
-; ------------------------------------------------------------
-
-.proc proc_mark_zombie
-    cpx #IDLE_PID
-    beq @fail
-
-    cpx #MAX_PROCS
-    bcs @fail
-
-    ldy proc_state,x
-    cpy #PROC_EMPTY
-    beq @fail
-
-    cpy #PROC_ZOMBIE
-    beq @already_zombie
-
-    ; Store the final exit code before the process disappears from
-    ; runnable scheduling state.
-    sta proc_exit_code,x
-
-    ; SIG_KILL has now been consumed by the lifecycle layer.
-    stz proc_signal_pending,x
-
-    ; If the process was sleeping on a timer, release the timer slot
-    ; immediately.  Otherwise the timer table would retain a stale PID
-    ; until expiry.
-    lda wait_reason,x
-    cmp #WAIT_TIMER
-    bne @clear_wait
-
-    lda wait_object,x
-    phx
-    tax
-    jsr timer_free
-    plx
-
-@clear_wait:
-    jsr proc_clear_wait
-
-    lda #PROC_ZOMBIE
-    jsr proc_set_state
-
-@already_zombie:
-    clc
-    rts
-
-@fail:
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; proc_reap_zombies
-;
-; Return:
-;   C set   = one zombie was reaped
-;   C clear = no work done
-;
-; Purpose:
-;   Non-critical cleanup phase for zombie processes.  This routine is
-;   called from idle_loop, not from sched_pick_next and not from the
-;   scheduler signal phase.
-;
-; Policy:
-;   - Reaps at most one zombie per call to keep idle latency bounded.
-;   - Runs only when PROC and FILE_IO gates are free.
-;   - Uses a short SEI window so no process can observe the manual gate
-;     ownership while cleanup is in progress.
-; ------------------------------------------------------------
-
-.proc proc_reap_zombies
-    ldx #FIRST_TASK_PID
-
-@scan:
-    lda proc_state,x
-    cmp #PROC_ZOMBIE
-    beq @candidate
-
-    inx
-    cpx #MAX_PROCS
-    bne @scan
-
-    clc
-    rts
-
-@candidate:
-    ; Do not block idle on a sleepable gate.  If either gate is busy,
-    ; skip this idle pass and try again later.
-    php
-    sei
-
-    lda proc_gate
-    ora file_io_gate
-    bne @busy
-
-    lda #$01
-    sta proc_gate
-
-    lda active_pid
-    sta proc_gate_owner
-
-    ; DEBUG BEGIN: proc_gate zombie reaper phase marker
-    lda #DBG_PROC_GATE_EXIT
-    sta proc_gate_phase
-    ; DEBUG END: proc_gate zombie reaper phase marker
-
-    lda proc_exit_code,x
-    jsr proc_terminate
-
-    lda #DBG_OWNER_NONE
-    sta proc_gate_owner
-
-    lda #DBG_PROC_GATE_IDLE
-    sta proc_gate_phase
-
-    stz proc_gate
-
-    plp
-    sec
-    rts
-
-@busy:
-    plp
-    clc
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; proc_apply_scheduler_signal
-;
-; Input:
-;   X = PID
-;
-; Return:
-;   C clear = no scheduler-safe signal was applied
-;   C set   = scheduler-safe signal was applied
-;
-; Notes:
-;   This routine is called from the scheduler's explicit signal
-;   phase, before runnable selection.
-;
-;   It is intentionally lightweight and scheduler-safe:
-;     - SIG_HALT only stops runnable/non-waiting processes.
-;     - SIG_CONT resumes stopped processes and clears stale wait state.
-;     - SIG_KILL is not applied here.  SIG_KILL is converted to
-;       PROC_ZOMBIE by proc_send_signal / proc_mark_zombie, and final
-;       cleanup is done by proc_reap_zombies from idle_loop.
-;
-;   Signals that are not safe to apply in the scheduler phase remain
-;   pending for a later process-lifecycle path.
-; ------------------------------------------------------------
-
-.proc proc_apply_scheduler_signal
-    lda proc_signal_pending,x
-    beq @none
-
-    cmp #SIG_HALT
-    beq @halt
-
-    cmp #SIG_CONT
-    beq @cont
-
-    ; SIG_KILL and unknown signal values are deliberately left alone
-    ; here.  The scheduler signal phase must not terminate processes
-    ; or acquire subsystem gates as a picker side effect.
-@none:
-    clc
-    rts
-
-@halt:
-    lda proc_state,x
-    cmp #PROC_NEW
-    beq @halt_runnable
-
-    cmp #PROC_READY
-    beq @halt_runnable
-
-    cmp #PROC_RUNNING
-    beq @halt_runnable
-
-    ; Do not stop blocked/empty/stopped processes here.  A blocked
-    ; process keeps SIG_HALT pending until its wait condition wakes it
-    ; and it becomes READY; then the scheduler signal phase can stop it
-    ; without corrupting wait_reason/wait_object semantics.
-    clc
-    rts
-
-@halt_runnable:
-    stz proc_signal_pending,x
-    jsr proc_clear_wait
-
-    lda #PROC_STOPPED
-    jsr proc_set_state
-
-    sec
-    rts
-
-@cont:
-    lda proc_state,x
-    cmp #PROC_STOPPED
-    beq @cont_stopped
-
-    ; CONT for a non-stopped process is consumed as a no-op.  This
-    ; matches the current small signal model and prevents a stale CONT
-    ; byte from being applied later to an unrelated state transition.
-    stz proc_signal_pending,x
-    sec
-    rts
-
-@cont_stopped:
-    stz proc_signal_pending,x
-    jsr proc_clear_wait
-
-    lda #PROC_READY
-    jsr proc_set_state
-
     sec
     rts
 .endproc
@@ -577,41 +323,56 @@
 ;   C clear
 ;
 ; Notes:
-;   Backward-compatible full signal application entry point.
-;   This routine is no longer called by sched_pick_next.  Keep any
-;   caller out of the scheduler picker/scan path.  SIG_KILL is first
-;   converted to PROC_ZOMBIE; final termination is done by the idle
-;   reaper outside the picker/signal phase.
+;   Applies one pending process-control signal.
 ; ------------------------------------------------------------
 
 .proc proc_apply_signal
     lda proc_signal_pending,x
     beq @done
 
+    stz proc_signal_pending,x
+
     cmp #SIG_HALT
-    beq @halt_or_cont
+    beq @halt
 
     cmp #SIG_CONT
-    beq @halt_or_cont
+    beq @cont
 
     cmp #SIG_KILL
     beq @kill
-
-    ; Unknown signal value: consume it as invalid.
-    stz proc_signal_pending,x
 
 @done:
     clc
     rts
 
-@halt_or_cont:
-    jsr proc_apply_scheduler_signal
+@halt:
+    lda proc_state,x
+    cmp #PROC_EMPTY
+    beq @done
+
+    cmp #PROC_STOPPED
+    beq @done
+
+    lda #PROC_STOPPED
+    jsr proc_set_state
+
+    clc
+    rts
+
+@cont:
+    lda proc_state,x
+    cmp #PROC_STOPPED
+    bne @done
+
+    lda #PROC_READY
+    jsr proc_set_state
+
     clc
     rts
 
 @kill:
     lda #$FF        ; killed by signal
-    jsr proc_mark_zombie
+    jsr proc_terminate
     clc
     rts
 .endproc

@@ -29,6 +29,8 @@
 .include "process.inc"
 .include "scheduler_defs.inc"
 .include "mailbox.inc"
+.include "klog.inc"
+.include "version.inc"
 
 .export kernel_main
 .export set_brk_vector
@@ -95,6 +97,9 @@
     cld
     ldx #$FF
     txs                     ; initialize supervisor stack
+
+    KLOG_CLEAR
+    KLOG_BOOT msg_klog_start
 	
 	lda #<irq_restore
 	sta brk_vector
@@ -102,8 +107,10 @@
 	sta brk_vector+1
 	
 	jsr debug_init
+    KLOG_OK msg_klog_debug_init
 	
 	jsr rp_init
+    KLOG_OK msg_klog_rp_init
 	
     ; --------------------------------------------------------
 	; set the version of the kernel
@@ -112,6 +119,7 @@
 	sta kernel_version
 	Lda #$02				; major
 	sta kernel_version+1
+    KLOG_OK msg_klog_version
 	
 	; debug
 	stz sched_debug_marker
@@ -123,16 +131,21 @@
     ; supervisor context 0.
     ; --------------------------------------------------------
     jsr scheduler_init
+    KLOG_OK msg_klog_scheduler_init
 	    
     ; --------------------------------------------------------
     ; Initialize ksys/fd/pipe
     ; --------------------------------------------------------
 	jsr ksys_io_init
+    KLOG_OK msg_klog_ksys_io_init
 	jsr fd_init_tables
+    KLOG_OK msg_klog_fd_init
 	jsr pipe_init_tables
+    KLOG_OK msg_klog_pipe_init
 
 	ldx #IDLE_PID
 	jsr fd_init_process
+    KLOG_OK msg_klog_idle_process_init
 
 	; --------------------------------------------------------
     ; Create initial runnable tasks.
@@ -140,6 +153,7 @@
     ; 1..N and mark them runnable (typically PROC_NEW).
     ; --------------------------------------------------------
     jsr tasks_init
+    KLOG_OK msg_klog_tasks_init
 
     ; --------------------------------------------------------
     ; Mark IDLE_PID execution 
@@ -157,11 +171,38 @@
     lda #$00
     jsr scheduler_set_current_context
 
+    KLOG_OK msg_klog_ready
+
 	; enable interrupts
 	cli
 	
 	jmp idle_loop
 .endproc
+
+msg_klog_start:
+    .byte "NEOX kernel "
+    NEOX_VERSION_BYTES
+    .byte " start", $00
+msg_klog_debug_init:
+    .byte "debug init", $00
+msg_klog_rp_init:
+    .byte "rp init", $00
+msg_klog_version:
+    .byte "kernel interface version set", $00
+msg_klog_scheduler_init:
+    .byte "scheduler init", $00
+msg_klog_ksys_io_init:
+    .byte "ksys io init", $00
+msg_klog_fd_init:
+    .byte "fd init", $00
+msg_klog_pipe_init:
+    .byte "pipe init", $00
+msg_klog_idle_process_init:
+    .byte "idle process init", $00
+msg_klog_tasks_init:
+    .byte "tasks init", $00
+msg_klog_ready:
+    .byte "kernel boot done", $00
 
 .proc rp_init
     ; --------------------------------------------------------

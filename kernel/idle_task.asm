@@ -15,11 +15,8 @@
 
 .export idle_loop
 
-.import proc_reap_zombies
-
 .proc idle_loop
 	cli			; assure IRQ enabled
 @idle:
-    jsr proc_reap_zombies
 	bra @idle
 .endproc

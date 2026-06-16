@@ -74,6 +74,7 @@ KERNEL_SRCS := \
 	kernel/shared_state.asm \
 	kernel/gate.asm \
 	kernel/entry_table.asm \
+	kernel/klog.asm \
 	kernel/main.asm \
 	kernel/irq.asm \
 	kernel/math8.asm \

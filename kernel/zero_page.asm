@@ -36,3 +36,7 @@ fd_ptr:         .res 2
 
 pipe_ptr:       .res 2
 pipe_buf_ptr:   .res 2
+
+; ============================================================
+.exportzp klog_ptr
+klog_ptr:      .res 2
