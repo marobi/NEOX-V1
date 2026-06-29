@@ -36,6 +36,7 @@ STDERR              = 2
 ; Syscall numbers
 ; ------------------------------------------------------------
 SYS_EXIT			= $00
+SYS_OPEN            = $01
 SYS_CLOSE			= $02
 SYS_READ            = $03
 SYS_WRITE           = $04
@@ -53,6 +54,7 @@ SYS_SIGNAL          = $12
 ; ------------------------------------------------------------
 
 sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
+sys_open            = SYSCALL_BASE + (SYS_OPEN    * SYSCALL_ENTRY_SIZE)
 sys_close           = SYSCALL_BASE + (SYS_CLOSE   * SYSCALL_ENTRY_SIZE)
 sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
@@ -79,6 +81,33 @@ ENOSYS              = 11
 EAGAIN              = 12       ; operation would block / try again
 ENOMEM              = 13       ; no free kernel memory/object/table slot
 EPIPE               = 14       ; write on pipe with no readers
+
+
+; ------------------------------------------------------------
+; Common open argument block
+;
+; path_ptr:
+;   Pointer to a NUL-terminated 8.3 filename in the current task
+;   context. The RP-side FS_OPEN command scans at most max_len bytes.
+;
+; max_len:
+;   Maximum filename scan length. Use a small bounded value such as 64.
+;
+; flags:
+;   Open flags. Only 0 is currently accepted: read-only open.
+;
+; device:
+;   RP filesystem device/FatFs drive number: 0..3.
+; ------------------------------------------------------------
+
+.struct open_args
+    path_ptr        .word
+    max_len         .word
+    flags           .byte
+    device          .byte
+.endstruct
+
+OPEN_ARGS_SIZE = .sizeof(open_args)
 
 ; ------------------------------------------------------------
 ; Common read/write argument block

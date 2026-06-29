@@ -39,7 +39,7 @@ FD_FLAG_CLOEXEC = $80    ; reserved for later exec() support
 
 OBJ_NONE    = $00
 OBJ_DEVICE  = $01        ; console for now
-OBJ_FILE    = $02        ; reserved
+OBJ_FILE    = $02        ; RP filesystem file handle
 OBJ_PIPE    = $03        ; reserved
 
 ; ------------------------------------------------------------

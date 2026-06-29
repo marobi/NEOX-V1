@@ -38,10 +38,10 @@ F047  60       RTS
 
 ACK_IRQ:
 F048  48       PHA
-F049  9C 0C E0 STZ $E00C
+F049  9C 10 E0 STZ $E010
 
 @wait_ack:
-F04C  AD 0F E0 LDA $E00F
+F04C  AD 13 E0 LDA $E013
 F04F  D0 FB    BNE @wait_ack
 F051  68       PLA
 F052  60       RTS

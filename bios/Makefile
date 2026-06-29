@@ -47,7 +47,7 @@ $(ROM): $(BIN)
 $(BIN): $(OBJ) $(CFG)
 	$(LD) -C $(CFG) -vm -m $(MAP) -Ln $(LBL) -o $@ $<
 
-$(OBJ): $(SRC) bios.asm
+$(OBJ): $(SRC) bios.asm bios.inc ../include/mailbox.inc
 	$(AS) --cpu W65C02 -g -I $(INCLUDE_DIR) -l $(LST) -o $@ $<
 
 # -------------------------------------------------

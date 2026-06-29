@@ -215,9 +215,9 @@ msg_klog_ready:
 
 	ldx #0
 @rp_clear:
-    stz RP_ARG0L,x
+    stz RP_GROUP,x
 	inx
-	cpx #$0C
+	cpx #$14
 	bne @rp_clear
 	
     stz RP_DOORBELL

@@ -24,8 +24,8 @@ Current file: bios.asm
 000000r 2               BIOS_CMD_PORT   = BIOS_IO_PORT + 2
 000000r 2               BIOS_PARAM_PORT = BIOS_IO_PORT + 3
 000000r 2               
-000000r 2               BIOS_IRQ_SOURCE =   $E00C
-000000r 2               BIOS_IRQ_STATE  =   $E00F
+000000r 2               BIOS_IRQ_SOURCE =   $E010
+000000r 2               BIOS_IRQ_STATE  =   $E013
 000000r 2               
 000000r 2               BIOS_BASE         = $F000
 000000r 2               
@@ -208,6 +208,7 @@ Current file: bios.asm
 000000r 2               SYS_DUP				= $0F
 000000r 2               SYS_DUP2			= $10
 000000r 2               SYS_TICKS           = $11
+000000r 2               SYS_SIGNAL          = $12
 000000r 2               
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Fixed syscall entry addresses
@@ -224,6 +225,7 @@ Current file: bios.asm
 000000r 2               sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
 000000r 2               sys_ticks           = SYSCALL_BASE + (SYS_TICKS   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_signal          = SYSCALL_BASE + (SYS_SIGNAL  * SYSCALL_ENTRY_SIZE)
 000000r 2               
 000000r 2               ; ------------------------------------------------------------
 000000r 2               ; Common errno values
@@ -359,10 +361,10 @@ Current file: bios.asm
 000048r 1               ;
 000048r 1               .proc ACK_IRQ
 000048r 1  48           	pha
-000049r 1  9C 0C E0     	stz BIOS_IRQ_SOURCE
+000049r 1  9C 10 E0     	stz BIOS_IRQ_SOURCE
 00004Cr 1               
 00004Cr 1               @wait_ack:
-00004Cr 1  AD 0F E0     	lda BIOS_IRQ_STATE
+00004Cr 1  AD 13 E0     	lda BIOS_IRQ_STATE
 00004Fr 1  D0 FB        	bne @wait_ack
 000051r 1  68           	pla
 000052r 1  60           	rts

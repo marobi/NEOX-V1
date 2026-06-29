@@ -119,9 +119,7 @@ syscall_table:
 .endproc
 
 .proc k_open
-    ldy #2
-    sec
-    rts
+    jmp KERN_ENTRY_KSYS_OPEN
 .endproc
 
 .proc k_close

@@ -192,7 +192,7 @@ t2_write_args:
     bcc :+
     jmp @fail
 :
-	lda #$03
+	lda #$01
 	jsr sys_sleep
     bra @loop
 

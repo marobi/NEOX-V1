@@ -87,10 +87,13 @@ KERNEL_SRCS := \
 	kernel/pipe.asm \
 	kernel/timer.asm \
 	kernel/ksys_io.asm \
+	kernel/ksys_fs.asm \
 	kernel/ksys_proc.asm \
 	kernel/ksys_time.asm \
 	kernel/device.asm \
 	kernel/console_device.asm \
+	kernel/rp_console_io.asm \
+	kernel/rp_fs_io.asm \
 	kernel/rp2350.asm \
 	kernel/init_tasks.asm \
 	kernel/debug.asm

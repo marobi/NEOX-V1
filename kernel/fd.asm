@@ -60,6 +60,7 @@
 .import open_refcnt
 .import open_flags
 .import open_dev
+.import open_file_handle
 
 .import dev_resolve_op
 
@@ -72,6 +73,9 @@
 .import pipe_write
 .import pipe_close_endpoint
 .import file_io_gate_phase
+
+.import rp_fs_read
+.import rp_fs_close
 
 .segment "KERN_BSS"
 
@@ -212,6 +216,7 @@ fd_closeproc_fd:
     stz open_refcnt,x
     stz open_flags,x
     stz open_dev,x
+    stz open_file_handle,x
     clc
     rts
 .endproc
@@ -240,6 +245,7 @@ fd_closeproc_fd:
     sta open_flags,x
     stz open_refcnt,x
     stz open_dev,x
+    stz open_file_handle,x
     clc
     rts
 .endproc
@@ -629,6 +635,7 @@ fd_closeproc_fd:
     stz open_refcnt,x
     stz open_flags,x
     stz open_dev,x
+    stz open_file_handle,x
 
     inx
     cpx #OPEN_MAX
@@ -910,6 +917,9 @@ fd_closeproc_fd:
     cmp #OBJ_DEVICE
     beq @close_device
 
+    cmp #OBJ_FILE
+    beq @close_file
+
     ; Unknown/simple object type: free generic open slot.
     jsr fd_free_open
     bra @done
@@ -926,6 +936,16 @@ fd_closeproc_fd:
     plx
     jsr fd_free_open
 
+    bra @done
+
+@close_file:
+    ; X = open object. File close is synchronous and serialized by
+    ; file_io_gate plus rp_lock in the RP mailbox transport.
+    phx
+    lda open_file_handle,x
+    jsr rp_fs_close
+    plx
+    jsr fd_free_open
     bra @done
 
 @done:
@@ -1441,6 +1461,9 @@ fd_closeproc_fd:
     cmp #OBJ_DEVICE
     beq @device_ok
 
+    cmp #OBJ_FILE
+    beq @file_ok
+
 
 
     plx
@@ -1448,6 +1471,17 @@ fd_closeproc_fd:
     ldy #ENODEV
     sec
     rts
+
+@file_ok:
+    ; X = open object. Restore requested length and tail-call the
+    ; RP filesystem read backend. io_ptr already points to caller buffer.
+    lda open_file_handle,x
+    tay                         ; Y = RP file handle
+
+    plx                         ; X = length high
+    pla                         ; A = length low
+
+    jmp rp_fs_read
 
 @pipe_ok:
     ; Save open object above saved length.
@@ -1562,10 +1596,20 @@ fd_closeproc_fd:
     cmp #OBJ_DEVICE
     beq @device_ok
 
+    cmp #OBJ_FILE
+    beq @file_write_unsupported
+
 
     plx
     pla
     ldy #ENODEV
+    sec
+    rts
+
+@file_write_unsupported:
+    plx
+    pla
+    ldy #EIO
     sec
     rts
 

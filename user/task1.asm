@@ -12,7 +12,7 @@
 
 T1_TX_FD          = 3          ; Task 1 -> Task 2
 T1_RX_FD          = 4          ; Task 2 -> Task 1
-T1_SAMPLE_TICKS   = 200        ; TIMER 20 = 50 ms, 200 ticks = 10 sec
+T1_SAMPLE_TICKS   = 100        ; TIMER 100 = 10 ms, 1000 ticks = 10 sec
 
 .segment "USER_DATA"
 
@@ -423,7 +423,7 @@ t1_read_args:
 :
     jsr t1_count_loop
 	
-	lda #$02
+	lda #$01
 	jsr sys_sleep
     bra @loop
 

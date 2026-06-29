@@ -19,7 +19,7 @@ OPEN_MAX    = 8          ; system-wide open object slots
 ; Maximum simultaneously active processes
 ; ------------------------------------------------------------
 
-MAX_PROCS   = 4
+MAX_PROCS   = 5
 
 ; ------------------------------------------------------------
 ; Maximum simultaneously active timer waits

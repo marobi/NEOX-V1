@@ -297,13 +297,15 @@ proc_fd_flags:
 ;   open_type   - object type
 ;   open_refcnt - number of FDs referencing this object
 ;   open_flags  - object-level flags
-;   open_dev    - backend device id for device objects
+;   open_dev    - backend device id for device objects, FS device for files
+;   open_file_handle - RP filesystem handle for OBJ_FILE objects
 ; ------------------------------------------------------------
 
 .export open_type
 .export open_refcnt
 .export open_flags
 .export open_dev
+.export open_file_handle
 
 open_type:
     .res OPEN_MAX
@@ -315,6 +317,9 @@ open_flags:
     .res OPEN_MAX
 
 open_dev:
+    .res OPEN_MAX
+
+open_file_handle:
     .res OPEN_MAX
 
 ; ------------------------------------------------------------

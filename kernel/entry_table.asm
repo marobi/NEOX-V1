@@ -35,6 +35,7 @@
 .import pipe_create_between_fd
 .import ksys_ticks
 .import ksys_signal
+.import ksys_open
 
 .segment "KERNEL_ENTRY"
 
@@ -58,7 +59,7 @@ kernel_entry_table:
 	jmp pipe_create_between_fd
 	jmp ksys_ticks
 	jmp ksys_signal
-	.res 3, $00
+    jmp ksys_open
 	.res 3, $00
 	.res 3, $00
 	.res 3, $00
