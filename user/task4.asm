@@ -20,7 +20,7 @@
 
 .export user_task4_entry
 
-T4_DEVICE          = 1
+T4_DEVICE          = 0
 T4_READ_MAX        = 64
 T4_FD_NONE        = $FF
 

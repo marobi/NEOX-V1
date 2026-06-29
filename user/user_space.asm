@@ -11,3 +11,4 @@
 .include "task2.asm"
 .include "task3.asm"
 .include "task4.asm"
+.include "task5.asm"

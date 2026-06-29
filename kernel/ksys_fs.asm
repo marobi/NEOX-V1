@@ -8,6 +8,7 @@
 ;
 ; Current scope:
 ;   - read-only open via RP FS mailbox ABI v2
+;   - write create/truncate open via RP FS mailbox ABI v2
 ;   - read through normal sys_read/FD path
 ;   - close through normal sys_close/FD path
 ; ============================================================
@@ -35,6 +36,7 @@
 .import open_file_handle
 
 .import rp_fs_open_readonly
+.import rp_fs_open_write_trunc
 
 .importzp io_ptr
 
@@ -160,8 +162,13 @@ ksys_open_entry_hi:
     lda ksys_open_device_by_pid,x
     sta ksys_open_device
 
-    ; Only read-only open is supported for now.
+    ; Supported modes:
+    ;   OPEN_READ        = read existing file
+    ;   OPEN_WRITE_TRUNC = create/truncate write-only file
     lda ksys_open_flags
+    cmp #OPEN_READ
+    beq @flags_ok
+    cmp #OPEN_WRITE_TRUNC
     beq @flags_ok
 
     ldy #EINVAL
@@ -194,25 +201,50 @@ ksys_open_entry_hi:
     lda ksys_open_path_hi
     sta io_ptr+1
 
+    lda ksys_open_flags
+    cmp #OPEN_WRITE_TRUNC
+    beq @rp_open_write
+
+@rp_open_read:
     lda ksys_open_max_lo
     ldx ksys_open_max_hi
     ldy ksys_open_device
     jsr rp_fs_open_readonly
-    bcc @rp_open_ok
+    bcc @rp_open_ok_read
+    jmp @rp_open_fail
 
+@rp_open_write:
+    lda ksys_open_max_lo
+    ldx ksys_open_max_hi
+    ldy ksys_open_device
+    jsr rp_fs_open_write_trunc
+    bcc @rp_open_ok_write
+    jmp @rp_open_fail
+
+@rp_open_ok_read:
+    ldy #FD_FLAG_READ
+    bra @rp_open_ok
+
+@rp_open_ok_write:
+    ldy #FD_FLAG_WRITE
+    bra @rp_open_ok
+
+@rp_open_fail:
     ; RP open failed. Free the open-object slot; no FD was attached yet.
     ldx ksys_open_obj
     jsr fd_free_open
     jmp @fail_release
 
 @rp_open_ok:
-    ; A = RP file handle.
+    ; A = RP file handle, Y = FD/open flags.
+    phy
     ldx ksys_open_obj
     sta open_file_handle,x
 
     lda #OBJ_FILE
     sta open_type,x
-    lda #FD_FLAG_READ
+    ply
+    tya
     sta open_flags,x
     lda ksys_open_device
     sta open_dev,x
@@ -220,7 +252,7 @@ ksys_open_entry_hi:
     ; Attach open object to current process FD table. Refcount becomes 1.
     ldx ksys_open_obj
     ldy ksys_open_fd
-    lda #FD_FLAG_READ
+    lda open_flags,x
     jsr fd_attach_current
 
     lda ksys_open_fd

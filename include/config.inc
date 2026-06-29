@@ -13,13 +13,13 @@ __CONFIG_INC__ = 1
 ; ------------------------------------------------------------
 
 MAX_FDS     = 6          ; per-process descriptor count
-OPEN_MAX    = 8          ; system-wide open object slots
+OPEN_MAX    = 16         ; system-wide open object slots
 
 ; ------------------------------------------------------------
 ; Maximum simultaneously active processes
 ; ------------------------------------------------------------
 
-MAX_PROCS   = 5
+MAX_PROCS   = 8
 
 ; ------------------------------------------------------------
 ; Maximum simultaneously active timer waits

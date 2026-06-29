@@ -92,6 +92,7 @@ RP_FS_CMD_STATUS    = $01
 RP_FS_CMD_OPEN      = $02
 RP_FS_CMD_READ      = $03
 RP_FS_CMD_CLOSE     = $04
+RP_FS_CMD_WRITE     = $05
 
 ; ------------------------------------------------------------
 ; RP_DOORBELL trigger value for ABI v2

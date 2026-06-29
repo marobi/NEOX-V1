@@ -109,6 +109,9 @@ EPIPE               = 14       ; write on pipe with no readers
 
 OPEN_ARGS_SIZE = .sizeof(open_args)
 
+OPEN_READ        = $00
+OPEN_WRITE_TRUNC = $01
+
 ; ------------------------------------------------------------
 ; Common read/write argument block
 ;

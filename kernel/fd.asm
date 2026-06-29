@@ -75,6 +75,7 @@
 .import file_io_gate_phase
 
 .import rp_fs_read
+.import rp_fs_write
 .import rp_fs_close
 
 .segment "KERN_BSS"
@@ -1597,7 +1598,7 @@ fd_closeproc_fd:
     beq @device_ok
 
     cmp #OBJ_FILE
-    beq @file_write_unsupported
+    beq @file_ok
 
 
     plx
@@ -1606,12 +1607,16 @@ fd_closeproc_fd:
     sec
     rts
 
-@file_write_unsupported:
-    plx
-    pla
-    ldy #EIO
-    sec
-    rts
+@file_ok:
+    ; X = open object. Restore requested length and tail-call the
+    ; RP filesystem write backend. io_ptr already points to caller buffer.
+    lda open_file_handle,x
+    tay                         ; Y = RP file handle
+
+    plx                         ; X = length high
+    pla                         ; A = length low
+
+    jmp rp_fs_write
 
 @pipe_ok:
     ; Save open object above saved length.

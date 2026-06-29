@@ -12,7 +12,7 @@
 user_image_header:
     .byte "N", "X"         ; magic: NEOX User
     .byte $01              ; version
-    .byte $04              ; number of boot tasks
+    .byte $05              ; number of boot tasks
 
     ; task 1
     .byte $01              ; context
@@ -34,6 +34,11 @@ user_image_header:
     .byte $04
     .byte $00
     .word user_task4_entry
+
+    ; task 5
+    .byte $05
+    .byte $00
+    .word user_task5_entry
 
     ; terminator, optional
     .byte $ff
