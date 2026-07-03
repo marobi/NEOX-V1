@@ -27,6 +27,8 @@
 
 .export fd_resolve_read
 .export fd_resolve_write
+.export fd_resolve_file
+.export fd_resolve_dir
 
 .export fd_init_tables
 .export fd_init_process
@@ -77,6 +79,7 @@
 .import rp_fs_read
 .import rp_fs_write
 .import rp_fs_close
+.import rp_fs_closedir
 
 .segment "KERN_BSS"
 
@@ -921,6 +924,9 @@ fd_closeproc_fd:
     cmp #OBJ_FILE
     beq @close_file
 
+    cmp #OBJ_DIR
+    beq @close_dir
+
     ; Unknown/simple object type: free generic open slot.
     jsr fd_free_open
     bra @done
@@ -945,6 +951,15 @@ fd_closeproc_fd:
     phx
     lda open_file_handle,x
     jsr rp_fs_close
+    plx
+    jsr fd_free_open
+    bra @done
+
+@close_dir:
+    ; X = open object. Directory close releases the RP-owned DIR handle.
+    phx
+    lda open_file_handle,x
+    jsr rp_fs_closedir
     plx
     jsr fd_free_open
     bra @done
@@ -1372,6 +1387,97 @@ fd_closeproc_fd:
     plx                         ; X = open object
     pla                         ; A = object type
 
+    clc
+    rts
+.endproc
+
+
+; ------------------------------------------------------------
+; fd_resolve_file
+;
+; Input:
+;   Y = fd number
+;
+; Output:
+;   C clear = success
+;       X = open object index
+;       A = RP filesystem handle
+;
+;   C set = failure
+;       Y = errno
+;
+; Purpose:
+;   Validate that fd is an open filesystem object.  No read/write
+;   permission bit is required because seek/tell are file-position
+;   operations valid for read-only, write-only, and read/write files.
+;
+; Locking:
+;   Requires file_io_gate for fd/open-object lookup.
+; ------------------------------------------------------------
+
+.proc fd_resolve_file
+    tya
+    jsr fd_lookup
+    bcc @fd_ok
+
+    sec
+    rts
+
+@fd_ok:
+    lda open_type,x
+    cmp #OBJ_FILE
+    beq @file_ok
+
+    ldy #ENODEV
+    sec
+    rts
+
+@file_ok:
+    lda open_file_handle,x
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_resolve_dir
+;
+; Input:
+;   Y = fd number
+;
+; Output:
+;   C clear = success
+;       X = open object index
+;       A = RP filesystem directory handle
+;
+;   C set = failure
+;       Y = errno
+;
+; Purpose:
+;   Validate that fd is an open directory object.
+;
+; Locking:
+;   Requires file_io_gate for fd/open-object lookup.
+; ------------------------------------------------------------
+
+.proc fd_resolve_dir
+    tya
+    jsr fd_lookup
+    bcc @fd_ok
+
+    sec
+    rts
+
+@fd_ok:
+    lda open_type,x
+    cmp #OBJ_DIR
+    beq @dir_ok
+
+    ldy #ENODEV
+    sec
+    rts
+
+@dir_ok:
+    lda open_file_handle,x
     clc
     rts
 .endproc

@@ -1,5 +1,5 @@
 ; ============================================================
-; rp2350.asm
+; mailbox.asm
 ; NEOX - RP2350 mailbox transport helpers
 ;
 ; Purpose:

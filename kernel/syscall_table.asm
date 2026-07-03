@@ -31,19 +31,22 @@
 .export k_read
 .export k_write
 .export k_monitor
-.export k_exec
-.export k_wait
-.export k_chdir
-.export k_stat
+.export k_load_file_to_memory
+.export k_save_memory_to_file
+.export k_seek
+.export k_tell
+.export k_delete
+.export k_rename
 .export k_pipe
 .export k_yield
-.export k_sbrk
-.export k_ioctl
 .export k_sleep
 .export k_dup
 .export k_dup2
 .export k_ticks
 .export k_signal
+.export k_opendir
+.export k_readdir
+.export k_closedir
 
 .segment "SYSCALL_STUBS"
 
@@ -59,19 +62,22 @@
 ;   3  -> k_read
 ;   4  -> k_write
 ;   5  -> k_monitor
-;   6  -> k_exec
-;   7  -> k_wait
-;   8  -> k_chdir
-;   9  -> k_stat
+;   6  -> k_load_file_to_memory
+;   7  -> k_save_memory_to_file
+;   8  -> k_seek
+;   9  -> k_tell
 ;   10 -> k_pipe
 ;   11 -> k_yield
-;   12 -> k_sbrk
-;   13 -> k_ioctl
+;   12 -> k_delete
+;   13 -> k_rename
 ;	14 -> k_sleep
 ;	15 -> k_dup
 ;	16 -> k_dup2
 ;   17 -> k_ticks
 ;   18 -> k_signal
+;   19 -> k_opendir
+;   20 -> k_readdir
+;   21 -> k_closedir
 ; ------------------------------------------------------------
 
 syscall_table:
@@ -81,19 +87,22 @@ syscall_table:
     jmp k_read
     jmp k_write
     jmp k_monitor
-    jmp k_exec
-    jmp k_wait
-    jmp k_chdir
-    jmp k_stat
+    jmp k_load_file_to_memory
+    jmp k_save_memory_to_file
+    jmp k_seek
+    jmp k_tell
     jmp k_pipe
     jmp k_yield
-    jmp k_sbrk
-    jmp k_ioctl
+    jmp k_delete
+    jmp k_rename
 	jmp k_sleep
     jmp k_dup
     jmp k_dup2
 	jmp k_ticks
 	jmp k_signal
+    jmp k_opendir
+    jmp k_readdir
+    jmp k_closedir
 
 .segment "KERN_TEXT"
 
@@ -138,28 +147,20 @@ syscall_table:
     jmp KERN_ENTRY_MONITOR
 .endproc
 
-.proc k_exec
-    ldy #2
-    sec
-    rts
+.proc k_load_file_to_memory
+    jmp KERN_ENTRY_KSYS_LOAD_FILE_TO_MEMORY
 .endproc
 
-.proc k_wait
-    ldy #EINVAL
-    sec
-    rts
+.proc k_save_memory_to_file
+    jmp KERN_ENTRY_KSYS_SAVE_MEMORY_TO_FILE
 .endproc
 
-.proc k_chdir
-    ldy #2
-    sec
-    rts
+.proc k_seek
+    jmp KERN_ENTRY_KSYS_SEEK
 .endproc
 
-.proc k_stat
-    ldy #2
-    sec
-    rts
+.proc k_tell
+    jmp KERN_ENTRY_KSYS_TELL
 .endproc
 
 .proc k_pipe
@@ -180,16 +181,12 @@ syscall_table:
     rts
 .endproc
 
-.proc k_sbrk
-    ldy #4
-    sec
-    rts
+.proc k_delete
+    jmp KERN_ENTRY_KSYS_DELETE
 .endproc
 
-.proc k_ioctl
-    ldy #EINVAL
-    sec
-    rts
+.proc k_rename
+    jmp KERN_ENTRY_KSYS_RENAME
 .endproc
 
 .proc k_sleep
@@ -210,4 +207,16 @@ syscall_table:
 
 .proc k_signal
     jmp KERN_ENTRY_KSYS_SIGNAL
+.endproc
+
+.proc k_opendir
+    jmp KERN_ENTRY_KSYS_OPENDIR
+.endproc
+
+.proc k_readdir
+    jmp KERN_ENTRY_KSYS_READDIR
+.endproc
+
+.proc k_closedir
+    jmp KERN_ENTRY_KSYS_CLOSEDIR
 .endproc

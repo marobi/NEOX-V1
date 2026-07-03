@@ -10,7 +10,7 @@
 ;   - Located at $E000
 ;
 ; Notes:
-;   Padding ensures that KERN_TEXT always starts at $8060
+;   Padding ensures that KERN_TEXT always starts at $8080
 ; ============================================================
 
 .setcpu "65C02"
@@ -36,6 +36,15 @@
 .import ksys_ticks
 .import ksys_signal
 .import ksys_open
+.import ksys_load_file_to_memory
+.import ksys_save_memory_to_file
+.import ksys_seek
+.import ksys_tell
+.import ksys_delete
+.import ksys_rename
+.import ksys_opendir
+.import ksys_readdir
+.import ksys_closedir
 
 .segment "KERNEL_ENTRY"
 
@@ -60,18 +69,29 @@ kernel_entry_table:
 	jmp ksys_ticks
 	jmp ksys_signal
     jmp ksys_open
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
-	.res 3, $00
+    jmp ksys_load_file_to_memory
+    jmp ksys_save_memory_to_file
+    jmp ksys_seek
+    jmp ksys_tell
+    jmp ksys_delete
+    jmp ksys_rename
+    jmp ksys_opendir
+    jmp ksys_readdir
+    jmp ksys_closedir
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 3, $00
+		.res 2, $00

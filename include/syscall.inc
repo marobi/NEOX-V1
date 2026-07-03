@@ -41,13 +41,22 @@ SYS_CLOSE			= $02
 SYS_READ            = $03
 SYS_WRITE           = $04
 SYS_MONITOR         = $05
+SYS_LOAD_FILE_TO_MEMORY = $06
+SYS_SAVE_MEMORY_TO_FILE = $07
+SYS_SEEK            = $08
+SYS_TELL            = $09
 SYS_PIPE			= $0A
+SYS_DELETE          = $0C
+SYS_RENAME          = $0D
 SYS_YIELD           = $0B
 SYS_SLEEP           = $0E
 SYS_DUP				= $0F
 SYS_DUP2			= $10
 SYS_TICKS           = $11
 SYS_SIGNAL          = $12
+SYS_OPENDIR         = $13
+SYS_READDIR         = $14
+SYS_CLOSEDIR        = $15
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -59,6 +68,12 @@ sys_close           = SYSCALL_BASE + (SYS_CLOSE   * SYSCALL_ENTRY_SIZE)
 sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
 sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
 sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+sys_load_file_to_memory = SYSCALL_BASE + (SYS_LOAD_FILE_TO_MEMORY * SYSCALL_ENTRY_SIZE)
+sys_save_memory_to_file = SYSCALL_BASE + (SYS_SAVE_MEMORY_TO_FILE * SYSCALL_ENTRY_SIZE)
+sys_seek            = SYSCALL_BASE + (SYS_SEEK    * SYSCALL_ENTRY_SIZE)
+sys_tell            = SYSCALL_BASE + (SYS_TELL    * SYSCALL_ENTRY_SIZE)
+sys_delete          = SYSCALL_BASE + (SYS_DELETE  * SYSCALL_ENTRY_SIZE)
+sys_rename          = SYSCALL_BASE + (SYS_RENAME  * SYSCALL_ENTRY_SIZE)
 sys_pipe            = SYSCALL_BASE + (SYS_PIPE    * SYSCALL_ENTRY_SIZE)
 sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
 sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
@@ -66,6 +81,9 @@ sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
 sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
 sys_ticks           = SYSCALL_BASE + (SYS_TICKS   * SYSCALL_ENTRY_SIZE)
 sys_signal          = SYSCALL_BASE + (SYS_SIGNAL  * SYSCALL_ENTRY_SIZE)
+sys_opendir         = SYSCALL_BASE + (SYS_OPENDIR * SYSCALL_ENTRY_SIZE)
+sys_readdir         = SYSCALL_BASE + (SYS_READDIR * SYSCALL_ENTRY_SIZE)
+sys_closedir        = SYSCALL_BASE + (SYS_CLOSEDIR * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values
@@ -94,7 +112,8 @@ EPIPE               = 14       ; write on pipe with no readers
 ;   Maximum filename scan length. Use a small bounded value such as 64.
 ;
 ; flags:
-;   Open flags. Only 0 is currently accepted: read-only open.
+;   Open mode. V32 supports read-only, write/truncate, write-existing,
+;   read/write-existing, and read/write-create.
 ;
 ; device:
 ;   RP filesystem device/FatFs drive number: 0..3.
@@ -109,8 +128,118 @@ EPIPE               = 14       ; write on pipe with no readers
 
 OPEN_ARGS_SIZE = .sizeof(open_args)
 
-OPEN_READ        = $00
-OPEN_WRITE_TRUNC = $01
+OPEN_READ           = $00    ; read existing
+OPEN_WRITE_TRUNC    = $01    ; write create/truncate
+OPEN_WRITE_EXISTING = $02    ; write existing, no truncate
+OPEN_RW_EXISTING    = $03    ; read/write existing, no truncate
+OPEN_RW_CREATE      = $04    ; read/write create if missing, no truncate if existing
+
+
+; ------------------------------------------------------------
+; Bulk filesystem argument blocks
+;
+; Names and paths use NEOX 8.3 path components. The path string is
+; NUL-terminated and is validated by the RP side.
+;
+; max_bytes / byte_count:
+;   $0000 means 65536 bytes.
+;
+; flags:
+;   Reserved for now. Must be 0.
+;
+; Context rule:
+;   User code never supplies a context. The kernel derives the caller
+;   context and passes it separately to the RP mailbox in ARG2L.
+; ------------------------------------------------------------
+
+.struct fs_load_args
+    path_ptr        .word
+    dest_ptr        .word
+    max_bytes       .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+FS_LOAD_ARGS_SIZE = .sizeof(fs_load_args)
+
+.struct fs_save_args
+    path_ptr        .word
+    src_ptr         .word
+    byte_count      .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+FS_SAVE_ARGS_SIZE = .sizeof(fs_save_args)
+
+FS_BULK_FLAGS_NONE = $00
+
+
+; ------------------------------------------------------------
+; Seek/tell filesystem argument blocks
+;
+; offset_lo/offset_hi:
+;   Signed 32-bit offset split into low/high words.  SEEK_SET
+;   requires a non-negative final target; SEEK_CUR and SEEK_END
+;   allow negative offsets.
+;
+; result_lo/result_hi:
+;   Kernel writes the resulting unsigned 32-bit file position here.
+;   A/X also return result_lo for convenience.
+; ------------------------------------------------------------
+
+SEEK_SET            = $00
+SEEK_CUR            = $01
+SEEK_END            = $02
+
+.struct seek_args
+    fd              .byte
+    whence          .byte
+    offset_lo       .word
+    offset_hi       .word
+    result_lo       .word
+    result_hi       .word
+.endstruct
+
+SEEK_ARGS_SIZE = .sizeof(seek_args)
+
+.struct tell_args
+    fd              .byte
+    reserved        .byte
+    result_lo       .word
+    result_hi       .word
+.endstruct
+
+TELL_ARGS_SIZE = .sizeof(tell_args)
+
+
+; ------------------------------------------------------------
+; Delete/rename filesystem argument blocks
+;
+; V34 path handling uses the same RP-side 8.3 validator as open.
+; flags is reserved and must be 0.
+; ------------------------------------------------------------
+
+FS_PATH_FLAGS_NONE  = $00
+
+.struct delete_args
+    path_ptr        .word
+    max_len         .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+DELETE_ARGS_SIZE = .sizeof(delete_args)
+
+.struct rename_args
+    old_path_ptr    .word
+    new_path_ptr    .word
+    max_len         .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+RENAME_ARGS_SIZE = .sizeof(rename_args)
 
 ; ------------------------------------------------------------
 ; Common read/write argument block
@@ -155,5 +284,53 @@ RW_ARGS_SIZE = .sizeof(rw_args)
     ldy #>argblk
     jsr entry
 .endmacro
+
+
+; ------------------------------------------------------------
+; Directory control argument blocks
+;
+; V35 exposes directory handles as normal NEOX fd numbers. The RP
+; directory handle remains kernel-private in the FD/open-object table.
+;
+; dir_entry layout matches the RP serialized directory entry:
+;   name[13] = NUL-terminated 8.3 name
+;   attr     = FatFs attribute byte
+;   size     = unsigned 32-bit byte size
+; ------------------------------------------------------------
+
+DIR_ENTRY_NAME_SIZE = 13
+DIR_ENTRY_SIZE      = 18
+
+.struct dir_entry
+    name            .res 13
+    attr            .byte
+    size_lo         .word
+    size_hi         .word
+.endstruct
+
+.struct opendir_args
+    path_ptr        .word
+    max_len         .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+OPENDIR_ARGS_SIZE = .sizeof(opendir_args)
+
+.struct readdir_args
+    fd              .byte
+    reserved        .byte
+    entry_ptr       .word
+    entry_size      .word
+.endstruct
+
+READDIR_ARGS_SIZE = .sizeof(readdir_args)
+
+.struct closedir_args
+    fd              .byte
+    reserved        .byte
+.endstruct
+
+CLOSEDIR_ARGS_SIZE = .sizeof(closedir_args)
 
 .endif

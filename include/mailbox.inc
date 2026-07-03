@@ -93,6 +93,19 @@ RP_FS_CMD_OPEN      = $02
 RP_FS_CMD_READ      = $03
 RP_FS_CMD_CLOSE     = $04
 RP_FS_CMD_WRITE     = $05
+RP_FS_CMD_LOAD      = $06
+RP_FS_CMD_SAVE      = $07
+RP_FS_CMD_SEEK      = $08
+RP_FS_CMD_TELL      = $09
+RP_FS_CMD_DELETE    = $0A
+RP_FS_CMD_RENAME    = $0B
+RP_FS_CMD_OPENDIR   = $0C
+RP_FS_CMD_READDIR   = $0D
+RP_FS_CMD_CLOSEDIR  = $0E
+
+RP_FS_SEEK_SET      = $00
+RP_FS_SEEK_CUR      = $01
+RP_FS_SEEK_END      = $02
 
 ; ------------------------------------------------------------
 ; RP_DOORBELL trigger value for ABI v2

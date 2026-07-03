@@ -41,6 +41,7 @@ OBJ_NONE    = $00
 OBJ_DEVICE  = $01        ; console for now
 OBJ_FILE    = $02        ; RP filesystem file handle
 OBJ_PIPE    = $03        ; reserved
+OBJ_DIR     = $04        ; RP filesystem directory handle
 
 ; ------------------------------------------------------------
 ; Device identifiers

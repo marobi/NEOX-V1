@@ -9,7 +9,7 @@
 ; Design rule:
 ;   This file owns console command semantics only. Low-level
 ;   mailbox locking, waiting, and doorbell mechanics remain in
-;   rp2350.asm.
+;   mailbox.asm.
 ; ============================================================
 
 .setcpu "65C02"

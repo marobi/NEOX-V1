@@ -94,7 +94,7 @@ KERNEL_SRCS := \
 	kernel/console_device.asm \
 	kernel/rp_console_io.asm \
 	kernel/rp_fs_io.asm \
-	kernel/rp2350.asm \
+	kernel/mailbox.asm \
 	kernel/init_tasks.asm \
 	kernel/debug.asm
 
