@@ -1,11 +1,11 @@
 ; ============================================================
 ; task5.asm
-; NEOX - RP filesystem V31 bulk, V32 open-mode, V33 seek/tell, V34 delete/rename, and V35 directory-control test
+; NEOX - RP filesystem V31-V37 regression test
 ;
 ; Purpose:
 ;   Exercises SYS_SAVE_MEMORY_TO_FILE / SYS_LOAD_FILE_TO_MEMORY, the
 ;   V32 SYS_OPEN modes, V33 SYS_SEEK / SYS_TELL, and V34 SYS_DELETE /
-;   SYS_RENAME and V35 SYS_OPENDIR / SYS_READDIR / SYS_CLOSEDIR through the normal user syscall path.
+;   SYS_RENAME and V35 SYS_OPENDIR / SYS_READDIR / SYS_CLOSEDIR and V37 SYS_MKDIR / SYS_RMDIR through the normal user syscall path.
 ;
 ; V33 scenario:
 ;   - create V33TEST.TXT as ABCDE
@@ -26,6 +26,17 @@
 ;   - readdir both handles
 ;   - verify both independent scans return the same first entry
 ;   - closedir both handles
+;
+; V37 scenario:
+;   - cleanup stale V37DIR/A.TXT and V37DIR
+;   - mkdir V37DIR
+;   - chdir V37DIR
+;   - create A.TXT through relative cwd
+;   - chdir 0:/
+;   - verify V37DIR/A.TXT
+;   - delete V37DIR/A.TXT
+;   - rmdir V37DIR
+;   - verify opendir V37DIR fails
 ; ============================================================
 
 .setcpu "65C02"
@@ -63,6 +74,27 @@ t5_v34_renamed_path:
 
 t5_root_path:
     .byte "/", 0
+
+t5_drive0_root_path:
+    .byte "0:/", 0
+
+t5_dot_dir_path:
+    .byte ".", 0
+
+t5_dot_bulk_path:
+    .byte "./BULKTEST.TXT", 0
+
+t5_v37_dir_path:
+    .byte "V37DIR", 0
+
+t5_v37_file_path:
+    .byte "V37DIR/A.TXT", 0
+
+t5_v37_rel_file_path:
+    .byte "A.TXT", 0
+
+t5_expect_cwd_v37:
+    .byte "0:/V37DIR", 0
 
 t5_bulk_text:
     .byte "NEOX V31 BULK TEST"
@@ -124,6 +156,9 @@ t5_dir_fd1:
 t5_dir_fd2:
     .byte T5_FD_NONE
 
+t5_cwd_buf:
+    .res NEOX_CWD_MAX
+
 t5_expected_pos_lo:
     .byte 0
 
@@ -131,7 +166,7 @@ t5_expected_pos_hi:
     .byte 0
 
 t5_msg_start:
-    .byte "T5 V35 START", 13
+    .byte "T5 V37 START", 13
 
 t5_msg_bulk_fail:
     .byte "T5 BULK FAIL", 13
@@ -184,6 +219,24 @@ t5_msg_closedir_fail:
 t5_msg_v35_verify_fail:
     .byte "T5 V35 VERIFY FAIL", 13
 
+t5_msg_chdir_fail:
+    .byte "T5 CHDIR FAIL", 13
+
+t5_msg_getcwd_fail:
+    .byte "T5 GETCWD FAIL", 13
+
+t5_msg_v36_verify_fail:
+    .byte "T5 V36 VERIFY FAIL", 13
+
+t5_msg_mkdir_fail:
+    .byte "T5 MKDIR FAIL", 13
+
+t5_msg_rmdir_fail:
+    .byte "T5 RMDIR FAIL", 13
+
+t5_msg_v37_verify_fail:
+    .byte "T5 V37 VERIFY FAIL", 13
+
 t5_msg_v32_ok:
     .byte "T5 V32 OK", 13
 
@@ -195,6 +248,12 @@ t5_msg_v34_ok:
 
 t5_msg_v35_ok:
     .byte "T5 V35 OK", 13
+
+t5_msg_v36_ok:
+    .byte "T5 V36 OK", 13
+
+t5_msg_v37_ok:
+    .byte "T5 V37 OK", 13
 
 t5_stdout_args:
     .byte STDOUT
@@ -263,6 +322,31 @@ t5_readdir_args:
 t5_closedir_args:
     .byte T5_FD_NONE
     .byte 0
+
+t5_chdir_args:
+    .word t5_drive0_root_path
+    .word 64
+    .byte T5_DEVICE
+    .byte NEOX_PATH_FLAGS_NONE
+
+t5_getcwd_args:
+    .word t5_cwd_buf
+    .word NEOX_CWD_MAX
+    .word 0
+    .byte NEOX_PATH_FLAGS_NONE
+    .byte 0
+
+t5_mkdir_args:
+    .word t5_v37_dir_path
+    .word 64
+    .byte T5_DEVICE
+    .byte NEOX_PATH_FLAGS_NONE
+
+t5_rmdir_args:
+    .word t5_v37_dir_path
+    .word 64
+    .byte T5_DEVICE
+    .byte NEOX_PATH_FLAGS_NONE
 
 t5_save_args:
     .word t5_bulk_path
@@ -455,6 +539,62 @@ t5_load_args:
     jmp t5_print_msg
 .endproc
 
+.proc t5_print_chdir_fail
+    lda #<t5_msg_chdir_fail
+    ldx #>t5_msg_chdir_fail
+    ldy #15
+    jmp t5_print_msg
+.endproc
+
+.proc t5_print_getcwd_fail
+    lda #<t5_msg_getcwd_fail
+    ldx #>t5_msg_getcwd_fail
+    ldy #16
+    jmp t5_print_msg
+.endproc
+
+.proc t5_print_v36_verify_fail
+    lda #<t5_msg_v36_verify_fail
+    ldx #>t5_msg_v36_verify_fail
+    ldy #19
+    jmp t5_print_msg
+.endproc
+
+.proc t5_print_v36_ok
+    lda #<t5_msg_v36_ok
+    ldx #>t5_msg_v36_ok
+    ldy #10
+    jmp t5_print_msg
+.endproc
+
+.proc t5_print_mkdir_fail
+    lda #<t5_msg_mkdir_fail
+    ldx #>t5_msg_mkdir_fail
+    ldy #14
+    jmp t5_print_msg
+.endproc
+
+.proc t5_print_rmdir_fail
+    lda #<t5_msg_rmdir_fail
+    ldx #>t5_msg_rmdir_fail
+    ldy #14
+    jmp t5_print_msg
+.endproc
+
+.proc t5_print_v37_verify_fail
+    lda #<t5_msg_v37_verify_fail
+    ldx #>t5_msg_v37_verify_fail
+    ldy #19
+    jmp t5_print_msg
+.endproc
+
+.proc t5_print_v37_ok
+    lda #<t5_msg_v37_ok
+    ldx #>t5_msg_v37_ok
+    ldy #10
+    jmp t5_print_msg
+.endproc
+
 ; ------------------------------------------------------------
 ; t5_close_file
 ; ------------------------------------------------------------
@@ -642,6 +782,57 @@ t5_load_args:
     lda #<t5_v34_renamed_path
     sta t5_open_args + open_args::path_ptr
     lda #>t5_v34_renamed_path
+    sta t5_open_args + open_args::path_ptr + 1
+    pla
+    jmp t5_open_path_common
+.endproc
+
+; ------------------------------------------------------------
+; t5_open_dot_bulk_path
+;
+; Input:
+;   A = open mode
+; ------------------------------------------------------------
+
+.proc t5_open_dot_bulk_path
+    pha
+    lda #<t5_dot_bulk_path
+    sta t5_open_args + open_args::path_ptr
+    lda #>t5_dot_bulk_path
+    sta t5_open_args + open_args::path_ptr + 1
+    pla
+    jmp t5_open_path_common
+.endproc
+
+; ------------------------------------------------------------
+; t5_open_v37_file_path
+;
+; Input:
+;   A = open mode
+; ------------------------------------------------------------
+
+.proc t5_open_v37_file_path
+    pha
+    lda #<t5_v37_file_path
+    sta t5_open_args + open_args::path_ptr
+    lda #>t5_v37_file_path
+    sta t5_open_args + open_args::path_ptr + 1
+    pla
+    jmp t5_open_path_common
+.endproc
+
+; ------------------------------------------------------------
+; t5_open_v37_rel_file_path
+;
+; Input:
+;   A = open mode
+; ------------------------------------------------------------
+
+.proc t5_open_v37_rel_file_path
+    pha
+    lda #<t5_v37_rel_file_path
+    sta t5_open_args + open_args::path_ptr
+    lda #>t5_v37_rel_file_path
     sta t5_open_args + open_args::path_ptr + 1
     pla
     jmp t5_open_path_common
@@ -1862,6 +2053,398 @@ t5_load_args:
     rts
 .endproc
 
+
+; ------------------------------------------------------------
+; t5_verify_getcwd_root0
+; ------------------------------------------------------------
+
+.proc t5_verify_getcwd_root0
+    lda t5_getcwd_args + getcwd_args::result_len
+    cmp #3
+    bne @fail
+    lda t5_getcwd_args + getcwd_args::result_len + 1
+    bne @fail
+    lda t5_cwd_buf
+    cmp #'0'
+    bne @fail
+    lda t5_cwd_buf+1
+    cmp #':'
+    bne @fail
+    lda t5_cwd_buf+2
+    cmp #'/'
+    bne @fail
+    lda t5_cwd_buf+3
+    bne @fail
+    clc
+    rts
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_opendir_dot_fd1
+; ------------------------------------------------------------
+
+.proc t5_opendir_dot_fd1
+    lda #<t5_dot_dir_path
+    sta t5_opendir_args + opendir_args::path_ptr
+    lda #>t5_dot_dir_path
+    sta t5_opendir_args + opendir_args::path_ptr + 1
+    SYSCALL t5_opendir_args, sys_opendir
+    bcs @fail
+    sta t5_dir_fd1
+    clc
+    rts
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_run_v36_current_dir
+; ------------------------------------------------------------
+
+.proc t5_run_v36_current_dir
+    ; chdir("0:/") establishes an explicit drive-qualified cwd root.
+    lda #<t5_drive0_root_path
+    sta t5_chdir_args + chdir_args::path_ptr
+    lda #>t5_drive0_root_path
+    sta t5_chdir_args + chdir_args::path_ptr + 1
+    SYSCALL t5_chdir_args, sys_chdir
+    bcc :+
+    jsr t5_print_chdir_fail
+    sec
+    rts
+:
+    ; getcwd must return "0:/".
+    SYSCALL t5_getcwd_args, sys_getcwd
+    bcc :+
+    jsr t5_print_getcwd_fail
+    sec
+    rts
+:
+    jsr t5_verify_getcwd_root0
+    bcc :+
+    jsr t5_print_getcwd_fail
+    sec
+    rts
+:
+    ; opendir(".") must resolve to the current directory.
+    jsr t5_close_dirs
+    jsr t5_opendir_dot_fd1
+    bcc :+
+    jsr t5_print_opendir_fail
+    sec
+    rts
+:
+    jsr t5_readdir_fd1
+    bcc :+
+    jsr t5_close_dirs
+    jsr t5_print_readdir_fail
+    sec
+    rts
+:
+    cmp #1
+    bne @readdir_bad
+    cpx #0
+    beq :+
+@readdir_bad:
+    jsr t5_close_dirs
+    jsr t5_print_readdir_fail
+    sec
+    rts
+:
+    jsr t5_closedir_fd1
+    bcc :+
+    jsr t5_print_closedir_fail
+    sec
+    rts
+:
+    ; open("./BULKTEST.TXT") must resolve against cwd and read the V31 file.
+    lda #OPEN_READ
+    jsr t5_open_dot_bulk_path
+    bcc :+
+    jsr t5_print_v36_verify_fail
+    sec
+    rts
+:
+    ldy #T5_TEXT_LEN
+    jsr t5_file_read
+    php
+    pha
+    phx
+    jsr t5_close_file
+    plx
+    pla
+    plp
+    bcc :+
+    jsr t5_print_v36_verify_fail
+    sec
+    rts
+:
+    cmp #T5_TEXT_LEN
+    bne @read_bad
+    cpx #0
+    beq :+
+@read_bad:
+    jsr t5_print_v36_verify_fail
+    sec
+    rts
+:
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_chdir_drive0_root
+; ------------------------------------------------------------
+
+.proc t5_chdir_drive0_root
+    lda #<t5_drive0_root_path
+    sta t5_chdir_args + chdir_args::path_ptr
+    lda #>t5_drive0_root_path
+    sta t5_chdir_args + chdir_args::path_ptr + 1
+    SYSCALL t5_chdir_args, sys_chdir
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_chdir_v37_dir
+; ------------------------------------------------------------
+
+.proc t5_chdir_v37_dir
+    lda #<t5_v37_dir_path
+    sta t5_chdir_args + chdir_args::path_ptr
+    lda #>t5_v37_dir_path
+    sta t5_chdir_args + chdir_args::path_ptr + 1
+    SYSCALL t5_chdir_args, sys_chdir
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_verify_getcwd_v37
+; ------------------------------------------------------------
+
+.proc t5_verify_getcwd_v37
+    lda t5_getcwd_args + getcwd_args::result_len
+    cmp #9
+    bne @fail
+    lda t5_getcwd_args + getcwd_args::result_len + 1
+    bne @fail
+
+    ldy #0
+@loop:
+    lda t5_cwd_buf,y
+    cmp t5_expect_cwd_v37,y
+    bne @fail
+    beq @check_end
+@next:
+    iny
+    bra @loop
+@check_end:
+    lda t5_expect_cwd_v37,y
+    beq @ok
+    bra @next
+@ok:
+    clc
+    rts
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_delete_v37_file_path
+; ------------------------------------------------------------
+
+.proc t5_delete_v37_file_path
+    lda #<t5_v37_file_path
+    sta t5_delete_args + delete_args::path_ptr
+    lda #>t5_v37_file_path
+    sta t5_delete_args + delete_args::path_ptr + 1
+    SYSCALL t5_delete_args, sys_delete
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_mkdir_v37_dir
+; ------------------------------------------------------------
+
+.proc t5_mkdir_v37_dir
+    lda #<t5_v37_dir_path
+    sta t5_mkdir_args + mkdir_args::path_ptr
+    lda #>t5_v37_dir_path
+    sta t5_mkdir_args + mkdir_args::path_ptr + 1
+    SYSCALL t5_mkdir_args, sys_mkdir
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_rmdir_v37_dir
+; ------------------------------------------------------------
+
+.proc t5_rmdir_v37_dir
+    lda #<t5_v37_dir_path
+    sta t5_rmdir_args + rmdir_args::path_ptr
+    lda #>t5_v37_dir_path
+    sta t5_rmdir_args + rmdir_args::path_ptr + 1
+    SYSCALL t5_rmdir_args, sys_rmdir
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_opendir_v37_dir_fd1
+; ------------------------------------------------------------
+
+.proc t5_opendir_v37_dir_fd1
+    lda #<t5_v37_dir_path
+    sta t5_opendir_args + opendir_args::path_ptr
+    lda #>t5_v37_dir_path
+    sta t5_opendir_args + opendir_args::path_ptr + 1
+    SYSCALL t5_opendir_args, sys_opendir
+    bcs @fail
+    sta t5_dir_fd1
+    clc
+    rts
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; t5_run_v37_mkdir_rmdir
+; ------------------------------------------------------------
+
+.proc t5_run_v37_mkdir_rmdir
+    ; Start from root.
+    jsr t5_chdir_drive0_root
+    bcc :+
+    jsr t5_print_chdir_fail
+    sec
+    rts
+:
+
+    ; Cleanup from earlier runs. Missing-file/missing-directory failures are ignored.
+    jsr t5_delete_v37_file_path
+    jsr t5_rmdir_v37_dir
+
+    ; mkdir("V37DIR") from root.
+    jsr t5_mkdir_v37_dir
+    bcc :+
+    jsr t5_print_mkdir_fail
+    sec
+    rts
+:
+
+    ; chdir("V37DIR") and verify getcwd is 0:/V37DIR.
+    jsr t5_chdir_v37_dir
+    bcc :+
+    jsr t5_print_chdir_fail
+    sec
+    rts
+:
+    SYSCALL t5_getcwd_args, sys_getcwd
+    bcc :+
+    jsr t5_print_getcwd_fail
+    sec
+    rts
+:
+    jsr t5_verify_getcwd_v37
+    bcc :+
+    jsr t5_print_getcwd_fail
+    sec
+    rts
+:
+
+    ; Create A.TXT using relative cwd.
+    lda #OPEN_WRITE_TRUNC
+    jsr t5_open_v37_rel_file_path
+    bcc :+
+    jsr t5_print_trunc_fail
+    sec
+    rts
+:
+    lda #<t5_seed_text
+    ldx #>t5_seed_text
+    ldy #5
+    jsr t5_file_write
+    php
+    jsr t5_close_file
+    plp
+    bcc :+
+    jsr t5_print_trunc_fail
+    sec
+    rts
+:
+
+    ; Return to root and verify the file through V37DIR/A.TXT.
+    jsr t5_chdir_drive0_root
+    bcc :+
+    jsr t5_print_chdir_fail
+    sec
+    rts
+:
+    ldy #5
+    phy
+    lda #OPEN_READ
+    jsr t5_open_v37_file_path
+    bcc :+
+    ply
+    jsr t5_print_v37_verify_fail
+    sec
+    rts
+:
+    ply
+    jsr t5_file_read
+    php
+    pha
+    phx
+    jsr t5_close_file
+    plx
+    pla
+    plp
+    bcc :+
+    jsr t5_print_v37_verify_fail
+    sec
+    rts
+:
+    cmp #5
+    bne @verify_fail
+    cpx #0
+    bne @verify_fail
+    jsr t5_verify_abcde
+    bcc :+
+@verify_fail:
+    jsr t5_print_v37_verify_fail
+    sec
+    rts
+:
+
+    ; Delete file, remove directory, and prove directory no longer opens.
+    jsr t5_delete_v37_file_path
+    bcc :+
+    jsr t5_print_delete_fail
+    sec
+    rts
+:
+    jsr t5_rmdir_v37_dir
+    bcc :+
+    jsr t5_print_rmdir_fail
+    sec
+    rts
+:
+    jsr t5_opendir_v37_dir_fd1
+    bcs :+
+    jsr t5_closedir_fd1
+    jsr t5_print_v37_verify_fail
+    sec
+    rts
+:
+    clc
+    rts
+.endproc
+
 ; ------------------------------------------------------------
 ; user_task5_entry
 ; ------------------------------------------------------------
@@ -1899,6 +2482,18 @@ t5_load_args:
     jmp @exit
 :
     jsr t5_print_v35_ok
+
+    jsr t5_run_v36_current_dir
+    bcc :+
+    jmp @exit
+:
+    jsr t5_print_v36_ok
+
+    jsr t5_run_v37_mkdir_rmdir
+    bcc :+
+    jmp @exit
+:
+    jsr t5_print_v37_ok
 
 @exit:
     jsr t5_close_file

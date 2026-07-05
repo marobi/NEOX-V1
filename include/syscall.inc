@@ -57,6 +57,10 @@ SYS_SIGNAL          = $12
 SYS_OPENDIR         = $13
 SYS_READDIR         = $14
 SYS_CLOSEDIR        = $15
+SYS_CHDIR           = $16
+SYS_GETCWD          = $17
+SYS_MKDIR           = $18
+SYS_RMDIR           = $19
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -84,6 +88,10 @@ sys_signal          = SYSCALL_BASE + (SYS_SIGNAL  * SYSCALL_ENTRY_SIZE)
 sys_opendir         = SYSCALL_BASE + (SYS_OPENDIR * SYSCALL_ENTRY_SIZE)
 sys_readdir         = SYSCALL_BASE + (SYS_READDIR * SYSCALL_ENTRY_SIZE)
 sys_closedir        = SYSCALL_BASE + (SYS_CLOSEDIR * SYSCALL_ENTRY_SIZE)
+sys_chdir           = SYSCALL_BASE + (SYS_CHDIR * SYSCALL_ENTRY_SIZE)
+sys_getcwd          = SYSCALL_BASE + (SYS_GETCWD * SYSCALL_ENTRY_SIZE)
+sys_mkdir           = SYSCALL_BASE + (SYS_MKDIR * SYSCALL_ENTRY_SIZE)
+sys_rmdir           = SYSCALL_BASE + (SYS_RMDIR * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values
@@ -332,5 +340,55 @@ READDIR_ARGS_SIZE = .sizeof(readdir_args)
 .endstruct
 
 CLOSEDIR_ARGS_SIZE = .sizeof(closedir_args)
+
+; ------------------------------------------------------------
+; Current directory argument blocks
+;
+; V36 stores current directory per process as drive + absolute path.
+; User-visible getcwd form is D:/PATH.
+; ------------------------------------------------------------
+
+NEOX_PATH_FLAGS_NONE = $00
+
+.struct chdir_args
+    path_ptr        .word
+    max_len         .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+CHDIR_ARGS_SIZE = .sizeof(chdir_args)
+
+.struct getcwd_args
+    buffer_ptr      .word
+    buffer_size     .word
+    result_len      .word
+    flags           .byte
+    reserved        .byte
+.endstruct
+
+GETCWD_ARGS_SIZE = .sizeof(getcwd_args)
+
+; ------------------------------------------------------------
+; Directory create/remove argument blocks
+; ------------------------------------------------------------
+
+.struct mkdir_args
+    path_ptr        .word
+    max_len         .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+MKDIR_ARGS_SIZE = .sizeof(mkdir_args)
+
+.struct rmdir_args
+    path_ptr        .word
+    max_len         .word
+    device          .byte
+    flags           .byte
+.endstruct
+
+RMDIR_ARGS_SIZE = .sizeof(rmdir_args)
 
 .endif

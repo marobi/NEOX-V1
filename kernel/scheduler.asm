@@ -70,6 +70,7 @@
 .import console_owner_pid
 
 .import active_context
+.import proc_cwd_init_current
 
 .importzp sched_ptr
 
@@ -1559,6 +1560,9 @@ idle_stack_ready:
     ; Start with a clean private stack.
     ldx #$FF
     txs
+
+    ; Initialise process-private cwd state in the selected context.
+    jsr proc_cwd_init_current
 
     ; Resolve entry address into private zero-page sched_ptr.
     ldx active_pid

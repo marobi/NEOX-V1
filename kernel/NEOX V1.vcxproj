@@ -168,10 +168,6 @@
     <None Include="user\task1.asm" />
     <None Include="user\task2.asm" />
     <None Include="user\task3.asm" />
-    <None Include="user\task6.asm" />
-    <None Include="user\nbox.asm" />
-    <None Include="user\task5.asm" />
-    <None Include="user\task4.asm" />
     <None Include="user\user_entry.asm" />
     <None Include="user\user_space.asm" />
   </ItemGroup>

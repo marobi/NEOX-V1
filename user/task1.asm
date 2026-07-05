@@ -302,7 +302,9 @@ t1_read_args:
     sbc t1_last_loop_hi
     sta t1_delta_loop_hi
 
-    jsr t1_print_rate
+    ; V38: keep pipe ping/pong task active, but suppress periodic console spam
+    ; so the interactive nbox task remains usable.
+    ; jsr t1_print_rate
     jsr t1_reset_sample
     rts
 .endproc

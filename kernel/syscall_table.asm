@@ -47,6 +47,10 @@
 .export k_opendir
 .export k_readdir
 .export k_closedir
+.export k_chdir
+.export k_getcwd
+.export k_mkdir
+.export k_rmdir
 
 .segment "SYSCALL_STUBS"
 
@@ -78,6 +82,10 @@
 ;   19 -> k_opendir
 ;   20 -> k_readdir
 ;   21 -> k_closedir
+;   22 -> k_chdir
+;   23 -> k_getcwd
+;   24 -> k_mkdir
+;   25 -> k_rmdir
 ; ------------------------------------------------------------
 
 syscall_table:
@@ -103,6 +111,10 @@ syscall_table:
     jmp k_opendir
     jmp k_readdir
     jmp k_closedir
+    jmp k_chdir
+    jmp k_getcwd
+    jmp k_mkdir
+    jmp k_rmdir
 
 .segment "KERN_TEXT"
 
@@ -219,4 +231,20 @@ syscall_table:
 
 .proc k_closedir
     jmp KERN_ENTRY_KSYS_CLOSEDIR
+.endproc
+
+.proc k_chdir
+    jmp KERN_ENTRY_KSYS_CHDIR
+.endproc
+
+.proc k_getcwd
+    jmp KERN_ENTRY_KSYS_GETCWD
+.endproc
+
+.proc k_mkdir
+    jmp KERN_ENTRY_KSYS_MKDIR
+.endproc
+
+.proc k_rmdir
+    jmp KERN_ENTRY_KSYS_RMDIR
 .endproc

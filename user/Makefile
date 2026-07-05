@@ -100,8 +100,7 @@ KERNEL_SRCS := \
 	kernel/debug.asm
 
 USER_SRCS := \
-	user/user_space.asm \
-	user/nbox.asm
+	user/user_space.asm
 
 # Optional user library objects
 USERLIB_SRCS := 

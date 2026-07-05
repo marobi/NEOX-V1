@@ -35,6 +35,8 @@
 .export rp_fs_opendir
 .export rp_fs_readdir
 .export rp_fs_closedir
+.export rp_fs_mkdir
+.export rp_fs_rmdir
 .export rp_fs_result_hi_lo
 .export rp_fs_result_hi_hi
 .export rp_fs_close
@@ -871,6 +873,146 @@ rp_fs_result_hi_hi:
     jsr rp_mailbox_mark_idle
     jsr rp_release_lock
 
+    clc
+    rts
+
+@fail:
+    phy
+    jsr rp_mailbox_mark_idle
+    jsr rp_release_lock
+    ply
+    sec
+    rts
+.endproc
+
+; <summary>
+; rp_fs_mkdir submits an FS_MKDIR request for a bounded explicit 8.3 directory path.
+; </summary>
+; <param name="io_ptr">Pointer to a NUL-terminated directory path in caller context.</param>
+; <param name="A">Maximum path scan length low byte.</param>
+; <param name="X">Maximum path scan length high byte.</param>
+; <param name="Y">Filesystem device/FatFs drive number.</param>
+; <returns>C clear with A/X = 0; C set with Y = errno.</returns>
+.proc rp_fs_mkdir
+    pha
+    phx
+    phy
+
+    jsr rp_acquire_lock
+
+    ply                         ; Y = device
+    plx                         ; X = max length high
+    pla                         ; A = max length low
+
+    jsr rp_mailbox_clear_request
+
+    pha
+    phx
+    phy
+
+    lda #RP_GROUP_FS
+    sta RP_GROUP
+    lda #RP_FS_CMD_MKDIR
+    sta RP_CMD
+
+    lda io_ptr
+    sta RP_ARG0L
+    lda io_ptr+1
+    sta RP_ARG0H
+
+    ply                         ; Y = device
+    plx                         ; X = max length high
+    pla                         ; A = max length low
+
+    sta RP_ARG1L
+    stx RP_ARG1H
+    sty RP_ARG2L
+    stz RP_ARG2H
+
+    jsr rp_mailbox_trigger
+    jsr rp_wait_done
+    bcs @fail
+
+    lda RP_RES0L
+    ldx RP_RES0H
+    pha
+    phx
+
+    jsr rp_mailbox_mark_idle
+    jsr rp_release_lock
+
+    plx
+    pla
+    clc
+    rts
+
+@fail:
+    phy
+    jsr rp_mailbox_mark_idle
+    jsr rp_release_lock
+    ply
+    sec
+    rts
+.endproc
+
+; <summary>
+; rp_fs_rmdir submits an FS_RMDIR request for a bounded explicit 8.3 directory path.
+; </summary>
+; <param name="io_ptr">Pointer to a NUL-terminated directory path in caller context.</param>
+; <param name="A">Maximum path scan length low byte.</param>
+; <param name="X">Maximum path scan length high byte.</param>
+; <param name="Y">Filesystem device/FatFs drive number.</param>
+; <returns>C clear with A/X = 0; C set with Y = errno.</returns>
+.proc rp_fs_rmdir
+    pha
+    phx
+    phy
+
+    jsr rp_acquire_lock
+
+    ply                         ; Y = device
+    plx                         ; X = max length high
+    pla                         ; A = max length low
+
+    jsr rp_mailbox_clear_request
+
+    pha
+    phx
+    phy
+
+    lda #RP_GROUP_FS
+    sta RP_GROUP
+    lda #RP_FS_CMD_RMDIR
+    sta RP_CMD
+
+    lda io_ptr
+    sta RP_ARG0L
+    lda io_ptr+1
+    sta RP_ARG0H
+
+    ply                         ; Y = device
+    plx                         ; X = max length high
+    pla                         ; A = max length low
+
+    sta RP_ARG1L
+    stx RP_ARG1H
+    sty RP_ARG2L
+    stz RP_ARG2H
+
+    jsr rp_mailbox_trigger
+    jsr rp_wait_done
+    bcs @fail
+
+    lda RP_RES0L
+    ldx RP_RES0H
+    pha
+    phx
+
+    jsr rp_mailbox_mark_idle
+    jsr rp_release_lock
+
+    plx
+    pla
     clc
     rts
 

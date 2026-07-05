@@ -45,6 +45,10 @@
 .import ksys_opendir
 .import ksys_readdir
 .import ksys_closedir
+.import ksys_chdir
+.import ksys_getcwd
+.import ksys_mkdir
+.import ksys_rmdir
 
 .segment "KERNEL_ENTRY"
 
@@ -78,10 +82,10 @@ kernel_entry_table:
     jmp ksys_opendir
     jmp ksys_readdir
     jmp ksys_closedir
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
+    jmp ksys_chdir
+    jmp ksys_getcwd
+    jmp ksys_mkdir
+    jmp ksys_rmdir
 		.res 3, $00
 		.res 3, $00
 		.res 3, $00

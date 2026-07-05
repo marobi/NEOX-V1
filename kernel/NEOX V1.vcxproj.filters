@@ -130,18 +130,6 @@
     <None Include="user\task3.asm">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="user\task6.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\nbox.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\task5.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\task4.asm">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="user\user_entry.asm">
       <Filter>Source Files</Filter>
     </None>

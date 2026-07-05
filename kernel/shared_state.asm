@@ -268,7 +268,7 @@ monitor_active:
 
 active_context:
 	.res 1
-	
+
 ; ------------------------------------------------------------
 ; Per-process file descriptor tables
 ;

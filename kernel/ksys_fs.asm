@@ -30,11 +30,18 @@
 .export ksys_opendir
 .export ksys_readdir
 .export ksys_closedir
+.export ksys_chdir
+.export ksys_getcwd
+.export ksys_mkdir
+.export ksys_rmdir
 
 .import file_io_gate_acquire
 .import file_io_gate_release
 .import file_io_gate_phase
 .import active_pid
+.import proc_cwd_device
+.import proc_cwd_len
+.import proc_cwd_path
 .import proc_context
 
 .import fd_alloc_open
@@ -64,196 +71,250 @@
 .import rp_fs_rename_set_new_path
 .import rp_fs_opendir
 .import rp_fs_readdir
+.import rp_fs_closedir
+.import rp_fs_mkdir
+.import rp_fs_rmdir
 .import rp_fs_result_hi_lo
 .import rp_fs_result_hi_hi
 
 .importzp io_ptr
+.importzp fd_ptr
+
+
+.segment "BSS"
+
+; Process/private filesystem syscall snapshot overlay.
+;
+; A process cannot execute two filesystem syscalls at the same time. These
+; bytes must survive file_io_gate_acquire because that acquire can block/yield,
+; but they do not need separate storage per syscall type. The active syscall
+; interprets the same private bytes with syscall-specific aliases below.
+ksys_fs_snap0:
+    .res 1
+
+ksys_fs_snap1:
+    .res 1
+
+ksys_fs_snap2:
+    .res 1
+
+ksys_fs_snap3:
+    .res 1
+
+ksys_fs_snap4:
+    .res 1
+
+ksys_fs_snap5:
+    .res 1
+
+ksys_fs_snap6:
+    .res 1
+
+ksys_fs_snap7:
+    .res 1
+
+ksys_fs_snap8:
+    .res 1
+
+ksys_fs_snap9:
+    .res 1
+
+; OPEN snapshot aliases
+ksys_open_path_lo_snapshot    = ksys_fs_snap0
+ksys_open_path_hi_snapshot    = ksys_fs_snap1
+ksys_open_max_lo_snapshot     = ksys_fs_snap2
+ksys_open_max_hi_snapshot     = ksys_fs_snap3
+ksys_open_flags_snapshot      = ksys_fs_snap4
+ksys_open_device_snapshot     = ksys_fs_snap5
+
+; BULK LOAD/SAVE snapshot aliases
+ksys_bulk_args_lo_snapshot    = ksys_fs_snap0
+ksys_bulk_args_hi_snapshot    = ksys_fs_snap1
+ksys_bulk_context_snapshot    = ksys_fs_snap2
+
+; SEEK snapshot aliases
+ksys_seek_args_lo_snapshot    = ksys_fs_snap0
+ksys_seek_args_hi_snapshot    = ksys_fs_snap1
+ksys_seek_fd_snapshot         = ksys_fs_snap2
+ksys_seek_whence_snapshot     = ksys_fs_snap3
+ksys_seek_off0_snapshot       = ksys_fs_snap4
+ksys_seek_off1_snapshot       = ksys_fs_snap5
+ksys_seek_off2_snapshot       = ksys_fs_snap6
+ksys_seek_off3_snapshot       = ksys_fs_snap7
+
+; TELL snapshot aliases
+ksys_tell_args_lo_snapshot    = ksys_fs_snap0
+ksys_tell_args_hi_snapshot    = ksys_fs_snap1
+ksys_tell_fd_snapshot         = ksys_fs_snap2
+
+; DELETE snapshot aliases
+ksys_delete_args_lo_snapshot  = ksys_fs_snap0
+ksys_delete_args_hi_snapshot  = ksys_fs_snap1
+ksys_delete_path_lo_snapshot  = ksys_fs_snap2
+ksys_delete_path_hi_snapshot  = ksys_fs_snap3
+ksys_delete_max_lo_snapshot   = ksys_fs_snap4
+ksys_delete_max_hi_snapshot   = ksys_fs_snap5
+ksys_delete_device_snapshot   = ksys_fs_snap6
+ksys_delete_flags_snapshot    = ksys_fs_snap7
+
+; RENAME snapshot aliases
+ksys_rename_args_lo_snapshot  = ksys_fs_snap0
+ksys_rename_args_hi_snapshot  = ksys_fs_snap1
+ksys_rename_old_lo_snapshot   = ksys_fs_snap2
+ksys_rename_old_hi_snapshot   = ksys_fs_snap3
+ksys_rename_new_lo_snapshot   = ksys_fs_snap4
+ksys_rename_new_hi_snapshot   = ksys_fs_snap5
+ksys_rename_max_lo_snapshot   = ksys_fs_snap6
+ksys_rename_max_hi_snapshot   = ksys_fs_snap7
+ksys_rename_device_snapshot   = ksys_fs_snap8
+ksys_rename_flags_snapshot    = ksys_fs_snap9
+
+; OPENDIR snapshot aliases
+ksys_opendir_args_lo_snapshot = ksys_fs_snap0
+ksys_opendir_args_hi_snapshot = ksys_fs_snap1
+ksys_opendir_path_lo_snapshot = ksys_fs_snap2
+ksys_opendir_path_hi_snapshot = ksys_fs_snap3
+ksys_opendir_max_lo_snapshot  = ksys_fs_snap4
+ksys_opendir_max_hi_snapshot  = ksys_fs_snap5
+ksys_opendir_device_snapshot  = ksys_fs_snap6
+ksys_opendir_flags_snapshot   = ksys_fs_snap7
+
+; READDIR snapshot aliases
+ksys_readdir_args_lo_snapshot = ksys_fs_snap0
+ksys_readdir_args_hi_snapshot = ksys_fs_snap1
+ksys_readdir_fd_snapshot      = ksys_fs_snap2
+ksys_readdir_entry_lo_snapshot= ksys_fs_snap3
+ksys_readdir_entry_hi_snapshot= ksys_fs_snap4
+ksys_readdir_size_lo_snapshot = ksys_fs_snap5
+ksys_readdir_size_hi_snapshot = ksys_fs_snap6
+
+; CLOSEDIR snapshot aliases
+ksys_closedir_args_lo_snapshot= ksys_fs_snap0
+ksys_closedir_args_hi_snapshot= ksys_fs_snap1
+ksys_closedir_fd_snapshot     = ksys_fs_snap2
+
+; CHDIR snapshot aliases
+ksys_chdir_args_lo_snapshot   = ksys_fs_snap0
+ksys_chdir_args_hi_snapshot   = ksys_fs_snap1
+ksys_chdir_path_lo_snapshot   = ksys_fs_snap2
+ksys_chdir_path_hi_snapshot   = ksys_fs_snap3
+ksys_chdir_max_lo_snapshot    = ksys_fs_snap4
+ksys_chdir_max_hi_snapshot    = ksys_fs_snap5
+ksys_chdir_device_snapshot    = ksys_fs_snap6
+ksys_chdir_flags_snapshot     = ksys_fs_snap7
+
+; GETCWD snapshot aliases
+ksys_getcwd_args_lo_snapshot  = ksys_fs_snap0
+ksys_getcwd_args_hi_snapshot  = ksys_fs_snap1
+ksys_getcwd_buf_lo_snapshot   = ksys_fs_snap2
+ksys_getcwd_buf_hi_snapshot   = ksys_fs_snap3
+ksys_getcwd_size_lo_snapshot  = ksys_fs_snap4
+ksys_getcwd_size_hi_snapshot  = ksys_fs_snap5
+ksys_getcwd_flags_snapshot    = ksys_fs_snap6
+
+; MKDIR/RMDIR snapshot aliases
+ksys_mkdir_args_lo_snapshot   = ksys_fs_snap0
+ksys_mkdir_args_hi_snapshot   = ksys_fs_snap1
+ksys_mkdir_path_lo_snapshot   = ksys_fs_snap2
+ksys_mkdir_path_hi_snapshot   = ksys_fs_snap3
+ksys_mkdir_max_lo_snapshot    = ksys_fs_snap4
+ksys_mkdir_max_hi_snapshot    = ksys_fs_snap5
+ksys_mkdir_device_snapshot    = ksys_fs_snap6
+ksys_mkdir_flags_snapshot     = ksys_fs_snap7
+
+ksys_rmdir_args_lo_snapshot   = ksys_fs_snap0
+ksys_rmdir_args_hi_snapshot   = ksys_fs_snap1
+ksys_rmdir_path_lo_snapshot   = ksys_fs_snap2
+ksys_rmdir_path_hi_snapshot   = ksys_fs_snap3
+ksys_rmdir_max_lo_snapshot    = ksys_fs_snap4
+ksys_rmdir_max_hi_snapshot    = ksys_fs_snap5
+ksys_rmdir_device_snapshot    = ksys_fs_snap6
+ksys_rmdir_flags_snapshot     = ksys_fs_snap7
+
 
 .segment "KERN_BSS"
 
-; Per-PID open syscall argument snapshot. The syscall entry pointer is
-; copied before file_io_gate_acquire because the gate can block/yield.
-ksys_open_path_lo_by_pid:
-    .res MAX_PROCS
+; V36 path resolver scratch. Valid while file_io_gate is owned.
+ksys_resolved_path:
+    .res NEOX_PATH_MAX
 
-ksys_open_path_hi_by_pid:
-    .res MAX_PROCS
+ksys_component_buf:
+    .res 13
 
-ksys_open_max_lo_by_pid:
-    .res MAX_PROCS
+ksys_resolved_device:
+    .res 1
 
-ksys_open_max_hi_by_pid:
-    .res MAX_PROCS
+ksys_resolved_len:
+    .res 1
 
-ksys_open_flags_by_pid:
-    .res MAX_PROCS
+ksys_component_len:
+    .res 1
 
-ksys_open_device_by_pid:
-    .res MAX_PROCS
+ksys_resolve_src_idx:
+    .res 1
 
+ksys_resolve_max_lo:
+    .res 1
 
-; Per-PID bulk filesystem syscall snapshot. The syscall entry pointer and
-; trusted caller context are copied before file_io_gate_acquire because the
-; gate can block/yield.
-ksys_bulk_args_lo_by_pid:
-    .res MAX_PROCS
+ksys_resolve_max_hi:
+    .res 1
 
-ksys_bulk_args_hi_by_pid:
-    .res MAX_PROCS
+ksys_chdir_entry_lo:
+    .res 1
 
-ksys_bulk_context_by_pid:
-    .res MAX_PROCS
+ksys_chdir_entry_hi:
+    .res 1
 
-; Per-PID seek/tell syscall snapshots.  The syscall argument pointer and
-; input values are copied before file_io_gate_acquire because the gate can
-; block/yield.
-ksys_seek_args_lo_by_pid:
-    .res MAX_PROCS
+ksys_chdir_path_lo:
+    .res 1
 
-ksys_seek_args_hi_by_pid:
-    .res MAX_PROCS
+ksys_chdir_path_hi:
+    .res 1
 
-ksys_seek_fd_by_pid:
-    .res MAX_PROCS
+ksys_chdir_max_lo:
+    .res 1
 
-ksys_seek_whence_by_pid:
-    .res MAX_PROCS
+ksys_chdir_max_hi:
+    .res 1
 
-ksys_seek_off0_by_pid:
-    .res MAX_PROCS
+ksys_chdir_device:
+    .res 1
 
-ksys_seek_off1_by_pid:
-    .res MAX_PROCS
+ksys_chdir_flags:
+    .res 1
 
-ksys_seek_off2_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_entry_lo:
+    .res 1
 
-ksys_seek_off3_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_entry_hi:
+    .res 1
 
-ksys_tell_args_lo_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_buf_lo:
+    .res 1
 
-ksys_tell_args_hi_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_buf_hi:
+    .res 1
 
-ksys_tell_fd_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_size_lo:
+    .res 1
 
-; Per-PID delete/rename syscall snapshots.  User pointers and scalar
-; arguments are copied before file_io_gate_acquire because the gate can
-; block/yield.
-ksys_delete_args_lo_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_size_hi:
+    .res 1
 
-ksys_delete_args_hi_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_flags:
+    .res 1
 
-ksys_delete_path_lo_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_len:
+    .res 1
 
-ksys_delete_path_hi_by_pid:
-    .res MAX_PROCS
+ksys_cwd_len_tmp:
+    .res 1
 
-ksys_delete_max_lo_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_src_idx:
+    .res 1
 
-ksys_delete_max_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_delete_device_by_pid:
-    .res MAX_PROCS
-
-ksys_delete_flags_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_args_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_args_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_old_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_old_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_new_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_new_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_max_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_max_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_device_by_pid:
-    .res MAX_PROCS
-
-ksys_rename_flags_by_pid:
-    .res MAX_PROCS
-
-
-; Per-PID directory syscall snapshots.  User pointers and scalar
-; arguments are copied before file_io_gate_acquire because the gate can
-; block/yield.
-ksys_opendir_args_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_opendir_args_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_opendir_path_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_opendir_path_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_opendir_max_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_opendir_max_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_opendir_device_by_pid:
-    .res MAX_PROCS
-
-ksys_opendir_flags_by_pid:
-    .res MAX_PROCS
-
-ksys_readdir_args_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_readdir_args_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_readdir_fd_by_pid:
-    .res MAX_PROCS
-
-ksys_readdir_entry_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_readdir_entry_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_readdir_size_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_readdir_size_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_closedir_args_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_closedir_args_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_closedir_fd_by_pid:
-    .res MAX_PROCS
+ksys_getcwd_dst_idx:
+    .res 1
 
 ; Gate-protected scratch. Valid only while file_io_gate is owned.
 ksys_open_path_lo:
@@ -516,7 +577,359 @@ ksys_closedir_entry_lo:
 ksys_closedir_entry_hi:
     .res 1
 
+; V37 mkdir/rmdir gate scratch aliases reuse the delete scratch because
+; one filesystem syscall owns file_io_gate at a time.
+ksys_mkdir_args_lo     = ksys_delete_args_lo
+ksys_mkdir_args_hi     = ksys_delete_args_hi
+ksys_mkdir_path_lo     = ksys_delete_path_lo
+ksys_mkdir_path_hi     = ksys_delete_path_hi
+ksys_mkdir_max_lo      = ksys_delete_max_lo
+ksys_mkdir_max_hi      = ksys_delete_max_hi
+ksys_mkdir_device      = ksys_delete_device
+ksys_mkdir_flags       = ksys_delete_flags
+
+ksys_rmdir_args_lo     = ksys_delete_args_lo
+ksys_rmdir_args_hi     = ksys_delete_args_hi
+ksys_rmdir_path_lo     = ksys_delete_path_lo
+ksys_rmdir_path_hi     = ksys_delete_path_hi
+ksys_rmdir_max_lo      = ksys_delete_max_lo
+ksys_rmdir_max_hi      = ksys_delete_max_hi
+ksys_rmdir_device      = ksys_delete_device
+ksys_rmdir_flags       = ksys_delete_flags
+
 .segment "KERN_TEXT"
+
+
+; <summary>
+; ksys_cwd_select_current loads fd_ptr with the current process/private cwd buffer.
+; Root is represented by proc_cwd_len = 0.
+; </summary>
+; <returns>fd_ptr -> current process cwd buffer.</returns>
+.proc ksys_cwd_select_current
+    lda #<proc_cwd_path
+    sta fd_ptr
+    lda #>proc_cwd_path
+    sta fd_ptr+1
+    rts
+.endproc
+
+; <summary>
+; ksys_resolve_clear clears the resolved path buffer.
+; </summary>
+; <returns>C clear.</returns>
+.proc ksys_resolve_clear
+    stz ksys_resolved_len
+    stz ksys_resolved_path
+    clc
+    rts
+.endproc
+
+; <summary>
+; ksys_resolve_append_char appends A to ksys_resolved_path.
+; </summary>
+; <returns>C clear on success; C set on path too long.</returns>
+.proc ksys_resolve_append_char
+    ldx ksys_resolved_len
+    cpx #(NEOX_PATH_MAX - 1)
+    bcc @space
+    ldy #EINVAL
+    sec
+    rts
+@space:
+    sta ksys_resolved_path,x
+    inx
+    stx ksys_resolved_len
+    stz ksys_resolved_path,x
+    clc
+    rts
+.endproc
+
+; <summary>
+; ksys_resolve_append_slash_if_needed appends '/' between path components.
+; </summary>
+; <returns>C clear on success; C set on path too long.</returns>
+.proc ksys_resolve_append_slash_if_needed
+    lda ksys_resolved_len
+    beq @done
+    lda #'/'
+    jsr ksys_resolve_append_char
+    rts
+@done:
+    clc
+    rts
+.endproc
+
+; <summary>
+; ksys_resolve_copy_cwd copies the current process cwd component string into
+; ksys_resolved_path. The cwd buffer does not include a leading slash.
+; </summary>
+; <returns>C clear.</returns>
+.proc ksys_resolve_copy_cwd
+    jsr ksys_cwd_select_current
+    lda proc_cwd_device
+    sta ksys_resolved_device
+    stz ksys_resolved_len
+    stz ksys_resolved_path
+    lda proc_cwd_len
+    sta ksys_cwd_len_tmp
+    beq @done
+    ldy #0
+@loop:
+    lda (fd_ptr),y
+    jsr ksys_resolve_append_char
+    bcs @fail
+    iny
+    cpy ksys_cwd_len_tmp
+    bne @loop
+@done:
+    clc
+    rts
+@fail:
+    sec
+    rts
+.endproc
+
+; <summary>
+; ksys_resolve_remove_last_component implements '..' on the resolved path.
+; </summary>
+; <returns>C clear.</returns>
+.proc ksys_resolve_remove_last_component
+    ldx ksys_resolved_len
+    beq @root
+@loop:
+    dex
+    beq @root
+    lda ksys_resolved_path,x
+    cmp #'/'
+    bne @loop
+    stx ksys_resolved_len
+    stz ksys_resolved_path,x
+    clc
+    rts
+@root:
+    stz ksys_resolved_len
+    stz ksys_resolved_path
+    clc
+    rts
+.endproc
+
+; <summary>
+; ksys_resolve_commit_component appends ksys_component_buf unless it is '.'
+; or '..'. Component validation is deliberately limited to syntax needed by
+; the resolver; RP remains the authoritative 8.3 validator.
+; </summary>
+; <returns>C clear on success; C set with Y = errno.</returns>
+.proc ksys_resolve_commit_component
+    lda ksys_component_len
+    beq @done
+    cmp #1
+    bne @check_parent
+    lda ksys_component_buf
+    cmp #'.'
+    beq @done
+@check_parent:
+    lda ksys_component_len
+    cmp #2
+    bne @normal
+    lda ksys_component_buf
+    cmp #'.'
+    bne @normal
+    lda ksys_component_buf+1
+    cmp #'.'
+    bne @normal
+    jmp ksys_resolve_remove_last_component
+@normal:
+    jsr ksys_resolve_append_slash_if_needed
+    bcs @fail
+    ldy #0
+@copy:
+    lda ksys_component_buf,y
+    jsr ksys_resolve_append_char
+    bcs @fail
+    iny
+    cpy ksys_component_len
+    bne @copy
+@done:
+    clc
+    rts
+@fail:
+    sec
+    rts
+.endproc
+
+; <summary>
+; ksys_resolve_path normalizes a caller path against the current process cwd.
+; </summary>
+; <param name="io_ptr">Caller path pointer in the current context.</param>
+; <param name="A/X">Maximum bytes to scan.</param>
+; <param name="Y">Legacy/default device, used only when cwd is uninitialized.</param>
+; <returns>C clear, A = resolved device, io_ptr -> ksys_resolved_path; C set with Y = errno.</returns>
+.proc ksys_resolve_path
+    sta ksys_resolve_max_lo
+    stx ksys_resolve_max_hi
+    sty ksys_resolved_device
+
+    ; Require bounded paths that fit in the V36 resolver buffer.
+    lda ksys_resolve_max_hi
+    beq @max_hi_ok
+    ldy #EINVAL
+    sec
+    rts
+@max_hi_ok:
+    lda ksys_resolve_max_lo
+    bne @max_nonzero
+    jmp @bad_path
+@max_nonzero:
+    cmp #NEOX_PATH_MAX
+    bcc @max_ok
+    lda #NEOX_PATH_MAX
+    sta ksys_resolve_max_lo
+@max_ok:
+    stz ksys_resolve_src_idx
+    stz ksys_component_len
+
+    ; Empty string is invalid.
+    ldy #0
+    lda (io_ptr),y
+    bne @path_nonempty
+    jmp @bad_path
+@path_nonempty:
+
+    ; Drive-qualified absolute path: N:/...
+    cmp #'0'
+    bcc @not_drive
+    cmp #'4'
+    bcs @not_drive
+    pha
+    ldy #1
+    lda (io_ptr),y
+    cmp #':'
+    bne @not_drive_pop
+    iny
+    lda (io_ptr),y
+    cmp #'/'
+    bne @not_drive_pop
+    pla
+    sec
+    sbc #'0'
+    sta ksys_resolved_device
+    jsr ksys_resolve_clear
+    lda #3
+    sta ksys_resolve_src_idx
+    bra @parse_loop
+@not_drive_pop:
+    pla
+@not_drive:
+    ; Absolute path on current device.
+    ldy #0
+    lda (io_ptr),y
+    cmp #'/'
+    bne @relative
+    jsr ksys_cwd_select_current
+    lda proc_cwd_device
+    sta ksys_resolved_device
+    jsr ksys_resolve_clear
+    lda #1
+    sta ksys_resolve_src_idx
+    bra @parse_loop
+@relative:
+    jsr ksys_resolve_copy_cwd
+    bcs @fail
+
+@parse_loop:
+    ldy ksys_resolve_src_idx
+    cpy ksys_resolve_max_lo
+    bcs @bad_path
+    lda (io_ptr),y
+    beq @finish
+    cmp #'/'
+    beq @separator
+
+    ldx ksys_component_len
+    cpx #12
+    bcc @component_space
+    ldy #EINVAL
+    sec
+    rts
+@component_space:
+    sta ksys_component_buf,x
+    inx
+    stx ksys_component_len
+    inc ksys_resolve_src_idx
+    bra @parse_loop
+
+@separator:
+    jsr ksys_resolve_commit_component
+    bcs @fail
+    stz ksys_component_len
+    inc ksys_resolve_src_idx
+    bra @parse_loop
+
+@finish:
+    jsr ksys_resolve_commit_component
+    bcs @fail
+    lda ksys_resolved_len
+    bne @non_root
+    lda #'/'
+    sta ksys_resolved_path
+    stz ksys_resolved_path+1
+    lda #1
+    sta ksys_resolved_len
+@non_root:
+    lda #<ksys_resolved_path
+    sta io_ptr
+    lda #>ksys_resolved_path
+    sta io_ptr+1
+    lda ksys_resolved_device
+    clc
+    rts
+
+@bad_path:
+    ldy #EINVAL
+@fail:
+    sec
+    rts
+.endproc
+
+; <summary>
+; ksys_set_cwd_from_resolved stores ksys_resolved_path as current cwd for
+; active_pid. Root '/' is stored internally as an empty path.
+; </summary>
+; <returns>C clear.</returns>
+.proc ksys_set_cwd_from_resolved
+    jsr ksys_cwd_select_current
+    lda ksys_resolved_device
+    sta proc_cwd_device
+
+    lda ksys_resolved_len
+    cmp #1
+    bne @copy_path
+    lda ksys_resolved_path
+    cmp #'/'
+    bne @copy_path
+    stz proc_cwd_len
+    ldy #0
+    lda #0
+    sta (fd_ptr),y
+    clc
+    rts
+
+@copy_path:
+    lda ksys_resolved_len
+    sta proc_cwd_len
+    sta ksys_cwd_len_tmp
+    ldy #0
+@loop:
+    lda ksys_resolved_path,y
+    sta (fd_ptr),y
+    iny
+    cpy ksys_cwd_len_tmp
+    bne @loop
+    lda #0
+    sta (fd_ptr),y
+    clc
+    rts
+.endproc
 
 ; <summary>
 ; ksys_open implements open(path, mode, device) for RP filesystem files
@@ -540,25 +953,25 @@ ksys_closedir_entry_hi:
 
     ldy #open_args::path_ptr
     lda (io_ptr),y
-    sta ksys_open_path_lo_by_pid,x
+    sta ksys_open_path_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_open_path_hi_by_pid,x
+    sta ksys_open_path_hi_snapshot
 
     ldy #open_args::max_len
     lda (io_ptr),y
-    sta ksys_open_max_lo_by_pid,x
+    sta ksys_open_max_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_open_max_hi_by_pid,x
+    sta ksys_open_max_hi_snapshot
 
     ldy #open_args::flags
     lda (io_ptr),y
-    sta ksys_open_flags_by_pid,x
+    sta ksys_open_flags_snapshot
 
     ldy #open_args::device
     lda (io_ptr),y
-    sta ksys_open_device_by_pid,x
+    sta ksys_open_device_snapshot
     plp
     cli
 
@@ -570,19 +983,19 @@ ksys_closedir_entry_hi:
     rts
 
 @gate_acquired:
-    ; Copy per-PID snapshot into gate-protected scratch.
+    ; Copy process/private snapshot into gate-protected scratch.
     ldx active_pid
-    lda ksys_open_path_lo_by_pid,x
+    lda ksys_open_path_lo_snapshot
     sta ksys_open_path_lo
-    lda ksys_open_path_hi_by_pid,x
+    lda ksys_open_path_hi_snapshot
     sta ksys_open_path_hi
-    lda ksys_open_max_lo_by_pid,x
+    lda ksys_open_max_lo_snapshot
     sta ksys_open_max_lo
-    lda ksys_open_max_hi_by_pid,x
+    lda ksys_open_max_hi_snapshot
     sta ksys_open_max_hi
-    lda ksys_open_flags_by_pid,x
+    lda ksys_open_flags_snapshot
     sta ksys_open_flags
-    lda ksys_open_device_by_pid,x
+    lda ksys_open_device_snapshot
     sta ksys_open_device
 
     ; Supported V32 modes:
@@ -607,6 +1020,29 @@ ksys_closedir_entry_hi:
     jmp @fail_release
 
 @flags_ok:
+    lda ksys_open_path_lo
+    sta io_ptr
+    lda ksys_open_path_hi
+    sta io_ptr+1
+    lda ksys_open_max_lo
+    ldx ksys_open_max_hi
+    ldy ksys_open_device
+    jsr ksys_resolve_path
+    bcc @open_path_ok
+
+    jmp @fail_release
+
+@open_path_ok:
+    sta ksys_open_device
+    lda #<ksys_resolved_path
+    sta ksys_open_path_lo
+    lda #>ksys_resolved_path
+    sta ksys_open_path_hi
+    lda #<NEOX_PATH_MAX
+    sta ksys_open_max_lo
+    lda #>NEOX_PATH_MAX
+    sta ksys_open_max_hi
+
     jsr fd_alloc_open
     bcc @open_obj_ok
 
@@ -756,12 +1192,12 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_bulk_entry_lo
-    sta ksys_bulk_args_lo_by_pid,x
+    sta ksys_bulk_args_lo_snapshot
     lda ksys_bulk_entry_hi
-    sta ksys_bulk_args_hi_by_pid,x
+    sta ksys_bulk_args_hi_snapshot
 
     lda proc_context,x
-    sta ksys_bulk_context_by_pid,x
+    sta ksys_bulk_context_snapshot
 
     plp
     cli
@@ -770,21 +1206,21 @@ ksys_closedir_entry_hi:
 .endproc
 
 ; <summary>
-; ksys_prepare_bulk_call copies the per-PID bulk snapshot into gate-protected
+; ksys_prepare_bulk_call copies the process/private bulk snapshot into gate-protected
 ; scratch and sets io_ptr to the user argument block.
 ; </summary>
 ; <returns>A = trusted caller context.</returns>
 .proc ksys_prepare_bulk_call
     ldx active_pid
 
-    lda ksys_bulk_args_lo_by_pid,x
+    lda ksys_bulk_args_lo_snapshot
     sta ksys_bulk_args_lo
     sta io_ptr
-    lda ksys_bulk_args_hi_by_pid,x
+    lda ksys_bulk_args_hi_snapshot
     sta ksys_bulk_args_hi
     sta io_ptr+1
 
-    lda ksys_bulk_context_by_pid,x
+    lda ksys_bulk_context_snapshot
     sta ksys_bulk_context
     rts
 .endproc
@@ -882,31 +1318,31 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_seek_entry_lo
-    sta ksys_seek_args_lo_by_pid,x
+    sta ksys_seek_args_lo_snapshot
     lda ksys_seek_entry_hi
-    sta ksys_seek_args_hi_by_pid,x
+    sta ksys_seek_args_hi_snapshot
 
     ldy #seek_args::fd
     lda (io_ptr),y
-    sta ksys_seek_fd_by_pid,x
+    sta ksys_seek_fd_snapshot
 
     ldy #seek_args::whence
     lda (io_ptr),y
-    sta ksys_seek_whence_by_pid,x
+    sta ksys_seek_whence_snapshot
 
     ldy #seek_args::offset_lo
     lda (io_ptr),y
-    sta ksys_seek_off0_by_pid,x
+    sta ksys_seek_off0_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_seek_off1_by_pid,x
+    sta ksys_seek_off1_snapshot
 
     ldy #seek_args::offset_hi
     lda (io_ptr),y
-    sta ksys_seek_off2_by_pid,x
+    sta ksys_seek_off2_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_seek_off3_by_pid,x
+    sta ksys_seek_off3_snapshot
     plp
     cli
 
@@ -920,21 +1356,21 @@ ksys_closedir_entry_hi:
 @gate_acquired:
     ldx active_pid
 
-    lda ksys_seek_args_lo_by_pid,x
+    lda ksys_seek_args_lo_snapshot
     sta ksys_seek_args_lo
-    lda ksys_seek_args_hi_by_pid,x
+    lda ksys_seek_args_hi_snapshot
     sta ksys_seek_args_hi
-    lda ksys_seek_fd_by_pid,x
+    lda ksys_seek_fd_snapshot
     sta ksys_seek_fd
-    lda ksys_seek_whence_by_pid,x
+    lda ksys_seek_whence_snapshot
     sta ksys_seek_whence
-    lda ksys_seek_off0_by_pid,x
+    lda ksys_seek_off0_snapshot
     sta ksys_seek_off0
-    lda ksys_seek_off1_by_pid,x
+    lda ksys_seek_off1_snapshot
     sta ksys_seek_off1
-    lda ksys_seek_off2_by_pid,x
+    lda ksys_seek_off2_snapshot
     sta ksys_seek_off2
-    lda ksys_seek_off3_by_pid,x
+    lda ksys_seek_off3_snapshot
     sta ksys_seek_off3
 
     lda ksys_seek_whence
@@ -1039,13 +1475,13 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_tell_entry_lo
-    sta ksys_tell_args_lo_by_pid,x
+    sta ksys_tell_args_lo_snapshot
     lda ksys_tell_entry_hi
-    sta ksys_tell_args_hi_by_pid,x
+    sta ksys_tell_args_hi_snapshot
 
     ldy #tell_args::fd
     lda (io_ptr),y
-    sta ksys_tell_fd_by_pid,x
+    sta ksys_tell_fd_snapshot
     plp
     cli
 
@@ -1059,11 +1495,11 @@ ksys_closedir_entry_hi:
 @gate_acquired:
     ldx active_pid
 
-    lda ksys_tell_args_lo_by_pid,x
+    lda ksys_tell_args_lo_snapshot
     sta ksys_tell_args_lo
-    lda ksys_tell_args_hi_by_pid,x
+    lda ksys_tell_args_hi_snapshot
     sta ksys_tell_args_hi
-    lda ksys_tell_fd_by_pid,x
+    lda ksys_tell_fd_snapshot
     sta ksys_tell_fd
 
     ldy ksys_tell_fd
@@ -1149,31 +1585,31 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_delete_entry_lo
-    sta ksys_delete_args_lo_by_pid,x
+    sta ksys_delete_args_lo_snapshot
     lda ksys_delete_entry_hi
-    sta ksys_delete_args_hi_by_pid,x
+    sta ksys_delete_args_hi_snapshot
 
     ldy #delete_args::path_ptr
     lda (io_ptr),y
-    sta ksys_delete_path_lo_by_pid,x
+    sta ksys_delete_path_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_delete_path_hi_by_pid,x
+    sta ksys_delete_path_hi_snapshot
 
     ldy #delete_args::max_len
     lda (io_ptr),y
-    sta ksys_delete_max_lo_by_pid,x
+    sta ksys_delete_max_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_delete_max_hi_by_pid,x
+    sta ksys_delete_max_hi_snapshot
 
     ldy #delete_args::device
     lda (io_ptr),y
-    sta ksys_delete_device_by_pid,x
+    sta ksys_delete_device_snapshot
 
     ldy #delete_args::flags
     lda (io_ptr),y
-    sta ksys_delete_flags_by_pid,x
+    sta ksys_delete_flags_snapshot
     plp
     cli
 
@@ -1187,21 +1623,21 @@ ksys_closedir_entry_hi:
 @gate_acquired:
     ldx active_pid
 
-    lda ksys_delete_args_lo_by_pid,x
+    lda ksys_delete_args_lo_snapshot
     sta ksys_delete_args_lo
-    lda ksys_delete_args_hi_by_pid,x
+    lda ksys_delete_args_hi_snapshot
     sta ksys_delete_args_hi
-    lda ksys_delete_path_lo_by_pid,x
+    lda ksys_delete_path_lo_snapshot
     sta ksys_delete_path_lo
-    lda ksys_delete_path_hi_by_pid,x
+    lda ksys_delete_path_hi_snapshot
     sta ksys_delete_path_hi
-    lda ksys_delete_max_lo_by_pid,x
+    lda ksys_delete_max_lo_snapshot
     sta ksys_delete_max_lo
-    lda ksys_delete_max_hi_by_pid,x
+    lda ksys_delete_max_hi_snapshot
     sta ksys_delete_max_hi
-    lda ksys_delete_device_by_pid,x
+    lda ksys_delete_device_snapshot
     sta ksys_delete_device
-    lda ksys_delete_flags_by_pid,x
+    lda ksys_delete_flags_snapshot
     sta ksys_delete_flags
 
     lda ksys_delete_flags
@@ -1260,38 +1696,38 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_rename_entry_lo
-    sta ksys_rename_args_lo_by_pid,x
+    sta ksys_rename_args_lo_snapshot
     lda ksys_rename_entry_hi
-    sta ksys_rename_args_hi_by_pid,x
+    sta ksys_rename_args_hi_snapshot
 
     ldy #rename_args::old_path_ptr
     lda (io_ptr),y
-    sta ksys_rename_old_lo_by_pid,x
+    sta ksys_rename_old_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_rename_old_hi_by_pid,x
+    sta ksys_rename_old_hi_snapshot
 
     ldy #rename_args::new_path_ptr
     lda (io_ptr),y
-    sta ksys_rename_new_lo_by_pid,x
+    sta ksys_rename_new_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_rename_new_hi_by_pid,x
+    sta ksys_rename_new_hi_snapshot
 
     ldy #rename_args::max_len
     lda (io_ptr),y
-    sta ksys_rename_max_lo_by_pid,x
+    sta ksys_rename_max_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_rename_max_hi_by_pid,x
+    sta ksys_rename_max_hi_snapshot
 
     ldy #rename_args::device
     lda (io_ptr),y
-    sta ksys_rename_device_by_pid,x
+    sta ksys_rename_device_snapshot
 
     ldy #rename_args::flags
     lda (io_ptr),y
-    sta ksys_rename_flags_by_pid,x
+    sta ksys_rename_flags_snapshot
     plp
     cli
 
@@ -1305,25 +1741,25 @@ ksys_closedir_entry_hi:
 @gate_acquired:
     ldx active_pid
 
-    lda ksys_rename_args_lo_by_pid,x
+    lda ksys_rename_args_lo_snapshot
     sta ksys_rename_args_lo
-    lda ksys_rename_args_hi_by_pid,x
+    lda ksys_rename_args_hi_snapshot
     sta ksys_rename_args_hi
-    lda ksys_rename_old_lo_by_pid,x
+    lda ksys_rename_old_lo_snapshot
     sta ksys_rename_old_lo
-    lda ksys_rename_old_hi_by_pid,x
+    lda ksys_rename_old_hi_snapshot
     sta ksys_rename_old_hi
-    lda ksys_rename_new_lo_by_pid,x
+    lda ksys_rename_new_lo_snapshot
     sta ksys_rename_new_lo
-    lda ksys_rename_new_hi_by_pid,x
+    lda ksys_rename_new_hi_snapshot
     sta ksys_rename_new_hi
-    lda ksys_rename_max_lo_by_pid,x
+    lda ksys_rename_max_lo_snapshot
     sta ksys_rename_max_lo
-    lda ksys_rename_max_hi_by_pid,x
+    lda ksys_rename_max_hi_snapshot
     sta ksys_rename_max_hi
-    lda ksys_rename_device_by_pid,x
+    lda ksys_rename_device_snapshot
     sta ksys_rename_device
-    lda ksys_rename_flags_by_pid,x
+    lda ksys_rename_flags_snapshot
     sta ksys_rename_flags
 
     lda ksys_rename_flags
@@ -1396,31 +1832,31 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_opendir_entry_lo
-    sta ksys_opendir_args_lo_by_pid,x
+    sta ksys_opendir_args_lo_snapshot
     lda ksys_opendir_entry_hi
-    sta ksys_opendir_args_hi_by_pid,x
+    sta ksys_opendir_args_hi_snapshot
 
     ldy #opendir_args::path_ptr
     lda (io_ptr),y
-    sta ksys_opendir_path_lo_by_pid,x
+    sta ksys_opendir_path_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_opendir_path_hi_by_pid,x
+    sta ksys_opendir_path_hi_snapshot
 
     ldy #opendir_args::max_len
     lda (io_ptr),y
-    sta ksys_opendir_max_lo_by_pid,x
+    sta ksys_opendir_max_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_opendir_max_hi_by_pid,x
+    sta ksys_opendir_max_hi_snapshot
 
     ldy #opendir_args::device
     lda (io_ptr),y
-    sta ksys_opendir_device_by_pid,x
+    sta ksys_opendir_device_snapshot
 
     ldy #opendir_args::flags
     lda (io_ptr),y
-    sta ksys_opendir_flags_by_pid,x
+    sta ksys_opendir_flags_snapshot
     plp
     cli
 
@@ -1434,21 +1870,21 @@ ksys_closedir_entry_hi:
 @gate_acquired:
     ldx active_pid
 
-    lda ksys_opendir_args_lo_by_pid,x
+    lda ksys_opendir_args_lo_snapshot
     sta ksys_opendir_args_lo
-    lda ksys_opendir_args_hi_by_pid,x
+    lda ksys_opendir_args_hi_snapshot
     sta ksys_opendir_args_hi
-    lda ksys_opendir_path_lo_by_pid,x
+    lda ksys_opendir_path_lo_snapshot
     sta ksys_opendir_path_lo
-    lda ksys_opendir_path_hi_by_pid,x
+    lda ksys_opendir_path_hi_snapshot
     sta ksys_opendir_path_hi
-    lda ksys_opendir_max_lo_by_pid,x
+    lda ksys_opendir_max_lo_snapshot
     sta ksys_opendir_max_lo
-    lda ksys_opendir_max_hi_by_pid,x
+    lda ksys_opendir_max_hi_snapshot
     sta ksys_opendir_max_hi
-    lda ksys_opendir_device_by_pid,x
+    lda ksys_opendir_device_snapshot
     sta ksys_opendir_device
-    lda ksys_opendir_flags_by_pid,x
+    lda ksys_opendir_flags_snapshot
     sta ksys_opendir_flags
 
     lda ksys_opendir_flags
@@ -1459,6 +1895,29 @@ ksys_closedir_entry_hi:
     jmp @fail_release
 
 @flags_ok:
+    lda ksys_opendir_path_lo
+    sta io_ptr
+    lda ksys_opendir_path_hi
+    sta io_ptr+1
+    lda ksys_opendir_max_lo
+    ldx ksys_opendir_max_hi
+    ldy ksys_opendir_device
+    jsr ksys_resolve_path
+    bcc @opendir_path_ok
+
+    jmp @fail_release
+
+@opendir_path_ok:
+    sta ksys_opendir_device
+    lda #<ksys_resolved_path
+    sta ksys_opendir_path_lo
+    lda #>ksys_resolved_path
+    sta ksys_opendir_path_hi
+    lda #<NEOX_PATH_MAX
+    sta ksys_opendir_max_lo
+    lda #>NEOX_PATH_MAX
+    sta ksys_opendir_max_hi
+
     jsr fd_alloc_open
     bcc @open_obj_ok
 
@@ -1548,27 +2007,27 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_readdir_entry_arg_lo
-    sta ksys_readdir_args_lo_by_pid,x
+    sta ksys_readdir_args_lo_snapshot
     lda ksys_readdir_entry_arg_hi
-    sta ksys_readdir_args_hi_by_pid,x
+    sta ksys_readdir_args_hi_snapshot
 
     ldy #readdir_args::fd
     lda (io_ptr),y
-    sta ksys_readdir_fd_by_pid,x
+    sta ksys_readdir_fd_snapshot
 
     ldy #readdir_args::entry_ptr
     lda (io_ptr),y
-    sta ksys_readdir_entry_lo_by_pid,x
+    sta ksys_readdir_entry_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_readdir_entry_hi_by_pid,x
+    sta ksys_readdir_entry_hi_snapshot
 
     ldy #readdir_args::entry_size
     lda (io_ptr),y
-    sta ksys_readdir_size_lo_by_pid,x
+    sta ksys_readdir_size_lo_snapshot
     iny
     lda (io_ptr),y
-    sta ksys_readdir_size_hi_by_pid,x
+    sta ksys_readdir_size_hi_snapshot
     plp
     cli
 
@@ -1582,19 +2041,19 @@ ksys_closedir_entry_hi:
 @gate_acquired:
     ldx active_pid
 
-    lda ksys_readdir_args_lo_by_pid,x
+    lda ksys_readdir_args_lo_snapshot
     sta ksys_readdir_args_lo
-    lda ksys_readdir_args_hi_by_pid,x
+    lda ksys_readdir_args_hi_snapshot
     sta ksys_readdir_args_hi
-    lda ksys_readdir_fd_by_pid,x
+    lda ksys_readdir_fd_snapshot
     sta ksys_readdir_fd
-    lda ksys_readdir_entry_lo_by_pid,x
+    lda ksys_readdir_entry_lo_snapshot
     sta ksys_readdir_entry_lo
-    lda ksys_readdir_entry_hi_by_pid,x
+    lda ksys_readdir_entry_hi_snapshot
     sta ksys_readdir_entry_hi
-    lda ksys_readdir_size_lo_by_pid,x
+    lda ksys_readdir_size_lo_snapshot
     sta ksys_readdir_size_lo
-    lda ksys_readdir_size_hi_by_pid,x
+    lda ksys_readdir_size_hi_snapshot
     sta ksys_readdir_size_hi
 
     ; Require destination buffer >= DIR_ENTRY_SIZE.
@@ -1667,13 +2126,13 @@ ksys_closedir_entry_hi:
     ldx active_pid
 
     lda ksys_closedir_entry_lo
-    sta ksys_closedir_args_lo_by_pid,x
+    sta ksys_closedir_args_lo_snapshot
     lda ksys_closedir_entry_hi
-    sta ksys_closedir_args_hi_by_pid,x
+    sta ksys_closedir_args_hi_snapshot
 
     ldy #closedir_args::fd
     lda (io_ptr),y
-    sta ksys_closedir_fd_by_pid,x
+    sta ksys_closedir_fd_snapshot
     plp
     cli
 
@@ -1687,11 +2146,11 @@ ksys_closedir_entry_hi:
 @gate_acquired:
     ldx active_pid
 
-    lda ksys_closedir_args_lo_by_pid,x
+    lda ksys_closedir_args_lo_snapshot
     sta ksys_closedir_args_lo
-    lda ksys_closedir_args_hi_by_pid,x
+    lda ksys_closedir_args_hi_snapshot
     sta ksys_closedir_args_hi
-    lda ksys_closedir_fd_by_pid,x
+    lda ksys_closedir_fd_snapshot
     sta ksys_closedir_fd
 
     ldy ksys_closedir_fd
@@ -1723,3 +2182,521 @@ ksys_closedir_entry_hi:
     sec
     rts
 .endproc
+; <summary>
+; ksys_chdir changes the current process cwd after validating the resolved
+; directory with RP OPENDIR/CLOSEDIR. No RP global cwd is modified.
+; </summary>
+; <param name="X/Y">Pointer to a chdir_args block in the caller context.</param>
+; <returns>C clear with A/X = 0; C set with Y = errno.</returns>
+.proc ksys_chdir
+    php
+    sei
+    stx ksys_chdir_entry_lo
+    sty ksys_chdir_entry_hi
+
+    lda ksys_chdir_entry_lo
+    sta io_ptr
+    lda ksys_chdir_entry_hi
+    sta io_ptr+1
+
+    ldx active_pid
+
+    ldy #chdir_args::path_ptr
+    lda (io_ptr),y
+    sta ksys_chdir_path_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_chdir_path_hi_snapshot
+
+    ldy #chdir_args::max_len
+    lda (io_ptr),y
+    sta ksys_chdir_max_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_chdir_max_hi_snapshot
+
+    ldy #chdir_args::device
+    lda (io_ptr),y
+    sta ksys_chdir_device_snapshot
+
+    ldy #chdir_args::flags
+    lda (io_ptr),y
+    sta ksys_chdir_flags_snapshot
+    plp
+    cli
+
+    jsr file_io_gate_acquire
+    bcs @gate_acquired
+
+    ldy #EINVAL
+    sec
+    rts
+
+@gate_acquired:
+    ldx active_pid
+    lda ksys_chdir_path_lo_snapshot
+    sta ksys_chdir_path_lo
+    lda ksys_chdir_path_hi_snapshot
+    sta ksys_chdir_path_hi
+    lda ksys_chdir_max_lo_snapshot
+    sta ksys_chdir_max_lo
+    lda ksys_chdir_max_hi_snapshot
+    sta ksys_chdir_max_hi
+    lda ksys_chdir_device_snapshot
+    sta ksys_chdir_device
+    lda ksys_chdir_flags_snapshot
+    sta ksys_chdir_flags
+
+    lda ksys_chdir_flags
+    cmp #NEOX_PATH_FLAGS_NONE
+    beq @flags_ok
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@flags_ok:
+    lda ksys_chdir_path_lo
+    sta io_ptr
+    lda ksys_chdir_path_hi
+    sta io_ptr+1
+    lda ksys_chdir_max_lo
+    ldx ksys_chdir_max_hi
+    ldy ksys_chdir_device
+    jsr ksys_resolve_path
+    bcc @path_ok
+
+    jmp @fail_release
+
+@path_ok:
+    sta ksys_chdir_device
+    lda #<NEOX_PATH_MAX
+    ldx #>NEOX_PATH_MAX
+    ldy ksys_chdir_device
+    jsr rp_fs_opendir
+    bcc @opendir_ok
+
+    jmp @fail_release
+
+@opendir_ok:
+    pha
+    jsr rp_fs_closedir
+    pla
+    bcc @close_ok
+
+    jmp @fail_release
+
+@close_ok:
+    jsr ksys_set_cwd_from_resolved
+    bcc @ok
+
+    jmp @fail_release
+
+@ok:
+    jsr file_io_gate_release
+    lda #0
+    tax
+    clc
+    rts
+
+@fail_release:
+    phy
+    jsr file_io_gate_release
+    ply
+    sec
+    rts
+.endproc
+
+; <summary>
+; ksys_mkdir creates a directory after resolving the caller path against the
+; current process cwd. RP receives only an explicit resolved path and device.
+; </summary>
+; <param name="X/Y">Pointer to a mkdir_args block in the caller context.</param>
+; <returns>C clear with A/X = 0; C set with Y = errno.</returns>
+.proc ksys_mkdir
+    php
+    sei
+    stx ksys_mkdir_args_lo_snapshot
+    sty ksys_mkdir_args_hi_snapshot
+
+    lda ksys_mkdir_args_lo_snapshot
+    sta io_ptr
+    lda ksys_mkdir_args_hi_snapshot
+    sta io_ptr+1
+
+    ldy #mkdir_args::path_ptr
+    lda (io_ptr),y
+    sta ksys_mkdir_path_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_mkdir_path_hi_snapshot
+
+    ldy #mkdir_args::max_len
+    lda (io_ptr),y
+    sta ksys_mkdir_max_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_mkdir_max_hi_snapshot
+
+    ldy #mkdir_args::device
+    lda (io_ptr),y
+    sta ksys_mkdir_device_snapshot
+
+    ldy #mkdir_args::flags
+    lda (io_ptr),y
+    sta ksys_mkdir_flags_snapshot
+    plp
+    cli
+
+    jsr file_io_gate_acquire
+    bcs @gate_acquired
+
+    ldy #EINVAL
+    sec
+    rts
+
+@gate_acquired:
+    lda ksys_mkdir_path_lo_snapshot
+    sta ksys_mkdir_path_lo
+    lda ksys_mkdir_path_hi_snapshot
+    sta ksys_mkdir_path_hi
+    lda ksys_mkdir_max_lo_snapshot
+    sta ksys_mkdir_max_lo
+    lda ksys_mkdir_max_hi_snapshot
+    sta ksys_mkdir_max_hi
+    lda ksys_mkdir_device_snapshot
+    sta ksys_mkdir_device
+    lda ksys_mkdir_flags_snapshot
+    sta ksys_mkdir_flags
+
+    lda ksys_mkdir_flags
+    cmp #NEOX_PATH_FLAGS_NONE
+    beq @flags_ok
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@flags_ok:
+    lda ksys_mkdir_path_lo
+    sta io_ptr
+    lda ksys_mkdir_path_hi
+    sta io_ptr+1
+    lda ksys_mkdir_max_lo
+    ldx ksys_mkdir_max_hi
+    ldy ksys_mkdir_device
+    jsr ksys_resolve_path
+    bcc @path_ok
+
+    jmp @fail_release
+
+@path_ok:
+    sta ksys_mkdir_device
+    lda #<ksys_resolved_path
+    sta io_ptr
+    lda #>ksys_resolved_path
+    sta io_ptr+1
+    lda #<NEOX_PATH_MAX
+    ldx #>NEOX_PATH_MAX
+    ldy ksys_mkdir_device
+    jsr rp_fs_mkdir
+    bcc @ok
+
+    jmp @fail_release
+
+@ok:
+    jsr file_io_gate_release
+    lda #0
+    tax
+    clc
+    rts
+
+@fail_release:
+    phy
+    jsr file_io_gate_release
+    ply
+    sec
+    rts
+.endproc
+
+; <summary>
+; ksys_rmdir removes an empty directory after resolving the caller path against
+; the current process cwd. RP receives only an explicit resolved path and device.
+; </summary>
+; <param name="X/Y">Pointer to a rmdir_args block in the caller context.</param>
+; <returns>C clear with A/X = 0; C set with Y = errno.</returns>
+.proc ksys_rmdir
+    php
+    sei
+    stx ksys_rmdir_args_lo_snapshot
+    sty ksys_rmdir_args_hi_snapshot
+
+    lda ksys_rmdir_args_lo_snapshot
+    sta io_ptr
+    lda ksys_rmdir_args_hi_snapshot
+    sta io_ptr+1
+
+    ldy #rmdir_args::path_ptr
+    lda (io_ptr),y
+    sta ksys_rmdir_path_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_rmdir_path_hi_snapshot
+
+    ldy #rmdir_args::max_len
+    lda (io_ptr),y
+    sta ksys_rmdir_max_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_rmdir_max_hi_snapshot
+
+    ldy #rmdir_args::device
+    lda (io_ptr),y
+    sta ksys_rmdir_device_snapshot
+
+    ldy #rmdir_args::flags
+    lda (io_ptr),y
+    sta ksys_rmdir_flags_snapshot
+    plp
+    cli
+
+    jsr file_io_gate_acquire
+    bcs @gate_acquired
+
+    ldy #EINVAL
+    sec
+    rts
+
+@gate_acquired:
+    lda ksys_rmdir_path_lo_snapshot
+    sta ksys_rmdir_path_lo
+    lda ksys_rmdir_path_hi_snapshot
+    sta ksys_rmdir_path_hi
+    lda ksys_rmdir_max_lo_snapshot
+    sta ksys_rmdir_max_lo
+    lda ksys_rmdir_max_hi_snapshot
+    sta ksys_rmdir_max_hi
+    lda ksys_rmdir_device_snapshot
+    sta ksys_rmdir_device
+    lda ksys_rmdir_flags_snapshot
+    sta ksys_rmdir_flags
+
+    lda ksys_rmdir_flags
+    cmp #NEOX_PATH_FLAGS_NONE
+    beq @flags_ok
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@flags_ok:
+    lda ksys_rmdir_path_lo
+    sta io_ptr
+    lda ksys_rmdir_path_hi
+    sta io_ptr+1
+    lda ksys_rmdir_max_lo
+    ldx ksys_rmdir_max_hi
+    ldy ksys_rmdir_device
+    jsr ksys_resolve_path
+    bcc @path_ok
+
+    jmp @fail_release
+
+@path_ok:
+    sta ksys_rmdir_device
+    lda #<ksys_resolved_path
+    sta io_ptr
+    lda #>ksys_resolved_path
+    sta io_ptr+1
+    lda #<NEOX_PATH_MAX
+    ldx #>NEOX_PATH_MAX
+    ldy ksys_rmdir_device
+    jsr rp_fs_rmdir
+    bcc @ok
+
+    jmp @fail_release
+
+@ok:
+    jsr file_io_gate_release
+    lda #0
+    tax
+    clc
+    rts
+
+@fail_release:
+    phy
+    jsr file_io_gate_release
+    ply
+    sec
+    rts
+.endproc
+
+; <summary>
+; ksys_getcwd copies the current process cwd as D:/PATH into a caller buffer.
+; </summary>
+; <param name="X/Y">Pointer to a getcwd_args block in the caller context.</param>
+; <returns>C clear with A = result length and X = 0; C set with Y = errno.</returns>
+.proc ksys_getcwd
+    php
+    sei
+    stx ksys_getcwd_entry_lo
+    sty ksys_getcwd_entry_hi
+
+    lda ksys_getcwd_entry_lo
+    sta io_ptr
+    lda ksys_getcwd_entry_hi
+    sta io_ptr+1
+
+    ldx active_pid
+
+    lda ksys_getcwd_entry_lo
+    sta ksys_getcwd_args_lo_snapshot
+    lda ksys_getcwd_entry_hi
+    sta ksys_getcwd_args_hi_snapshot
+
+    ldy #getcwd_args::buffer_ptr
+    lda (io_ptr),y
+    sta ksys_getcwd_buf_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_getcwd_buf_hi_snapshot
+
+    ldy #getcwd_args::buffer_size
+    lda (io_ptr),y
+    sta ksys_getcwd_size_lo_snapshot
+    iny
+    lda (io_ptr),y
+    sta ksys_getcwd_size_hi_snapshot
+
+    ldy #getcwd_args::flags
+    lda (io_ptr),y
+    sta ksys_getcwd_flags_snapshot
+    plp
+    cli
+
+    jsr file_io_gate_acquire
+    bcs @gate_acquired
+
+    ldy #EINVAL
+    sec
+    rts
+
+@gate_acquired:
+    ldx active_pid
+    lda ksys_getcwd_args_lo_snapshot
+    sta ksys_getcwd_entry_lo
+    lda ksys_getcwd_args_hi_snapshot
+    sta ksys_getcwd_entry_hi
+    lda ksys_getcwd_buf_lo_snapshot
+    sta ksys_getcwd_buf_lo
+    lda ksys_getcwd_buf_hi_snapshot
+    sta ksys_getcwd_buf_hi
+    lda ksys_getcwd_size_lo_snapshot
+    sta ksys_getcwd_size_lo
+    lda ksys_getcwd_size_hi_snapshot
+    sta ksys_getcwd_size_hi
+    lda ksys_getcwd_flags_snapshot
+    sta ksys_getcwd_flags
+
+    lda ksys_getcwd_flags
+    cmp #NEOX_PATH_FLAGS_NONE
+    beq @flags_ok
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@flags_ok:
+    lda ksys_getcwd_size_hi
+    bne @size_large
+    lda ksys_getcwd_size_lo
+    cmp #4
+    bcs @size_min_ok
+    ldy #EINVAL
+    jmp @fail_release
+@size_large:
+@size_min_ok:
+    jsr ksys_cwd_select_current
+
+    ; Required length excluding NUL = 3 + proc_cwd_len.
+    lda proc_cwd_len
+    clc
+    adc #3
+    sta ksys_getcwd_len
+
+    ; Need buffer size >= length + 1.
+    clc
+    adc #1
+    sta ksys_component_len
+    lda ksys_getcwd_size_hi
+    bne @buffer_ok
+    lda ksys_getcwd_size_lo
+    cmp ksys_component_len
+    bcs @buffer_ok
+    ldy #EINVAL
+    jmp @fail_release
+
+@buffer_ok:
+    lda ksys_getcwd_buf_lo
+    sta io_ptr
+    lda ksys_getcwd_buf_hi
+    sta io_ptr+1
+
+    ldy #0
+    lda proc_cwd_device
+    clc
+    adc #'0'
+    sta (io_ptr),y
+    iny
+    lda #':'
+    sta (io_ptr),y
+    iny
+    lda #'/'
+    sta (io_ptr),y
+    iny
+
+    lda proc_cwd_len
+    sta ksys_cwd_len_tmp
+    beq @terminate
+
+    stz ksys_getcwd_src_idx
+    lda #3
+    sta ksys_getcwd_dst_idx
+@copy_cwd:
+    ldy ksys_getcwd_src_idx
+    lda (fd_ptr),y
+    ldy ksys_getcwd_dst_idx
+    sta (io_ptr),y
+    inc ksys_getcwd_src_idx
+    inc ksys_getcwd_dst_idx
+    lda ksys_getcwd_src_idx
+    cmp ksys_cwd_len_tmp
+    bne @copy_cwd
+
+@terminate:
+    ldy ksys_getcwd_len
+    lda #0
+    sta (io_ptr),y
+
+    ; Store result_len in the caller argument block.
+    lda ksys_getcwd_entry_lo
+    sta io_ptr
+    lda ksys_getcwd_entry_hi
+    sta io_ptr+1
+    ldy #getcwd_args::result_len
+    lda ksys_getcwd_len
+    sta (io_ptr),y
+    iny
+    lda #0
+    sta (io_ptr),y
+
+    jsr file_io_gate_release
+    lda ksys_getcwd_len
+    ldx #0
+    clc
+    rts
+
+@fail_release:
+    phy
+    jsr file_io_gate_release
+    ply
+    sec
+    rts
+.endproc
+
