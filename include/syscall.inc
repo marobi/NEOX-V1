@@ -61,6 +61,7 @@ SYS_CHDIR           = $16
 SYS_GETCWD          = $17
 SYS_MKDIR           = $18
 SYS_RMDIR           = $19
+SYS_GETPROCINFO     = $1A
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -92,6 +93,7 @@ sys_chdir           = SYSCALL_BASE + (SYS_CHDIR * SYSCALL_ENTRY_SIZE)
 sys_getcwd          = SYSCALL_BASE + (SYS_GETCWD * SYSCALL_ENTRY_SIZE)
 sys_mkdir           = SYSCALL_BASE + (SYS_MKDIR * SYSCALL_ENTRY_SIZE)
 sys_rmdir           = SYSCALL_BASE + (SYS_RMDIR * SYSCALL_ENTRY_SIZE)
+sys_getprocinfo     = SYSCALL_BASE + (SYS_GETPROCINFO * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values
@@ -390,5 +392,31 @@ MKDIR_ARGS_SIZE = .sizeof(mkdir_args)
 .endstruct
 
 RMDIR_ARGS_SIZE = .sizeof(rmdir_args)
+
+; ------------------------------------------------------------
+; Process information argument block
+;
+; SYS_GETPROCINFO copies one compact process-table snapshot record
+; into caller memory.  The record is deliberately binary; user-space
+; commands such as PS own all text formatting.
+;
+; Record layout:
+;   +0 pid
+;   +1 ppid
+;   +2 state
+;   +3 wait_reason
+;   +4 signal_pending
+; ------------------------------------------------------------
+
+PROCINFO_RECORD_SIZE = 5
+
+.struct procinfo_args
+    pid             .byte
+    reserved        .byte
+    buffer_ptr      .word
+    buffer_size     .word
+.endstruct
+
+PROCINFO_ARGS_SIZE = .sizeof(procinfo_args)
 
 .endif

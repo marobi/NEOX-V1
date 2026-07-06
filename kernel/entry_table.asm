@@ -49,6 +49,7 @@
 .import ksys_getcwd
 .import ksys_mkdir
 .import ksys_rmdir
+.import ksys_getprocinfo
 
 .segment "KERNEL_ENTRY"
 
@@ -86,7 +87,7 @@ kernel_entry_table:
     jmp ksys_getcwd
     jmp ksys_mkdir
     jmp ksys_rmdir
-		.res 3, $00
+    jmp ksys_getprocinfo
 		.res 3, $00
 		.res 3, $00
 		.res 3, $00

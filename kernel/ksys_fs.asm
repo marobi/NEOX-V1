@@ -238,6 +238,15 @@ ksys_rmdir_flags_snapshot     = ksys_fs_snap7
 ksys_resolved_path:
     .res NEOX_PATH_MAX
 
+ksys_rename_old_resolved_path:
+    .res NEOX_PATH_MAX
+
+ksys_rename_old_resolved_device:
+    .res 1
+
+ksys_rename_copy_idx:
+    .res 1
+
 ksys_component_buf:
     .res 13
 
@@ -1566,6 +1575,35 @@ ksys_rmdir_flags       = ksys_delete_flags
 
 
 ; <summary>
+; ksys_rename_copy_resolved_old snapshots the currently resolved old rename path
+; before resolving the new rename path into the shared resolver buffer.
+; </summary>
+; <returns>C clear on success; C set with Y = errno on overflow.</returns>
+.proc ksys_rename_copy_resolved_old
+    stz ksys_rename_copy_idx
+@loop:
+    ldy ksys_rename_copy_idx
+    cpy #NEOX_PATH_MAX
+    bcc @in_range
+
+    ldy #EINVAL
+    sec
+    rts
+
+@in_range:
+    lda ksys_resolved_path,y
+    sta ksys_rename_old_resolved_path,y
+    beq @done
+
+    inc ksys_rename_copy_idx
+    bra @loop
+
+@done:
+    clc
+    rts
+.endproc
+
+; <summary>
 ; ksys_delete implements delete(path, device) for RP filesystem files.
 ; </summary>
 ; <param name="X/Y">Pointer to a delete_args block in the caller context.</param>
@@ -1655,6 +1693,20 @@ ksys_rmdir_flags       = ksys_delete_flags
 
     lda ksys_delete_max_lo
     ldx ksys_delete_max_hi
+    ldy ksys_delete_device
+    jsr ksys_resolve_path
+    bcc @path_ok
+
+    jmp @fail_release
+
+@path_ok:
+    sta ksys_delete_device
+    lda #<ksys_resolved_path
+    sta io_ptr
+    lda #>ksys_resolved_path
+    sta io_ptr+1
+    lda #<NEOX_PATH_MAX
+    ldx #>NEOX_PATH_MAX
     ldy ksys_delete_device
     jsr rp_fs_delete
     bcc @ok
@@ -1779,17 +1831,57 @@ ksys_rmdir_flags       = ksys_delete_flags
     jmp @fail_release
 
 @max_ok:
-    lda ksys_rename_new_lo
-    ldx ksys_rename_new_hi
-    jsr rp_fs_rename_set_new_path
-
     lda ksys_rename_old_lo
     sta io_ptr
     lda ksys_rename_old_hi
     sta io_ptr+1
-
     lda ksys_rename_max_lo
+    ldx ksys_rename_max_hi
     ldy ksys_rename_device
+    jsr ksys_resolve_path
+    bcc @old_path_ok
+
+    jmp @fail_release
+
+@old_path_ok:
+    sta ksys_rename_old_resolved_device
+    jsr ksys_rename_copy_resolved_old
+    bcc @old_copied
+
+    jmp @fail_release
+
+@old_copied:
+    lda ksys_rename_new_lo
+    sta io_ptr
+    lda ksys_rename_new_hi
+    sta io_ptr+1
+    lda ksys_rename_max_lo
+    ldx ksys_rename_max_hi
+    ldy ksys_rename_device
+    jsr ksys_resolve_path
+    bcc @new_path_ok
+
+    jmp @fail_release
+
+@new_path_ok:
+    cmp ksys_rename_old_resolved_device
+    beq @same_device
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@same_device:
+    lda #<ksys_resolved_path
+    ldx #>ksys_resolved_path
+    jsr rp_fs_rename_set_new_path
+
+    lda #<ksys_rename_old_resolved_path
+    sta io_ptr
+    lda #>ksys_rename_old_resolved_path
+    sta io_ptr+1
+
+    lda #<NEOX_PATH_MAX
+    ldy ksys_rename_old_resolved_device
     jsr rp_fs_rename
     bcc @ok
 

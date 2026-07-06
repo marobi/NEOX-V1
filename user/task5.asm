@@ -44,6 +44,7 @@
 .include "syscall.inc"
 
 .export user_task5_entry
+.export user_task5_disabled_entry
 
 T5_DEVICE          = 0
 T5_BULK_MAX        = 64
@@ -51,6 +52,20 @@ T5_TEXT_LEN        = 18
 T5_READ_MAX        = 16
 T5_FD_NONE         = $FF
 T5_DIRENT_SIZE      = DIR_ENTRY_SIZE
+
+.segment "USER_TEXT"
+
+; ------------------------------------------------------------
+; user_task5_disabled_entry
+;
+; Silent boot-table placeholder used when the regression test body
+; must remain linked into the image but must not auto-run at boot.
+; ------------------------------------------------------------
+
+.proc user_task5_disabled_entry
+    lda #0
+    jmp sys_exit
+.endproc
 
 .segment "USER_DATA"
 

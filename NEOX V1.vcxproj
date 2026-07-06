@@ -135,14 +135,17 @@
     <None Include="include\klog.inc" />
     <None Include="include\lock.inc" />
     <None Include="include\mailbox.inc" />
+    <None Include="include\math8.inc" />
     <None Include="include\pipe.inc" />
     <None Include="include\process.inc" />
     <None Include="include\scheduler.inc" />
     <None Include="include\scheduler_defs.inc" />
+    <None Include="include\sched_lock.inc" />
     <None Include="include\signal.inc" />
     <None Include="include\supervisor.inc" />
     <None Include="include\syscall.inc" />
     <None Include="include\timer.inc" />
+    <None Include="include\version.inc" />
     <None Include="kernel\debug.asm" />
     <None Include="kernel\entry_table.asm" />
     <None Include="kernel\fd.asm" />
@@ -169,6 +172,7 @@
     <None Include="user\task2.asm" />
     <None Include="user\task3.asm" />
     <None Include="user\task6.asm" />
+    <None Include="user\neosh.asm" />
     <None Include="user\nbox.asm" />
     <None Include="user\task5.asm" />
     <None Include="user\task4.asm" />

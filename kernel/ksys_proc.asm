@@ -17,6 +17,7 @@
 .export ksys_yield
 .export ksys_sleep
 .export ksys_signal
+.export ksys_getprocinfo
 
 .import idle_loop
 .import proc_exit_current
@@ -28,6 +29,11 @@
 .import proc_gate_acquire
 .import proc_gate_release
 .import active_pid
+.importzp io_ptr
+.import proc_state
+.import proc_parent_pid
+.import proc_signal_pending
+.import wait_reason
 
 
 .segment "KERN_BSS"
@@ -214,5 +220,104 @@ ksys_signal_self_kill:
     jsr proc_gate_release
     ldy #EINVAL
     sec
+    rts
+.endproc
+
+
+; ------------------------------------------------------------
+; ksys_getprocinfo
+;
+; Input:
+;   X/Y = procinfo_args pointer
+;
+; Return:
+;   C clear = record copied
+;   C set   = failure
+;   Y       = errno
+;
+; Purpose:
+;   Copy one compact process-table snapshot record for user-space PS.
+;
+; Record layout:
+;   +0 pid
+;   +1 ppid
+;   +2 state
+;   +3 wait_reason
+;   +4 signal_pending
+;
+; Notes:
+;   This is a small diagnostic syscall.  It keeps IRQs disabled while
+;   reading the process arrays and writing the five-byte caller record,
+;   avoiding shared scratch that would otherwise live across a blocking
+;   gate acquisition.  The snapshot is intentionally compact and may be
+;   extended later through a new record version.
+; ------------------------------------------------------------
+.proc ksys_getprocinfo
+    php
+    sei
+
+    stx io_ptr
+    sty io_ptr+1
+
+    ldy #procinfo_args::pid
+    lda (io_ptr),y
+    cmp #MAX_PROCS
+    bcc @pid_ok
+    plp
+    cli
+    ldy #EINVAL
+    sec
+    rts
+
+@pid_ok:
+    tax
+
+    ; Require caller buffer size >= PROCINFO_RECORD_SIZE.
+    ldy #procinfo_args::buffer_size + 1
+    lda (io_ptr),y
+    bne @size_ok
+    dey
+    lda (io_ptr),y
+    cmp #PROCINFO_RECORD_SIZE
+    bcs @size_ok
+    plp
+    cli
+    ldy #EINVAL
+    sec
+    rts
+
+@size_ok:
+    ldy #procinfo_args::buffer_ptr
+    lda (io_ptr),y
+    pha
+    iny
+    lda (io_ptr),y
+    sta io_ptr+1
+    pla
+    sta io_ptr
+
+    ldy #0
+    txa
+    sta (io_ptr),y
+    iny
+
+    lda proc_parent_pid,x
+    sta (io_ptr),y
+    iny
+
+    lda proc_state,x
+    sta (io_ptr),y
+    iny
+
+    lda wait_reason,x
+    sta (io_ptr),y
+    iny
+
+    lda proc_signal_pending,x
+    sta (io_ptr),y
+
+    plp
+    cli
+    clc
     rts
 .endproc

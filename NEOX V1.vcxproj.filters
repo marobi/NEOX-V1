@@ -166,5 +166,17 @@
     <None Include="include\klog.inc">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="user\neosh.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="include\math8.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="include\sched_lock.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="include\version.inc">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

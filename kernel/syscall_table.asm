@@ -51,6 +51,7 @@
 .export k_getcwd
 .export k_mkdir
 .export k_rmdir
+.export k_getprocinfo
 
 .segment "SYSCALL_STUBS"
 
@@ -86,6 +87,7 @@
 ;   23 -> k_getcwd
 ;   24 -> k_mkdir
 ;   25 -> k_rmdir
+;   26 -> k_getprocinfo
 ; ------------------------------------------------------------
 
 syscall_table:
@@ -115,6 +117,7 @@ syscall_table:
     jmp k_getcwd
     jmp k_mkdir
     jmp k_rmdir
+    jmp k_getprocinfo
 
 .segment "KERN_TEXT"
 
@@ -247,4 +250,8 @@ syscall_table:
 
 .proc k_rmdir
     jmp KERN_ENTRY_KSYS_RMDIR
+.endproc
+
+.proc k_getprocinfo
+    jmp KERN_ENTRY_KSYS_GETPROCINFO
 .endproc

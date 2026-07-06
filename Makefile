@@ -101,6 +101,7 @@ KERNEL_SRCS := \
 
 USER_SRCS := \
 	user/user_space.asm \
+	user/neosh.asm \
 	user/nbox.asm
 
 # Optional user library objects

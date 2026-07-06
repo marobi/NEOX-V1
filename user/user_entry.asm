@@ -38,7 +38,7 @@ user_image_header:
     ; task 5
     .byte $05
     .byte $00
-    .word user_task5_entry
+    .word user_task5_disabled_entry
 
 
     ; task 6
