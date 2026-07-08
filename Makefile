@@ -23,7 +23,7 @@ CAT         := cat
 # Project configuration
 # -------------------------------------------------
 
-INCDIR      := include -I bios
+INCDIR      := include -I bios -I user
 OUTDIR      := out
 
 SYS_TARGET  := neox_syscall
@@ -64,6 +64,9 @@ INSTALL_DIR := $(BASE_DIR)$(PROJECT_DIR)/data/system
 # Sources
 # -------------------------------------------------
 
+NBOX_BASE := user
+include user/nbox.mk
+
 SYSCALL_SRCS := \
 	kernel/zero_page.asm \
 	kernel/shared_state.asm \
@@ -72,6 +75,7 @@ SYSCALL_SRCS := \
 KERNEL_SRCS := \
 	kernel/zero_page.asm \
 	kernel/shared_state.asm \
+	kernel/context.asm \
 	kernel/gate.asm \
 	kernel/entry_table.asm \
 	kernel/main.asm \
@@ -85,6 +89,7 @@ KERNEL_SRCS := \
 	kernel/process_control.asm \
 	kernel/process_cwd.asm \
 	kernel/fd.asm \
+	kernel/spawn.asm \
 	kernel/pipe.asm \
 	kernel/timer.asm \
 	kernel/ksys_io.asm \
@@ -102,7 +107,7 @@ KERNEL_SRCS := \
 USER_SRCS := \
 	user/user_space.asm \
 	user/neosh.asm \
-	user/nbox.asm
+	$(NBOX_SRCS)
 
 # Optional user library objects
 USERLIB_SRCS := 
@@ -219,6 +224,7 @@ dirs:
 	$(MKDIR) $(OUTDIR)
 	$(MKDIR) $(OUTDIR)/kernel
 	$(MKDIR) $(OUTDIR)/user
+	$(MKDIR) $(OUTDIR)/user/applets
 	$(MKDIR) $(OUTDIR)/user/lib
 
 # -------------------------------------------------

@@ -62,6 +62,12 @@ SYS_GETCWD          = $17
 SYS_MKDIR           = $18
 SYS_RMDIR           = $19
 SYS_GETPROCINFO     = $1A
+SYS_SPAWN_ALLOC_RESIDENT = $1B
+SYS_SPAWN_FD_INHERIT = $1C
+SYS_SPAWN_FD_DUP_CHILD = $1D
+SYS_SPAWN_FD_CLOSE   = $1E
+SYS_SPAWN_COMMIT     = $1F
+SYS_SPAWN_ABORT      = $20
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -94,6 +100,12 @@ sys_getcwd          = SYSCALL_BASE + (SYS_GETCWD * SYSCALL_ENTRY_SIZE)
 sys_mkdir           = SYSCALL_BASE + (SYS_MKDIR * SYSCALL_ENTRY_SIZE)
 sys_rmdir           = SYSCALL_BASE + (SYS_RMDIR * SYSCALL_ENTRY_SIZE)
 sys_getprocinfo     = SYSCALL_BASE + (SYS_GETPROCINFO * SYSCALL_ENTRY_SIZE)
+sys_spawn_alloc_resident = SYSCALL_BASE + (SYS_SPAWN_ALLOC_RESIDENT * SYSCALL_ENTRY_SIZE)
+sys_spawn_fd_inherit = SYSCALL_BASE + (SYS_SPAWN_FD_INHERIT * SYSCALL_ENTRY_SIZE)
+sys_spawn_fd_dup_child = SYSCALL_BASE + (SYS_SPAWN_FD_DUP_CHILD * SYSCALL_ENTRY_SIZE)
+sys_spawn_fd_close = SYSCALL_BASE + (SYS_SPAWN_FD_CLOSE * SYSCALL_ENTRY_SIZE)
+sys_spawn_commit = SYSCALL_BASE + (SYS_SPAWN_COMMIT * SYSCALL_ENTRY_SIZE)
+sys_spawn_abort = SYSCALL_BASE + (SYS_SPAWN_ABORT * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values
@@ -110,6 +122,7 @@ EAGAIN              = 12       ; operation would block / try again
 ENOMEM              = 13       ; no free kernel memory/object/table slot
 EPIPE               = 14       ; write on pipe with no readers
 
+.include "spawn.inc"
 
 ; ------------------------------------------------------------
 ; Common open argument block

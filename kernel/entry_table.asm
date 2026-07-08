@@ -50,6 +50,12 @@
 .import ksys_mkdir
 .import ksys_rmdir
 .import ksys_getprocinfo
+.import ksys_spawn_alloc_resident
+.import ksys_spawn_fd_inherit
+.import ksys_spawn_fd_dup_child
+.import ksys_spawn_fd_close
+.import ksys_spawn_commit
+.import ksys_spawn_abort
 
 .segment "KERNEL_ENTRY"
 
@@ -88,12 +94,12 @@ kernel_entry_table:
     jmp ksys_mkdir
     jmp ksys_rmdir
     jmp ksys_getprocinfo
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
+    jmp ksys_spawn_alloc_resident
+    jmp ksys_spawn_fd_inherit
+    jmp ksys_spawn_fd_dup_child
+    jmp ksys_spawn_fd_close
+    jmp ksys_spawn_commit
+    jmp ksys_spawn_abort
 		.res 3, $00
 		.res 3, $00
 		.res 3, $00

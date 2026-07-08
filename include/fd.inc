@@ -43,6 +43,24 @@ OBJ_FILE    = $02        ; RP filesystem file handle
 OBJ_PIPE    = $03        ; reserved
 OBJ_DIR     = $04        ; RP filesystem directory handle
 
+
+; ------------------------------------------------------------
+; FD clone argument block
+;
+; Used by kernel-internal cross-process descriptor cloning.
+; The source descriptor is resolved in source_pid/source_fd and
+; attached to target_pid/target_fd with the same per-FD flags.
+; ------------------------------------------------------------
+
+.struct fd_clone_args
+    source_pid      .byte
+    source_fd       .byte
+    target_pid      .byte
+    target_fd       .byte
+.endstruct
+
+FD_CLONE_ARGS_SIZE = .sizeof(fd_clone_args)
+
 ; ------------------------------------------------------------
 ; Device identifiers
 ; ------------------------------------------------------------

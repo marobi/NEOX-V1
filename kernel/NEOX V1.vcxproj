@@ -129,6 +129,7 @@
     <None Include="bios\getaddress" />
     <None Include="bios\Makefile" />
     <None Include="include\config.inc" />
+    <None Include="include\context.inc" />
     <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
     <None Include="include\kernel.inc" />
@@ -140,12 +141,14 @@
     <None Include="include\scheduler.inc" />
     <None Include="include\scheduler_defs.inc" />
     <None Include="include\signal.inc" />
+    <None Include="include\spawn.inc" />
     <None Include="include\supervisor.inc" />
     <None Include="include\syscall.inc" />
     <None Include="include\timer.inc" />
     <None Include="kernel\debug.asm" />
     <None Include="kernel\entry_table.asm" />
     <None Include="kernel\fd.asm" />
+    <None Include="kernel\spawn.asm" />
     <None Include="kernel\idle_task.asm" />
     <None Include="kernel\init_tasks.asm" />
     <None Include="kernel\irq.asm" />

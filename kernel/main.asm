@@ -48,6 +48,7 @@
 
 .import scheduler_init
 .import scheduler_set_current_context
+.import ctx_init_table
 
 .import fd_init_tables
 .import fd_init_process
@@ -132,6 +133,14 @@
     ; --------------------------------------------------------
     jsr scheduler_init
     KLOG_OK msg_klog_scheduler_init
+
+    ; --------------------------------------------------------
+    ; Initialize kernel-owned context slot state.
+    ; RP/boot has already created and preloaded the physical
+    ; MMU contexts; NEOX only owns allocation status.
+    ; --------------------------------------------------------
+    jsr ctx_init_table
+    KLOG_OK msg_klog_ctx_init
 	    
     ; --------------------------------------------------------
     ; Initialize ksys/fd/pipe
@@ -149,8 +158,8 @@
 
 	; --------------------------------------------------------
     ; Create initial runnable tasks.
-    ; tasks_init is expected to create processes in contexts
-    ; 1..N and mark them runnable (typically PROC_NEW).
+    ; tasks_init creates processes from the user entry table.
+    ; proc_create allocates both PID and preloaded context.
     ; --------------------------------------------------------
     jsr tasks_init
     KLOG_OK msg_klog_tasks_init
@@ -191,6 +200,8 @@ msg_klog_version:
     .byte "kernel interface version set", $00
 msg_klog_scheduler_init:
     .byte "scheduler init", $00
+msg_klog_ctx_init:
+    .byte "context table init", $00
 msg_klog_ksys_io_init:
     .byte "ksys io init", $00
 msg_klog_fd_init:

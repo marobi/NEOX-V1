@@ -15,17 +15,17 @@ user_image_header:
     .byte $03              ; number of boot tasks
 
     ; task 1
-    .byte $01              ; context
-    .byte $00              ; reserved/flags
+    .byte $00              ; flags
+    .byte $00              ; reserved
     .word user_task1_entry
 
     ; task 2
-    .byte $02
+    .byte $00
     .byte $00
     .word user_task2_entry
 
     ; task 3
-    .byte $03
+    .byte $00
     .byte $00
     .word user_task3_entry
 

@@ -129,6 +129,7 @@
     <None Include="bios\getaddress" />
     <None Include="bios\Makefile" />
     <None Include="include\config.inc" />
+    <None Include="include\context.inc" />
     <None Include="include\fd.inc" />
     <None Include="include\irq.inc" />
     <None Include="include\kernel.inc" />
@@ -142,6 +143,7 @@
     <None Include="include\scheduler_defs.inc" />
     <None Include="include\sched_lock.inc" />
     <None Include="include\signal.inc" />
+    <None Include="include\spawn.inc" />
     <None Include="include\supervisor.inc" />
     <None Include="include\syscall.inc" />
     <None Include="include\timer.inc" />
@@ -174,6 +176,21 @@
     <None Include="user\task6.asm" />
     <None Include="user\neosh.asm" />
     <None Include="user\nbox.asm" />
+    <None Include="user\applets\help.asm" />
+    <None Include="user\applets\pwd.asm" />
+    <None Include="user\applets\cd.asm" />
+    <None Include="user\applets\ls.asm" />
+    <None Include="user\applets\cat.asm" />
+    <None Include="user\applets\rm.asm" />
+    <None Include="user\applets\mv.asm" />
+    <None Include="user\applets\mkdir.asm" />
+    <None Include="user\applets\rmdir.asm" />
+    <None Include="user\applets\cp.asm" />
+    <None Include="user\applets\ps.asm" />
+    <None Include="user\applets\spawn.asm" />
+    <None Include="user\applets\common.inc" />
+    <None Include="user\nbox.inc" />
+    <None Include="user\nbox.mk" />
     <None Include="user\task5.asm" />
     <None Include="user\task4.asm" />
     <None Include="user\user_entry.asm" />

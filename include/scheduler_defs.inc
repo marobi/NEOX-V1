@@ -12,7 +12,7 @@ IDLE_PID        = 0
 FIRST_TASK_PID  = 1
 
 .struct proc_create_args
-    context     .byte
+    flags       .byte
     reserved    .byte
     entry       .word
 .endstruct

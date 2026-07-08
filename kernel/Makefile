@@ -72,6 +72,7 @@ SYSCALL_SRCS := \
 KERNEL_SRCS := \
 	kernel/zero_page.asm \
 	kernel/shared_state.asm \
+	kernel/context.asm \
 	kernel/gate.asm \
 	kernel/entry_table.asm \
 	kernel/main.asm \
@@ -85,6 +86,7 @@ KERNEL_SRCS := \
 	kernel/process_control.asm \
 	kernel/process_cwd.asm \
 	kernel/fd.asm \
+	kernel/spawn.asm \
 	kernel/pipe.asm \
 	kernel/timer.asm \
 	kernel/ksys_io.asm \

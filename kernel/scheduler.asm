@@ -680,7 +680,13 @@ sched_handoff_sp:
 
 @clear:
     stz proc_state,x
-    stz proc_context,x
+
+    ; Empty process slots must not appear to own context 0.
+    ; Context 0 is a real reserved supervisor context, so use $FF
+    ; as the no-context sentinel until a process is created.
+    lda #$FF
+    sta proc_context,x
+
     stz proc_sp,x
     stz proc_entryL,x
     stz proc_entryH,x

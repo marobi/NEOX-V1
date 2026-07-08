@@ -10,6 +10,8 @@
 ;   - Monitor is not a process.
 ;   - Normal tasks are allocated from PID 1 upward.
 ;   - User process code lives in USER_TEXT, not KERN_TEXT.
+;   - The task table supplies entry points, not MMU context ids.
+;   - proc_create allocates both PID and preloaded context.
 ; ============================================================
 
 .setcpu "65C02"
@@ -64,7 +66,12 @@ USER_ENTRY_SIZE  = 4
     ldx init_task_ptr
     ldy init_task_ptr+1
     jsr proc_create
+    bcc @task_created
 
+@task_create_failed:
+    bra @task_create_failed
+
+@task_created:
     clc
     lda init_task_ptr
     adc #USER_ENTRY_SIZE

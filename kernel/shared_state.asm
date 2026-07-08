@@ -23,6 +23,7 @@
 .include "fd.inc"
 .include "timer.inc"
 .include "pipe.inc"
+.include "context.inc"
 
 .segment "KERN_BSS"
 
@@ -186,6 +187,31 @@ proc_state:
 
 proc_context:
     .res MAX_PROCS
+
+; ------------------------------------------------------------
+; MMU context slot ownership state
+;
+; context_state[ctx]:
+;   CTX_INVALID, CTX_RESERVED, CTX_PRELOADED_FREE,
+;   CTX_EMPTY_FREE, CTX_IN_USE.
+;
+; context_owner_pid[ctx]:
+;   owning PID or $FF when not process-owned.
+;
+; Notes:
+;   proc_context[pid] maps PID -> MMU context.
+;   context_owner_pid[ctx] is the inverse ownership map used by
+;   the future spawn/context allocator.
+; ------------------------------------------------------------
+
+.export context_state
+.export context_owner_pid
+
+context_state:
+    .res MAX_CONTEXTS
+
+context_owner_pid:
+    .res MAX_CONTEXTS
 
 proc_sp:
     .res MAX_PROCS
@@ -703,7 +729,5 @@ dbg_irq_selected_pid:  .res 1
 dbg_irq_saved_sp:      .res 1
 dbg_irq_loaded_sp:     .res 1
 dbg_irq_skip_reason:   .res 1
-
-
 
 

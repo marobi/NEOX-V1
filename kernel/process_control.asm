@@ -10,8 +10,11 @@
 .include "debug.inc"
 .include "syscall.inc"
 .include "signal.inc"
+.include "context.inc"
 
 .export proc_find_free_pid
+.export proc_alloc_preloaded
+.export proc_alloc_preloaded_setup
 .export proc_create
 .export proc_terminate
 .export proc_send_signal
@@ -26,6 +29,7 @@
 .import proc_gate
 .import proc_gate_owner
 .import fd_init_process
+.import fd_clear_process_slots
 .import fd_close_process
 .import file_io_gate_acquire
 .import file_io_gate_release
@@ -49,8 +53,21 @@
 
 .import proc_set_state
 .import proc_clear_wait
+.import ctx_alloc_preloaded_for_pid
+.import ctx_free_for_pid
 
 .importzp sched_ptr
+
+.segment "KERN_BSS"
+
+proc_alloc_parent_pid:
+    .res 1
+
+proc_alloc_entryL:
+    .res 1
+
+proc_alloc_entryH:
+    .res 1
 
 .segment "KERN_TEXT"
 
@@ -85,10 +102,12 @@
 .endproc
 
 ; ------------------------------------------------------------
-; proc_create
+; proc_alloc_preloaded
 ;
 ; Inputs:
-;   X/Y = pointer to proc_create_args
+;   A = parent PID
+;   X = entry low byte
+;   Y = entry high byte
 ;
 ; Return:
 ;   C clear = success
@@ -97,55 +116,44 @@
 ;   C set   = failure
 ;
 ; Notes:
+;   - Caller must hold proc_gate.
 ;   - PID is allocated by the kernel.
-;   - context 0 is reserved for idle/supervisor/monitor.
-;   - proc_gate serializes process lifecycle syscalls.
-;   - state is written last so partially initialized slots are
-;     never visible as runnable.
+;   - MMU context is allocated from CTX_PRELOADED_FREE slots.
+;   - State is written last so partially initialized slots are never
+;     visible as runnable.
+;   - This is the common allocator for static boot tasks and future
+;     resident/preloaded spawn.
 ; ------------------------------------------------------------
 
-.proc proc_create
-    stx sched_ptr
-    sty sched_ptr+1
+.proc proc_alloc_preloaded
+    sta proc_alloc_parent_pid
+    stx proc_alloc_entryL
+    sty proc_alloc_entryH
 
-    jsr proc_gate_acquire
-    bcs @gate_acquired
-
-    ; Recursive/bad gate acquisition.  Leave process state unchanged.
-    sec
-    rts
-
-@gate_acquired:
-    ; DEBUG BEGIN: proc_gate phase marker
-    lda #DBG_PROC_GATE_CREATE
-    sta proc_gate_phase
-    ; DEBUG END: proc_gate phase marker
-
-    ; Context 0 is reserved for idle/supervisor/monitor.
-    ; Normal processes must not be created in context 0.
-    ldy #proc_create_args::context
-    lda (sched_ptr),y
-    beq @fail_release
-
+    ; Process creation owns both allocations:
+    ;   1. allocate a free PID
+    ;   2. allocate a free preloaded MMU context for that PID
+    ; The context table is the authority for MMU context ownership.
     jsr proc_find_free_pid
-    bcc @fail_release
+    bcc @fail
 
-    ; Save MMU context id.
-    ldy #proc_create_args::context
-    lda (sched_ptr),y
+    ; X = allocated PID.  Allocate a preloaded context before
+    ; publishing the process.
+    jsr ctx_alloc_preloaded_for_pid
+    bcs @fail
+
+    ; Save allocated MMU context id.
     sta proc_context,x
 
     ; Save first-run entry address.
-    ldy #proc_create_args::entry
-    lda (sched_ptr),y
+    lda proc_alloc_entryL
     sta proc_entryL,x
 
-    iny
-    lda (sched_ptr),y
+    lda proc_alloc_entryH
     sta proc_entryH,x
 
     ; Record parent PID.
-    lda active_pid
+    lda proc_alloc_parent_pid
     sta proc_parent_pid,x
 
     ; Initial task stack.
@@ -178,9 +186,153 @@
     lda #PROC_NEW
     jsr proc_set_state
 
+    txa
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; proc_alloc_preloaded_setup
+;
+; Inputs:
+;   A = parent PID
+;   X = entry low byte
+;   Y = entry high byte
+;
+; Return:
+;   C clear = success
+;             A = allocated PID
+;
+;   C set   = failure
+;
+; Notes:
+;   - Caller must hold proc_gate.
+;   - Allocates a PID and CTX_PRELOADED_FREE context.
+;   - Leaves the child in PROC_SETUP, not runnable.
+;   - The child FD table is cleared but no default fd 0/1/2 are
+;     installed.  The parent-controlled spawn ABI must configure FDs
+;     explicitly before spawn_commit.
+; ------------------------------------------------------------
+
+.proc proc_alloc_preloaded_setup
+    sta proc_alloc_parent_pid
+    stx proc_alloc_entryL
+    sty proc_alloc_entryH
+
+    jsr proc_find_free_pid
+    bcc @fail
+
+    ; X = allocated PID.  Allocate a preloaded context before
+    ; publishing the process.
+    jsr ctx_alloc_preloaded_for_pid
+    bcs @fail
+
+    ; Save allocated MMU context id.
+    sta proc_context,x
+
+    ; Save first-run entry address.
+    lda proc_alloc_entryL
+    sta proc_entryL,x
+
+    lda proc_alloc_entryH
+    sta proc_entryH,x
+
+    ; Record parent PID.
+    lda proc_alloc_parent_pid
+    sta proc_parent_pid,x
+
+    ; Initial child stack.
+    lda #$FF
+    sta proc_sp,x
+
+    ; Initial wait state.
+    lda #WAIT_NONE
+    sta wait_reason,x
+    stz wait_object,x
+
+    ; Initial pending signal and exit code.
+    stz proc_signal_pending,x
+    lda #EXIT_OK
+    sta proc_exit_code,x
+
+    ; Initial process flags.
+    lda #PROC_FLAG_NONE
+    sta proc_flags,x
+
+    ; Setup children start with an empty fd table.  They are not
+    ; runnable, so only the creating parent can configure them.
+    jsr fd_clear_process_slots
+
+    ; Publish process last, but only as pending setup.
+    lda #PROC_SETUP
+    jsr proc_set_state
+
+    txa
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; proc_create
+;
+; Inputs:
+;   X/Y = pointer to proc_create_args
+;
+; Return:
+;   C clear = success
+;             A = allocated PID
+;
+;   C set   = failure
+;
+; Notes:
+;   - Static boot tasks no longer supply MMU context ids.
+;   - The task table supplies an entry point and flags/reserved bytes.
+;   - proc_alloc_preloaded performs the common PID/context allocation.
+;   - proc_gate serializes process lifecycle syscalls.
+; ------------------------------------------------------------
+
+.proc proc_create
+    stx sched_ptr
+    sty sched_ptr+1
+
+    jsr proc_gate_acquire
+    bcs @gate_acquired
+
+    ; Recursive/bad gate acquisition.  Leave process state unchanged.
+    sec
+    rts
+
+@gate_acquired:
+    ; DEBUG BEGIN: proc_gate phase marker
+    lda #DBG_PROC_GATE_CREATE
+    sta proc_gate_phase
+    ; DEBUG END: proc_gate phase marker
+
+    ; Read first-run entry address from the static task table.
+    ldy #proc_create_args::entry
+    lda (sched_ptr),y
+    tax
+
+    iny
+    lda (sched_ptr),y
+    tay
+
+    ; Static boot task parent remains the currently active PID
+    ; during bootstrap.  Today this is PID 0.
+    lda active_pid
+    jsr proc_alloc_preloaded
+    bcs @fail_release
+
     ; proc_gate_release may clobber X while waking a waiter.
     ; Return the allocated PID in A after releasing the gate.
-    txa
     pha
     jsr proc_gate_release
     pla
@@ -265,6 +417,10 @@
     ; Clear pending signal state.
     stz proc_signal_pending,x
 
+    ; Release the MMU context slot owned by this process.  The
+    ; process lifecycle path is serialized by the PROC gate.
+    jsr ctx_free_for_pid
+
     ; Clear execution/context fields.
     lda #$FF
     ; Mark parent invalid for an empty slot.
@@ -312,6 +468,9 @@
     beq @fail
 
     cpy #PROC_ZOMBIE
+    beq @fail
+
+    cpy #PROC_SETUP
     beq @fail
 
     cmp #SIG_KILL
@@ -362,6 +521,9 @@
 
     cpy #PROC_ZOMBIE
     beq @already_zombie
+
+    cpy #PROC_SETUP
+    beq @fail
 
     ; Store the final exit code before the process disappears from
     ; runnable scheduling state.

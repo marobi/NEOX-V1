@@ -38,6 +38,10 @@
 .export fd_close
 .export fd_dup
 .export fd_dup2
+.export fd_clone_between
+.export fd_clone_stdio_between
+.export fd_close_pid
+.export fd_clear_process_slots
 
 .export fd_alloc_open
 .export fd_free_open
@@ -67,6 +71,7 @@
 .import dev_resolve_op
 
 .importzp fd_ptr
+.importzp sched_ptr
 
 .importzp dev_ptr
 
@@ -136,6 +141,30 @@ fd_closeproc_pid:
 
 fd_closeproc_fd:
     .res 1              ; fd iterator used by fd_close_process
+
+fd_clone_source_pid:
+    .res 1              ; source PID for cross-process fd clone
+
+fd_clone_source_fd:
+    .res 1              ; source fd for cross-process fd clone
+
+fd_clone_target_pid:
+    .res 1              ; target PID for cross-process fd clone
+
+fd_clone_target_fd:
+    .res 1              ; target fd for cross-process fd clone
+
+fd_clone_stdio_source_pid:
+    .res 1              ; source PID used by fd_clone_stdio_between
+
+fd_clone_stdio_target_pid:
+    .res 1              ; target PID used by fd_clone_stdio_between
+
+fd_clone_stdio_fd:
+    .res 1              ; fd iterator used by fd_clone_stdio_between
+
+fd_clone_stdio_args:
+    .res FD_CLONE_ARGS_SIZE
 
 .segment "KERN_TEXT"
 
@@ -809,6 +838,252 @@ fd_closeproc_fd:
 .endproc
 
 ; ------------------------------------------------------------
+; fd_clone_between
+;
+; Purpose:
+;   Clone one descriptor from one PID/fd slot to another PID/fd slot.
+;
+; Input:
+;   X/Y -> fd_clone_args
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Requirements:
+;   Caller owns file_io_gate.
+;
+; Notes:
+;   - This is the cross-process equivalent of dup2.
+;   - Source and target may be different PIDs and different fd numbers.
+;   - If target fd is already open, it is closed first.
+;   - The source descriptor's open object and per-FD flags are reused.
+;   - fd_attach increments the shared open object's refcount.
+;   - clone(source_pid/source_fd -> same pid/same fd) is a no-op success.
+; ------------------------------------------------------------
+
+.proc fd_clone_between
+    stx sched_ptr
+    sty sched_ptr+1
+
+    ; Copy the argument block before touching FD tables.  The FD
+    ; subsystem uses fd_ptr for table access, so the caller's argument
+    ; pointer must not remain live only in an indirect pointer.
+    ldy #fd_clone_args::source_pid
+    lda (sched_ptr),y
+    sta fd_clone_source_pid
+
+    ldy #fd_clone_args::source_fd
+    lda (sched_ptr),y
+    sta fd_clone_source_fd
+
+    ldy #fd_clone_args::target_pid
+    lda (sched_ptr),y
+    sta fd_clone_target_pid
+
+    ldy #fd_clone_args::target_fd
+    lda (sched_ptr),y
+    sta fd_clone_target_fd
+
+    ; Validate PIDs.
+    lda fd_clone_source_pid
+    cmp #MAX_PROCS
+    bcc @source_pid_ok
+
+    ldy #EINVAL
+    sec
+    rts
+
+@source_pid_ok:
+    lda fd_clone_target_pid
+    cmp #MAX_PROCS
+    bcc @target_pid_ok
+
+    ldy #EINVAL
+    sec
+    rts
+
+@target_pid_ok:
+    ; Validate fd numbers.
+    lda fd_clone_source_fd
+    cmp #MAX_FDS
+    bcc @source_fd_ok
+
+    ldy #EBADF
+    sec
+    rts
+
+@source_fd_ok:
+    lda fd_clone_target_fd
+    cmp #MAX_FDS
+    bcc @target_fd_ok
+
+    ldy #EBADF
+    sec
+    rts
+
+@target_fd_ok:
+    ; dup2-style no-op for identical source and target.
+    lda fd_clone_source_pid
+    cmp fd_clone_target_pid
+    bne @resolve_source
+
+    lda fd_clone_source_fd
+    cmp fd_clone_target_fd
+    bne @resolve_source
+
+    clc
+    rts
+
+@resolve_source:
+    ; Resolve source PID/fd -> open object.
+    lda fd_clone_source_pid
+    jsr fd_calc_pid_offset
+
+    clc
+    lda #<proc_fd_obj
+    adc fd_mul_lo
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc fd_mul_hi
+    sta fd_ptr+1
+
+    ldy fd_clone_source_fd
+    lda (fd_ptr),y
+    cmp #FD_NONE
+    bne @source_open
+
+    ldy #EBADF
+    sec
+    rts
+
+@source_open:
+    sta fd_obj_tmp
+
+    ; Copy source descriptor flags.
+    clc
+    lda #<proc_fd_flags
+    adc fd_mul_lo
+    sta fd_ptr
+
+    lda #>proc_fd_flags
+    adc fd_mul_hi
+    sta fd_ptr+1
+
+    ldy fd_clone_source_fd
+    lda (fd_ptr),y
+    sta fd_flags_tmp
+
+    ; Close target descriptor if it is already open.  EBADF is OK:
+    ; it means the target slot was already empty.
+    ldx fd_clone_target_pid
+    lda fd_clone_target_fd
+    jsr fd_close_pid
+    bcc @target_closed_ok
+
+    cpy #EBADF
+    beq @target_closed_ok
+
+    sec
+    rts
+
+@target_closed_ok:
+    ; Attach target PID/fd to the source open object with copied flags.
+    ldx fd_clone_target_pid
+    ldy fd_clone_target_fd
+    lda fd_obj_tmp
+    jsr fd_attach
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_clone_stdio_between
+;
+; Purpose:
+;   Clone fd 0, 1, and 2 from one process to another process.
+;
+; Input:
+;   A = source PID
+;   X = target PID
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Requirements:
+;   Caller owns file_io_gate.
+;
+; Notes:
+;   This helper prepares the normal spawn inheritance case:
+;     parent fd 0 -> child fd 0
+;     parent fd 1 -> child fd 1
+;     parent fd 2 -> child fd 2
+;
+;   Redirection can later use fd_clone_between directly to map an
+;   arbitrary parent fd to a specific child fd.
+; ------------------------------------------------------------
+
+.proc fd_clone_stdio_between
+    sta fd_clone_stdio_source_pid
+    stx fd_clone_stdio_target_pid
+
+    lda #STDIN
+    sta fd_clone_stdio_fd
+    jsr fd_clone_one_stdio
+    bcs @fail
+
+    lda #STDOUT
+    sta fd_clone_stdio_fd
+    jsr fd_clone_one_stdio
+    bcs @fail
+
+    lda #STDERR
+    sta fd_clone_stdio_fd
+    jsr fd_clone_one_stdio
+    bcs @fail
+
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; fd_clone_one_stdio
+;
+; Internal helper for fd_clone_stdio_between.
+;
+; Input:
+;   fd_clone_stdio_source_pid = source PID
+;   fd_clone_stdio_target_pid = target PID
+;   fd_clone_stdio_fd         = fd to clone
+;
+; Requirements:
+;   Caller owns file_io_gate.
+; ------------------------------------------------------------
+
+.proc fd_clone_one_stdio
+    lda fd_clone_stdio_source_pid
+    sta fd_clone_stdio_args + fd_clone_args::source_pid
+
+    lda fd_clone_stdio_fd
+    sta fd_clone_stdio_args + fd_clone_args::source_fd
+
+    lda fd_clone_stdio_target_pid
+    sta fd_clone_stdio_args + fd_clone_args::target_pid
+
+    lda fd_clone_stdio_fd
+    sta fd_clone_stdio_args + fd_clone_args::target_fd
+
+    ldx #<fd_clone_stdio_args
+    ldy #>fd_clone_stdio_args
+    jmp fd_clone_between
+.endproc
+
+; ------------------------------------------------------------
 ; fd_close_pid
 ;
 ; Internal helper.
@@ -1033,6 +1308,85 @@ fd_closeproc_fd:
 .proc fd_close
     ldx active_pid
     jmp fd_close_pid
+.endproc
+
+; ------------------------------------------------------------
+; fd_clear_process_slots
+;
+; Purpose:
+;   Clear one process-local FD table without touching shared open-object
+;   reference counts.
+;
+; Input:
+;   X = PID
+;
+; Output:
+;   C clear = success
+;   C set   = failure, Y = errno
+;
+; Notes:
+;   This is only valid for a PID that is not runnable and whose
+;   previous descriptors have already been closed/reaped.  It is used
+;   by spawn allocation for a new PROC_SETUP child so the parent can
+;   explicitly configure fd 0/1/2 before commit.
+; ------------------------------------------------------------
+
+.proc fd_clear_process_slots
+    cpx #MAX_PROCS
+    bcc @pid_ok
+
+    ldy #EINVAL
+    sec
+    rts
+
+@pid_ok:
+    stx fd_pid_tmp
+
+    ; offset = PID * MAX_FDS
+    lda fd_pid_tmp
+    jsr fd_calc_pid_offset
+
+    ; Clear proc_fd_obj[pid][*].
+    clc
+    lda #<proc_fd_obj
+    adc fd_mul_lo
+    sta fd_ptr
+
+    lda #>proc_fd_obj
+    adc fd_mul_hi
+    sta fd_ptr+1
+
+    ldy #0
+    lda #FD_NONE
+
+@clear_obj:
+    sta (fd_ptr),y
+    iny
+    cpy #MAX_FDS
+    bne @clear_obj
+
+    ; Clear proc_fd_flags[pid][*].
+    clc
+    lda #<proc_fd_flags
+    adc fd_mul_lo
+    sta fd_ptr
+
+    lda #>proc_fd_flags
+    adc fd_mul_hi
+    sta fd_ptr+1
+
+    ldy #0
+    lda #0
+
+@clear_flags:
+    sta (fd_ptr),y
+    iny
+    cpy #MAX_FDS
+    bne @clear_flags
+
+    ldx fd_pid_tmp
+    clc
+    rts
 .endproc
 
 ; ------------------------------------------------------------

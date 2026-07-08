@@ -90,6 +90,9 @@
     <None Include="kernel\fd.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="kernel\spawn.asm">
+      <Filter>Source Files</Filter>
+    </None>
     <None Include="include\kernel.inc">
       <Filter>Header Files</Filter>
     </None>
@@ -110,6 +113,9 @@
       <Filter>Source Files</Filter>
     </None>
     <None Include="include\signal.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="include\spawn.inc">
       <Filter>Header Files</Filter>
     </None>
     <None Include="kernel\process_control.asm">
@@ -137,6 +143,9 @@
       <Filter>Source Files</Filter>
     </None>
     <None Include="include\config.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="include\context.inc">
       <Filter>Header Files</Filter>
     </None>
     <None Include="include\pipe.inc">

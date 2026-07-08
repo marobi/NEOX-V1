@@ -136,6 +136,51 @@
     <None Include="user\nbox.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="user\applets\help.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\pwd.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\cd.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\ls.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\cat.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\rm.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\mv.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\mkdir.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\rmdir.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\cp.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\ps.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\spawn.asm">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="user\applets\common.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="user\nbox.inc">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="user\nbox.mk">
+      <Filter>Source Files</Filter>
+    </None>
     <None Include="user\task5.asm">
       <Filter>Source Files</Filter>
     </None>
