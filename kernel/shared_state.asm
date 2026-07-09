@@ -24,6 +24,7 @@
 .include "timer.inc"
 .include "pipe.inc"
 .include "context.inc"
+.include "spawn.inc"
 
 .segment "KERN_BSS"
 
@@ -378,6 +379,67 @@ wait_object:
 
 proc_exit_code:
     .res MAX_PROCS
+
+
+; ------------------------------------------------------------
+; Per-process resident launch state
+;
+; proc_launch_id[pid]:
+;   Userland-defined resident launch selector. For nbox children this
+;   is one of the NBOX_APPLET_* ids. SPAWN_LAUNCH_NONE means unset.
+;
+; proc_launch_argc / arg0 / arg1:
+;   Minimal resident launch argument storage. This deliberately supports
+;   only two fixed path-style argument slots for now. It is enough for
+;   current resident nbox applets and avoids a full environment block.
+;
+; ------------------------------------------------------------
+
+.export proc_launch_id
+.export proc_launch_argc
+.export proc_launch_arg0_len
+.export proc_launch_arg1_len
+.export proc_launch_arg0
+.export proc_launch_arg1
+
+proc_launch_id:
+    .res MAX_PROCS
+
+proc_launch_argc:
+    .res MAX_PROCS
+
+proc_launch_arg0_len:
+    .res MAX_PROCS
+
+proc_launch_arg1_len:
+    .res MAX_PROCS
+
+proc_launch_arg0:
+    .res MAX_PROCS * SPAWN_ARG_MAX
+
+proc_launch_arg1:
+    .res MAX_PROCS * SPAWN_ARG_MAX
+
+; ------------------------------------------------------------
+; Per-process cwd mirror
+;
+; The active process still has context-private cwd BSS used by the
+; filesystem resolver. This shared mirror is the authoritative source
+; for spawn inheritance and first-run cwd initialization.
+; ------------------------------------------------------------
+
+.export proc_cwd_shared_device
+.export proc_cwd_shared_len
+.export proc_cwd_shared_path
+
+proc_cwd_shared_device:
+    .res MAX_PROCS
+
+proc_cwd_shared_len:
+    .res MAX_PROCS
+
+proc_cwd_shared_path:
+    .res MAX_PROCS * NEOX_CWD_MAX
 
 ; ------------------------------------------------------------
 ; Global scheduler tick counter

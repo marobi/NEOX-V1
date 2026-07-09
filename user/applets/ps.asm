@@ -8,8 +8,83 @@
 .include "applets/common.inc"
 
 .export nbox_cmd_ps
+.export nbox_ps
+
+NBOX_PROCINFO_PID   = 0
+NBOX_PROCINFO_PPID  = 1
+NBOX_PROCINFO_STATE = 2
+NBOX_PROCINFO_WAIT  = 3
+NBOX_PROCINFO_SIG   = 4
+
+.segment "USER_DATA"
+
+nbox_ps_pid:
+    .byte 0
+
+nbox_procinfo_buf:
+    .res PROCINFO_RECORD_SIZE
+
+nbox_procinfo_args:
+    .byte 0
+    .byte 0
+    .word nbox_procinfo_buf
+    .word PROCINFO_RECORD_SIZE
 
 .segment "USER_TEXT"
+nbox_msg_ps_header:
+    .byte "PID PPID ST  WAIT SIG", 13
+NBOX_MSG_PS_HEADER_LEN = * - nbox_msg_ps_header
+
+nbox_ps_state_empty:
+    .byte "EMP"
+nbox_ps_state_new:
+    .byte "NEW"
+nbox_ps_state_ready:
+    .byte "RDY"
+nbox_ps_state_running:
+    .byte "RUN"
+nbox_ps_state_blocked:
+    .byte "BLK"
+nbox_ps_state_stopped:
+    .byte "STP"
+nbox_ps_state_zombie:
+    .byte "ZOM"
+nbox_ps_state_setup:
+    .byte "SET"
+nbox_ps_state_unknown:
+    .byte "???"
+
+nbox_ps_wait_none:
+    .byte "----"
+nbox_ps_wait_console:
+    .byte "CON "
+nbox_ps_wait_device:
+    .byte "DEV "
+nbox_ps_wait_pipe_read:
+    .byte "PIPR"
+nbox_ps_wait_timer:
+    .byte "TIMR"
+nbox_ps_wait_proc:
+    .byte "PROC"
+nbox_ps_wait_lock:
+    .byte "LOCK"
+nbox_ps_wait_pipe_write:
+    .byte "PIPW"
+nbox_ps_wait_unknown:
+    .byte "????"
+
+
+; ------------------------------------------------------------
+nbox_ps_msg_fail:
+    .byte "PS FAIL", 13
+NBOX_PS_MSG_FAIL_LEN = * - nbox_ps_msg_fail
+
+.proc nbox_print_ps_fail
+    lda #<nbox_ps_msg_fail
+    ldx #>nbox_ps_msg_fail
+    ldy #NBOX_PS_MSG_FAIL_LEN
+    jmp nbox_print_msg
+.endproc
 
 ; ------------------------------------------------------------
 .proc nbox_ps_print_state

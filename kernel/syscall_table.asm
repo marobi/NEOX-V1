@@ -58,6 +58,11 @@
 .export k_spawn_fd_close
 .export k_spawn_commit
 .export k_spawn_abort
+.export k_waitpid
+.export k_spawn_set_launch_id
+.export k_get_launch_id
+.export k_spawn_set_args2
+.export k_get_launch_args2
 
 .segment "SYSCALL_STUBS"
 
@@ -100,6 +105,11 @@
 ;   30 -> k_spawn_fd_close
 ;   31 -> k_spawn_commit
 ;   32 -> k_spawn_abort
+;   33 -> k_waitpid
+;   34 -> k_spawn_set_launch_id
+;   35 -> k_get_launch_id
+;   36 -> k_spawn_set_args2
+;   37 -> k_get_launch_args2
 ; ------------------------------------------------------------
 
 syscall_table:
@@ -136,6 +146,11 @@ syscall_table:
     jmp k_spawn_fd_close
     jmp k_spawn_commit
     jmp k_spawn_abort
+    jmp k_waitpid
+    jmp k_spawn_set_launch_id
+    jmp k_get_launch_id
+    jmp k_spawn_set_args2
+    jmp k_get_launch_args2
 
 .segment "KERN_TEXT"
 
@@ -298,3 +313,23 @@ syscall_table:
 .proc k_spawn_abort
     jmp KERN_ENTRY_KSYS_SPAWN_ABORT
 .endproc
+.proc k_waitpid
+    jmp KERN_ENTRY_KSYS_WAITPID
+.endproc
+
+.proc k_spawn_set_launch_id
+    jmp KERN_ENTRY_KSYS_SPAWN_SET_LAUNCH_ID
+.endproc
+
+.proc k_get_launch_id
+    jmp KERN_ENTRY_KSYS_GET_LAUNCH_ID
+.endproc
+
+.proc k_spawn_set_args2
+    jmp KERN_ENTRY_KSYS_SPAWN_SET_ARGS2
+.endproc
+
+.proc k_get_launch_args2
+    jmp KERN_ENTRY_KSYS_GET_LAUNCH_ARGS2
+.endproc
+

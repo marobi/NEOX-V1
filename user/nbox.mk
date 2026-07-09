@@ -11,6 +11,7 @@ NBOX_APPLET_BASE := $(NBOX_BASE)/applets
 
 NBOX_SRCS := \
 	$(NBOX_BASE)/nbox.asm \
+	$(NBOX_APPLET_BASE)/applet_scratch.asm \
 	$(NBOX_APPLET_BASE)/help.asm \
 	$(NBOX_APPLET_BASE)/pwd.asm \
 	$(NBOX_APPLET_BASE)/cd.asm \
@@ -21,8 +22,7 @@ NBOX_SRCS := \
 	$(NBOX_APPLET_BASE)/mkdir.asm \
 	$(NBOX_APPLET_BASE)/rmdir.asm \
 	$(NBOX_APPLET_BASE)/cp.asm \
-	$(NBOX_APPLET_BASE)/ps.asm \
-	$(NBOX_APPLET_BASE)/spawn.asm
+	$(NBOX_APPLET_BASE)/ps.asm
 
 NBOX_OBJS := $(NBOX_SRCS:%.asm=$(OUTDIR)/%.o)
 NBOX_LSTS := $(NBOX_SRCS:%.asm=$(OUTDIR)/%.lst)

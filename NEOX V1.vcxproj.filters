@@ -90,6 +90,9 @@
     <None Include="kernel\fd.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="kernel\spawn.asm">
+      <Filter>Source Files</Filter>
+    </None>
     <None Include="include\kernel.inc">
       <Filter>Header Files</Filter>
     </None>
@@ -139,6 +142,9 @@
     <None Include="user\nbox.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="user\applets\applet_scratch.asm">
+      <Filter>Source Files</Filter>
+    </None>
     <None Include="user\applets\help.asm">
       <Filter>Source Files</Filter>
     </None>
@@ -170,9 +176,6 @@
       <Filter>Source Files</Filter>
     </None>
     <None Include="user\applets\ps.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\spawn.asm">
       <Filter>Source Files</Filter>
     </None>
     <None Include="user\applets\common.inc">

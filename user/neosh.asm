@@ -19,12 +19,24 @@
 .setcpu "65C02"
 
 .include "syscall.inc"
+.include "nbox.inc"
 
 .export neosh_main
 
 .import nbox_line_buf
 .import nbox_line_len
 .import nbox_dispatch_line
+.import nbox_resolve_line
+.import nbox_child_entry
+.import nbox_exec_mode
+.import nbox_launch_id
+.import nbox_line_idx
+.import nbox_arg_buf
+.import nbox_arg2_buf
+.import nbox_arg_len
+.import nbox_arg2_len
+.import nbox_copy_two_args_from_y
+.import nbox_print_unknown
 
 NEOSH_RX_FD        = STDIN
 NEOSH_LINE_MAX     = 64
@@ -86,6 +98,32 @@ neosh_getcwd_args:
     .word 0
     .byte NEOX_PATH_FLAGS_NONE
     .byte 0
+
+neosh_spawn_child_pid:
+    .byte $FF
+
+neosh_spawn_argc:
+    .byte 0
+
+neosh_spawn_alloc_args:
+    .word nbox_child_entry
+    .byte SPAWN_FLAGS_NONE
+    .byte $FF
+
+neosh_spawn_set_launch_args:
+    .byte $FF
+    .byte NBOX_APPLET_NONE
+
+neosh_spawn_set_args2_args:
+    .byte $FF
+    .byte 0
+    .word nbox_arg_buf
+    .byte 0
+    .word nbox_arg2_buf
+    .byte 0
+
+neosh_spawn_child_args:
+    .byte $FF
 
 .segment "USER_TEXT"
 
@@ -334,6 +372,166 @@ neosh_getcwd_args:
     rts
 .endproc
 
+
+; ------------------------------------------------------------
+; neosh_prepare_spawn_args
+;
+; Uses the resolved nbox_line_idx to copy up to two command arguments
+; into the normal nbox argument buffers, then derives argc for the
+; compact resident spawn argument ABI.
+; ------------------------------------------------------------
+.proc neosh_prepare_spawn_args
+    ldy nbox_line_idx
+    jsr nbox_copy_two_args_from_y
+
+    lda nbox_arg_len
+    beq @argc0
+
+    lda nbox_arg2_len
+    beq @argc1
+
+    lda #2
+    bra @store
+
+@argc1:
+    lda #1
+    bra @store
+
+@argc0:
+    lda #0
+
+@store:
+    sta neosh_spawn_argc
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; neosh_abort_spawn_child
+;
+; Abort the pending child recorded in neosh_spawn_child_pid.  Used only
+; on setup failures before spawn_commit has made the child runnable.
+; ------------------------------------------------------------
+.proc neosh_abort_spawn_child
+    lda neosh_spawn_child_pid
+    sta neosh_spawn_child_args + spawn_child_args::child_pid
+    SYSCALL neosh_spawn_child_args, sys_spawn_abort
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; neosh_spawn_resolved_child
+;
+; Spawn the already-resolved nbox command as a resident child, using
+; the launch id and up to two copied arguments.  Normal stdin/stdout/
+; stderr inheritance is handled by SYS_SPAWN_ALLOC_RESIDENT.
+;
+; Return:
+;   C clear = child completed and was reaped
+;   C set   = spawn/setup/commit/wait failed
+; ------------------------------------------------------------
+.proc neosh_spawn_resolved_child
+    jsr neosh_prepare_spawn_args
+
+    SYSCALL neosh_spawn_alloc_args, sys_spawn_alloc_resident
+    bcc @allocated
+    sec
+    rts
+
+@allocated:
+    sta neosh_spawn_child_pid
+
+    sta neosh_spawn_set_launch_args + spawn_set_launch_id_args::child_pid
+    lda nbox_launch_id
+    sta neosh_spawn_set_launch_args + spawn_set_launch_id_args::launch_id
+
+    SYSCALL neosh_spawn_set_launch_args, sys_spawn_set_launch_id
+    bcc @launch_ok
+    jsr neosh_abort_spawn_child
+    sec
+    rts
+
+@launch_ok:
+    lda neosh_spawn_child_pid
+    sta neosh_spawn_set_args2_args + spawn_set_args2_args::child_pid
+
+    lda neosh_spawn_argc
+    sta neosh_spawn_set_args2_args + spawn_set_args2_args::argc
+
+    lda nbox_arg_len
+    sta neosh_spawn_set_args2_args + spawn_set_args2_args::arg0_len
+
+    lda nbox_arg2_len
+    sta neosh_spawn_set_args2_args + spawn_set_args2_args::arg1_len
+
+    SYSCALL neosh_spawn_set_args2_args, sys_spawn_set_args2
+    bcc @args_ok
+    jsr neosh_abort_spawn_child
+    sec
+    rts
+
+@args_ok:
+    lda neosh_spawn_child_pid
+    sta neosh_spawn_child_args + spawn_child_args::child_pid
+
+    SYSCALL neosh_spawn_child_args, sys_spawn_commit
+    bcc @commit_ok
+    jsr neosh_abort_spawn_child
+    sec
+    rts
+
+@commit_ok:
+    lda neosh_spawn_child_pid
+    jsr sys_waitpid
+    bcc @wait_ok
+    sec
+    rts
+
+@wait_ok:
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; neosh_execute_clean_line
+;
+; Uses nbox execution-mode metadata.  Parent-mode commands execute in
+; the shell process.  Child-mode commands are spawned as resident nbox
+; children and waited for by the shell.
+; ------------------------------------------------------------
+.proc neosh_execute_clean_line
+    jsr nbox_resolve_line
+    bcc @resolved
+    jmp nbox_print_unknown
+
+@resolved:
+    lda nbox_exec_mode
+    cmp #NBOX_EXEC_NONE
+    beq @done
+
+    cmp #NBOX_EXEC_PARENT
+    beq @parent
+
+    cmp #NBOX_EXEC_CHILD
+    beq @child
+
+    jmp nbox_print_unknown
+
+@parent:
+    jsr nbox_dispatch_line
+    clc
+    rts
+
+@child:
+    jsr neosh_spawn_resolved_child
+    bcc @done
+    jmp nbox_print_unknown
+
+@done:
+    clc
+    rts
+.endproc
+
 .proc neosh_main
 @prompt:
     jsr neosh_print_prompt
@@ -343,6 +541,6 @@ neosh_getcwd_args:
     bcs @loop
 
     jsr neosh_copy_clean_line_to_nbox
-    jsr nbox_dispatch_line
+    jsr neosh_execute_clean_line
     bra @prompt
 .endproc

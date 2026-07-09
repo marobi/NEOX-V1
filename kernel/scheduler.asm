@@ -71,6 +71,7 @@
 
 .import active_context
 .import proc_cwd_init_current
+.import proc_cwd_init_from_shared
 
 .importzp sched_ptr
 
@@ -79,6 +80,7 @@
 
 .import proc_apply_scheduler_signal
 .import proc_terminate
+.import proc_exit_lifecycle
 .import proc_gate_acquire
 .import proc_gate_release
 .import proc_gate_phase
@@ -466,16 +468,26 @@ sched_handoff_sp:
     ; Process exit is a lifecycle operation.  Serialize it with
     ; proc_gate, but release the gate before yielding away from the
     ; terminating process.
+    ;
+    ; Preserve the user-supplied exit code across gate acquisition
+    ; and debug phase writes.  proc_gate_acquire and the debug marker
+    ; clobber A; proc_exit_lifecycle requires A = exit code.
+    pha
     jsr proc_gate_acquire
-    bcc @yield
+    bcs @gate_acquired
 
+    pla                         ; discard saved exit code on failure
+    bra @yield
+
+@gate_acquired:
     ; DEBUG BEGIN: proc_gate phase marker
     lda #DBG_PROC_GATE_EXIT
     sta proc_gate_phase
     ; DEBUG END: proc_gate phase marker
 
     ldx active_pid
-    jsr proc_terminate
+    pla                         ; restore exit code for lifecycle
+    jsr proc_exit_lifecycle
     jsr proc_gate_release
 
 @yield:
@@ -1567,8 +1579,9 @@ idle_stack_ready:
     ldx #$FF
     txs
 
-    ; Initialise process-private cwd state in the selected context.
-    jsr proc_cwd_init_current
+    ; Initialise process-private cwd state in the selected context
+    ; from the shared per-process cwd mirror.
+    jsr proc_cwd_init_from_shared
 
     ; Resolve entry address into private zero-page sched_ptr.
     ldx active_pid

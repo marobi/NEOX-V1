@@ -38,7 +38,7 @@ PIPE_BUF_SIZE   = 64
 ; Filesystem path limits
 ; ------------------------------------------------------------
 
-NEOX_CWD_MAX  = 64        ; process-private current-directory path bytes
+NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
 NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
 ; ============================================================
 ;

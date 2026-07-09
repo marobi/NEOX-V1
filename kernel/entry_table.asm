@@ -7,10 +7,11 @@
 ;   image for other images (syscall layer, BIOS, etc.).
 ;
 ; Layout:
-;   - Located at $E000
+;   - Located at KERNEL_BASE ($8000)
+;   - Reserved kernel-entry area is $0100 bytes.
 ;
 ; Notes:
-;   Padding ensures that KERN_TEXT always starts at $8080
+;   Padding ensures that KERN_TEXT always starts at $8100.
 ; ============================================================
 
 .setcpu "65C02"
@@ -56,6 +57,11 @@
 .import ksys_spawn_fd_close
 .import ksys_spawn_commit
 .import ksys_spawn_abort
+.import ksys_waitpid
+.import ksys_spawn_set_launch_id
+.import ksys_get_launch_id
+.import ksys_spawn_set_args2
+.import ksys_get_launch_args2
 
 .segment "KERNEL_ENTRY"
 
@@ -100,9 +106,20 @@ kernel_entry_table:
     jmp ksys_spawn_fd_close
     jmp ksys_spawn_commit
     jmp ksys_spawn_abort
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
-		.res 3, $00
-		.res 2, $00
+    jmp ksys_waitpid
+    jmp ksys_spawn_set_launch_id
+    jmp ksys_get_launch_id
+    jmp ksys_spawn_set_args2
+    jmp ksys_get_launch_args2
+
+; KERNEL_ENTRY area is $0100 bytes.
+; Current table: 42 absolute JMP entries * 3 bytes = $7E bytes.
+; Remaining fixed padding: $0100 - $7E = $82 bytes.
+; Keep this explicit because ca65 cannot use relocatable PC (*)
+; in the .res count expression here.
+KERNEL_ENTRY_COUNT         = 42
+KERNEL_ENTRY_RESERVED_SIZE = $0100
+KERNEL_ENTRY_USED_BYTES    = KERNEL_ENTRY_COUNT * KERNEL_ENTRY_SIZE
+
+    .assert KERNEL_ENTRY_USED_BYTES <= KERNEL_ENTRY_RESERVED_SIZE, error, "KERNEL_ENTRY overflows reserved entry area"
+    .res KERNEL_ENTRY_RESERVED_SIZE - KERNEL_ENTRY_USED_BYTES, $00

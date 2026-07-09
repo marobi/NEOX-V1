@@ -8,8 +8,40 @@
 .include "applets/common.inc"
 
 .export nbox_cmd_cat
+.export nbox_cat
 
+.segment "USER_DATA"
+
+nbox_cat_open_args:
+    .word nbox_arg_buf
+    .word NBOX_PATH_MAX
+    .byte OPEN_READ
+    .byte 0
+
+nbox_cat_rw_args:
+    .byte NBOX_FILE_FD_NONE
+    .byte 0
+    .word nbox_cat_buf
+    .word NBOX_CAT_BUF_SIZE
+
+nbox_cat_stdout_args:
+    .byte STDOUT
+    .byte 0
+    .word 0
+    .word 0
 .segment "USER_TEXT"
+
+; ------------------------------------------------------------
+nbox_cat_msg_fail:
+    .byte "CAT FAIL", 13
+NBOX_CAT_MSG_FAIL_LEN = * - nbox_cat_msg_fail
+
+.proc nbox_print_cat_fail
+    lda #<nbox_cat_msg_fail
+    ldx #>nbox_cat_msg_fail
+    ldy #NBOX_CAT_MSG_FAIL_LEN
+    jmp nbox_print_msg
+.endproc
 
 ; ------------------------------------------------------------
 .proc nbox_cat_close
@@ -34,7 +66,7 @@
     jmp nbox_print_arg_fail
 
 @has_arg:
-    SYSCALL nbox_open_args, sys_open
+    SYSCALL nbox_cat_open_args, sys_open
     bcc @opened
     jmp nbox_print_cat_fail
 
@@ -59,13 +91,13 @@
 
 @has_bytes:
     ; The cat buffer is 64 bytes, so X should be zero.  Write A bytes.
-    sta nbox_stdout_args + rw_args::len
-    stz nbox_stdout_args + rw_args::len + 1
+    sta nbox_cat_stdout_args + rw_args::len
+    stz nbox_cat_stdout_args + rw_args::len + 1
     lda #<nbox_cat_buf
-    sta nbox_stdout_args + rw_args::buf_ptr
+    sta nbox_cat_stdout_args + rw_args::buf_ptr
     lda #>nbox_cat_buf
-    sta nbox_stdout_args + rw_args::buf_ptr + 1
-    SYSCALL nbox_stdout_args, sys_write
+    sta nbox_cat_stdout_args + rw_args::buf_ptr + 1
+    SYSCALL nbox_cat_stdout_args, sys_write
     bcc @read_loop
 
     jsr nbox_cat_close

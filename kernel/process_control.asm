@@ -11,10 +11,13 @@
 .include "syscall.inc"
 .include "signal.inc"
 .include "context.inc"
+.include "spawn.inc"
 
 .export proc_find_free_pid
 .export proc_alloc_preloaded
 .export proc_alloc_preloaded_setup
+.export proc_exit_lifecycle
+.export proc_reap_waited_child
 .export proc_create
 .export proc_terminate
 .export proc_send_signal
@@ -46,6 +49,12 @@
 .import proc_parent_pid
 .import proc_signal_pending
 .import proc_exit_code
+.import proc_launch_id
+.import proc_launch_argc
+.import proc_launch_arg0_len
+.import proc_launch_arg1_len
+.import proc_cwd_shared_device
+.import proc_cwd_shared_len
 .import timer_free
 
 .import wait_reason
@@ -53,6 +62,7 @@
 
 .import proc_set_state
 .import proc_clear_wait
+.import proc_wake
 .import ctx_alloc_preloaded_for_pid
 .import ctx_free_for_pid
 
@@ -98,6 +108,29 @@ proc_alloc_entryH:
 
 @found:
     sec
+    rts
+.endproc
+
+
+; ------------------------------------------------------------
+; proc_clear_launch_state
+;
+; Input:
+;   X = PID
+;
+; Purpose:
+;   Clear minimal resident launch state for a process slot. The large
+;   arg/cwd path blobs are not scrubbed; their lengths/selectors make
+;   them inactive.
+; ------------------------------------------------------------
+.proc proc_clear_launch_state
+    lda #SPAWN_LAUNCH_NONE
+    sta proc_launch_id,x
+    stz proc_launch_argc,x
+    stz proc_launch_arg0_len,x
+    stz proc_launch_arg1_len,x
+    stz proc_cwd_shared_device,x
+    stz proc_cwd_shared_len,x
     rts
 .endproc
 
@@ -168,9 +201,10 @@ proc_alloc_entryH:
     ; Initial pending signal.
     stz proc_signal_pending,x
 
-    ; Initial exit code.
+    ; Initial exit code and launch metadata.
     lda #EXIT_OK
     sta proc_exit_code,x
+    jsr proc_clear_launch_state
 
     ; New processes are bootstrapped once. After first run, every
     ; saved runnable process frame is RTI-compatible.
@@ -349,6 +383,174 @@ proc_alloc_entryH:
 .endproc
 
 ; ------------------------------------------------------------
+; proc_close_fds_for_pid
+;
+; Input:
+;   X = PID
+;
+; Return:
+;   C clear = fd table closed
+;   C set   = file_io_gate could not be acquired or close failed
+;
+; Notes:
+;   - Caller owns proc_gate for lifecycle consistency.
+;   - file_io_gate serializes FD/open-object/pipe state.
+;   - X is preserved on success/failure.
+; ------------------------------------------------------------
+
+.proc proc_close_fds_for_pid
+    phx
+    jsr file_io_gate_acquire
+    bcs @gate_acquired
+
+    plx
+    sec
+    rts
+
+@gate_acquired:
+    plx
+    phx
+    jsr fd_close_process
+    php
+    pha
+    phx
+    phy
+    jsr file_io_gate_release
+    ply
+    plx
+    pla
+    plp
+    plx
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; proc_exit_lifecycle
+;
+; Input:
+;   X = PID to exit
+;   A = exit code
+;
+; Notes:
+;   - Caller must hold proc_gate.
+;   - Parent-owned children become waitable PROC_ZOMBIE entries.
+;   - Processes without a live normal parent are terminated immediately.
+;   - Waitable zombies keep PID/context ownership until WAITPID reaps.
+; ------------------------------------------------------------
+
+.proc proc_exit_lifecycle
+    cpx #IDLE_PID
+    beq @done
+
+    cpx #MAX_PROCS
+    bcs @done
+
+    sta proc_exit_code,x
+
+    ; A waitable child must have a live normal parent PID.
+    ldy proc_parent_pid,x
+    cpy #FIRST_TASK_PID
+    bcc @terminate_now
+
+    cpy #MAX_PROCS
+    bcs @terminate_now
+
+    lda proc_state,y
+    cmp #PROC_EMPTY
+    beq @terminate_now
+
+    cmp #PROC_ZOMBIE
+    beq @terminate_now
+
+    ; Close child FDs at exit time.  If closing fails because the
+    ; FILE_IO gate cannot be acquired recursively, keep the existing
+    ; immediate termination fallback rather than publishing a zombie
+    ; with live descriptors.
+    jsr proc_close_fds_for_pid
+    bcs @terminate_now_from_saved
+
+    ; Clear wait/signal state on the exiting process.
+    lda #WAIT_NONE
+    sta wait_reason,x
+    stz wait_object,x
+    stz proc_signal_pending,x
+
+    lda #PROC_ZOMBIE
+    jsr proc_set_state
+
+    ; Wake the parent only if it is waiting for exactly this child.
+    ldy proc_parent_pid,x
+    lda proc_state,y
+    cmp #PROC_BLOCKED
+    bne @done
+
+    lda wait_reason,y
+    cmp #WAIT_PROC
+    bne @done
+
+    txa
+    cmp wait_object,y
+    bne @done
+
+    tya
+    tax
+    jsr proc_wake
+
+@done:
+    rts
+
+@terminate_now_from_saved:
+    ; Fall through to immediate termination with the stored exit code.
+
+@terminate_now:
+    lda proc_exit_code,x
+    jmp proc_terminate
+.endproc
+
+; ------------------------------------------------------------
+; proc_reap_waited_child
+;
+; Input:
+;   X = child PID
+;
+; Return:
+;   C clear = reaped, A = exit code
+;   C set   = not a zombie/invalid
+;
+; Notes:
+;   Caller must hold proc_gate and must already have validated that
+;   the active process is this child's parent.
+; ------------------------------------------------------------
+
+.proc proc_reap_waited_child
+    cpx #IDLE_PID
+    beq @fail
+
+    cpx #MAX_PROCS
+    bcs @fail
+
+    lda proc_state,x
+    cmp #PROC_ZOMBIE
+    bne @fail
+
+    lda proc_exit_code,x
+    pha
+
+    ; proc_terminate accepts A = exit code and X = PID.  The exit code
+    ; is still in A after PHA, so this preserves the final status while
+    ; reusing the existing context/process cleanup path.
+    jsr proc_terminate
+
+    pla
+    clc
+    rts
+
+@fail:
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
 ; proc_terminate
 ;
 ; Input:
@@ -414,8 +616,9 @@ proc_alloc_entryH:
     sta wait_reason,x
     stz wait_object,x
 
-    ; Clear pending signal state.
+    ; Clear pending signal and launch state.
     stz proc_signal_pending,x
+    jsr proc_clear_launch_state
 
     ; Release the MMU context slot owned by this process.  The
     ; process lifecycle path is serialized by the PROC gate.
@@ -595,6 +798,30 @@ proc_alloc_entryH:
     rts
 
 @candidate:
+    ; Waitable child zombies are reaped by their live parent through
+    ; SYS_WAITPID.  The idle reaper only handles orphan/system zombies.
+    ldy proc_parent_pid,x
+    cpy #FIRST_TASK_PID
+    bcc @idle_reap_candidate
+
+    cpy #MAX_PROCS
+    bcs @idle_reap_candidate
+
+    lda proc_state,y
+    cmp #PROC_EMPTY
+    beq @idle_reap_candidate
+
+    cmp #PROC_ZOMBIE
+    beq @idle_reap_candidate
+
+    inx
+    cpx #MAX_PROCS
+    bne @scan
+
+    clc
+    rts
+
+@idle_reap_candidate:
     ; Do not block idle on a sleepable gate.  If either gate is busy,
     ; skip this idle pass and try again later.
     php

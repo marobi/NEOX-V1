@@ -12,20 +12,24 @@
 .include "syscall.inc"
 .include "timer.inc"
 .include "signal.inc"
+.include "scheduler_defs.inc"
 
 .export ksys_exit
 .export ksys_yield
 .export ksys_sleep
 .export ksys_signal
 .export ksys_getprocinfo
+.export ksys_waitpid
 
 .import idle_loop
 .import proc_exit_current
 .import sched_yield
 .import sched_block_current
+.import proc_set_wait
 
 .import timer_start_current
 .import proc_send_signal
+.import proc_reap_waited_child
 .import proc_gate_acquire
 .import proc_gate_release
 .import active_pid
@@ -34,6 +38,7 @@
 .import proc_parent_pid
 .import proc_signal_pending
 .import wait_reason
+.import wait_object
 
 
 .segment "KERN_BSS"
@@ -223,6 +228,141 @@ ksys_signal_self_kill:
     rts
 .endproc
 
+
+; ------------------------------------------------------------
+; ksys_waitpid
+;
+; Input:
+;   A = child PID
+;
+; Return:
+;   C clear = child reaped
+;             A = child exit code
+;
+;   C set   = failure
+;             Y = errno
+;
+; Purpose:
+;   Wait for a specific child owned by the active parent.  If the
+;   child is not yet a zombie, block on WAIT_PROC / child_pid and
+;   retry after wake.
+;
+; Notes:
+;   The requested child PID is kept on the current process stack across
+;   proc_gate acquisition and sched_yield.  Do not use module-global
+;   scratch for this value because another process can enter WAITPID
+;   while this one is blocked.
+; ------------------------------------------------------------
+.proc ksys_waitpid
+    pha                         ; persistent requested child PID
+
+@retry:
+    jsr proc_gate_acquire
+    bcs @gate_acquired
+
+    pla                         ; discard child PID
+    ldy #EAGAIN
+    sec
+    rts
+
+@gate_acquired:
+    ; Reload requested child PID without removing the persistent copy.
+    pla
+    pha
+
+    cmp #MAX_PROCS
+    bcc @pid_range_ok
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@pid_range_ok:
+    tax
+    cpx #IDLE_PID
+    bne @not_idle
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@not_idle:
+    lda proc_parent_pid,x
+    cmp active_pid
+    beq @owned_child
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@owned_child:
+    lda proc_state,x
+    cmp #PROC_ZOMBIE
+    beq @reap_child
+
+    cmp #PROC_EMPTY
+    beq @invalid_state
+
+    cmp #PROC_SETUP
+    beq @invalid_state
+
+    ; Child is still alive.  Commit the wait state while proc_gate is
+    ; held, then release the gate and yield immediately with IRQs
+    ; masked so no child-exit wake can be lost in between.
+    sei
+
+    pla
+    tay                         ; wait_object = child PID
+    pha                         ; keep child PID for retry after wake
+
+    ldx active_pid
+    lda #WAIT_PROC
+    jsr proc_set_wait
+
+    jsr proc_gate_release
+
+    jsr sched_yield
+    jmp @retry
+
+@invalid_state:
+    ldy #EINVAL
+    jmp @fail_release
+
+@reap_child:
+    ; X = child PID.  Reap under proc_gate, then return the stored
+    ; exit code to the parent.
+    jsr proc_reap_waited_child
+    bcc @reaped
+
+    ldy #EINVAL
+    jmp @fail_release
+
+@reaped:
+    pha                         ; exit code above persistent child PID
+    jsr proc_gate_release
+    bcc @release_fail_after_reap
+
+    pla                         ; A = exit code
+    tax                         ; preserve in X while dropping child PID
+    pla                         ; discard persistent child PID
+    txa                         ; A = exit code
+    clc
+    rts
+
+@fail_release:
+    tya                         ; save errno above persistent child PID
+    pha
+    jsr proc_gate_release
+    pla
+    tay
+    pla                         ; discard persistent child PID
+    sec
+    rts
+
+@release_fail_after_reap:
+    pla                         ; discard exit code
+    pla                         ; discard persistent child PID
+    ldy #EAGAIN
+    sec
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; ksys_getprocinfo

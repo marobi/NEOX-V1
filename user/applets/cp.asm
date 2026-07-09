@@ -8,8 +8,56 @@
 .include "applets/common.inc"
 
 .export nbox_cmd_cp
+.export nbox_cp
 
+.segment "USER_DATA"
+
+nbox_cp_src_open_args:
+    .word nbox_arg_buf
+    .word NBOX_PATH_MAX
+    .byte OPEN_READ
+    .byte 0
+
+nbox_cp_dst_open_args:
+    .word nbox_arg2_buf
+    .word NBOX_PATH_MAX
+    .byte OPEN_WRITE_TRUNC
+    .byte 0
+
+nbox_cp_dst_opendir_args:
+    .word nbox_arg2_buf
+    .word NBOX_PATH_MAX
+    .byte 0
+    .byte NEOX_PATH_FLAGS_NONE
+
+nbox_cp_dst_closedir_args:
+    .byte NBOX_DIR_FD_NONE
+    .byte 0
+
+nbox_cp_read_args:
+    .byte NBOX_FILE_FD_NONE
+    .byte 0
+    .word nbox_cat_buf
+    .word NBOX_CAT_BUF_SIZE
+
+nbox_cp_write_args:
+    .byte NBOX_FILE_FD_NONE
+    .byte 0
+    .word nbox_cat_buf
+    .word 0
 .segment "USER_TEXT"
+
+; ------------------------------------------------------------
+nbox_cp_msg_fail:
+    .byte "CP FAIL", 13
+NBOX_CP_MSG_FAIL_LEN = * - nbox_cp_msg_fail
+
+.proc nbox_print_cp_fail
+    lda #<nbox_cp_msg_fail
+    ldx #>nbox_cp_msg_fail
+    ldy #NBOX_CP_MSG_FAIL_LEN
+    jmp nbox_print_msg
+.endproc
 
 ; ------------------------------------------------------------
 .proc nbox_cp_close_src
@@ -54,7 +102,7 @@
 .proc nbox_cp_try_dst_dir
     lda #NBOX_DIR_FD_NONE
     sta nbox_dir_fd
-    sta nbox_closedir_args + closedir_args::fd
+    sta nbox_cp_dst_closedir_args + closedir_args::fd
 
     SYSCALL nbox_cp_dst_opendir_args, sys_opendir
     bcc @opened
@@ -63,9 +111,23 @@
 
 @opened:
     sta nbox_dir_fd
-    sta nbox_closedir_args + closedir_args::fd
-    jsr nbox_ls_close_dir
+    sta nbox_cp_dst_closedir_args + closedir_args::fd
+    jsr nbox_cp_close_dst_dir
     clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+.proc nbox_cp_close_dst_dir
+    lda nbox_dir_fd
+    cmp #NBOX_DIR_FD_NONE
+    beq @done
+
+    SYSCALL nbox_cp_dst_closedir_args, sys_closedir
+    lda #NBOX_DIR_FD_NONE
+    sta nbox_dir_fd
+    sta nbox_cp_dst_closedir_args + closedir_args::fd
+@done:
     rts
 .endproc
 

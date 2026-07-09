@@ -40,81 +40,40 @@
 .import nbox_cmd_rmdir
 .import nbox_cmd_cp
 .import nbox_cmd_ps
-.import nbox_cmd_spawn
-.import nbox_cmd_spawnc
+
+.import nbox_help
+.import nbox_pwd
+.import nbox_cd
+.import nbox_ls
+.import nbox_cat
+.import nbox_rm
+.import nbox_mv
+.import nbox_mkdir
+.import nbox_rmdir
+.import nbox_cp
+.import nbox_ps
+
+.import nbox_src_idx
+.import nbox_dst_idx
 
 .export nbox_line_buf
 .export nbox_line_len
 .export nbox_dispatch_line
+.export nbox_resolve_line
+.export nbox_child_entry
+.export nbox_exec_mode
+.export nbox_launch_id
+.export nbox_line_idx
 
 .export nbox_arg_buf
 .export nbox_arg2_buf
 .export nbox_arg_len
 .export nbox_arg2_len
-.export nbox_cwd_buf
-.export nbox_dir_entry
-.export nbox_cat_buf
-.export nbox_dir_fd
-.export nbox_file_fd
-.export nbox_cp_src_fd
-.export nbox_cp_dst_fd
-.export nbox_src_idx
-.export nbox_dst_idx
-.export nbox_type_prefix
-.export nbox_getcwd_args
-.export nbox_chdir_args
-.export nbox_opendir_args
-.export nbox_readdir_args
-.export nbox_closedir_args
-.export nbox_open_args
-.export nbox_cat_rw_args
-.export nbox_cp_src_open_args
-.export nbox_cp_dst_open_args
-.export nbox_cp_dst_opendir_args
-.export nbox_cp_read_args
-.export nbox_cp_write_args
-.export nbox_delete_args
-.export nbox_rename_args
-.export nbox_mkdir_args
-.export nbox_rmdir_args
-.export nbox_procinfo_buf
-.export nbox_ps_pid
-.export nbox_procinfo_args
-.export nbox_stdout_args
-.export nbox_msg_ps_header
-.export nbox_ps_state_empty
-.export nbox_ps_state_new
-.export nbox_ps_state_ready
-.export nbox_ps_state_running
-.export nbox_ps_state_blocked
-.export nbox_ps_state_stopped
-.export nbox_ps_state_zombie
-.export nbox_ps_state_setup
-.export nbox_ps_state_unknown
-.export nbox_ps_wait_none
-.export nbox_ps_wait_console
-.export nbox_ps_wait_device
-.export nbox_ps_wait_pipe_read
-.export nbox_ps_wait_timer
-.export nbox_ps_wait_proc
-.export nbox_ps_wait_lock
-.export nbox_ps_wait_pipe_write
-.export nbox_ps_wait_unknown
 .export nbox_print_msg
 .export nbox_print_cr
 .export nbox_print_help
 .export nbox_print_unknown
 .export nbox_print_arg_fail
-.export nbox_print_cd_fail
-.export nbox_print_ls_fail
-.export nbox_print_readdir_fail
-.export nbox_print_cat_fail
-.export nbox_print_rm_fail
-.export nbox_print_mv_fail
-.export nbox_print_mkdir_fail
-.export nbox_print_rmdir_fail
-.export nbox_print_cp_fail
-.export nbox_print_ps_fail
 .export nbox_print_space
 .export nbox_print_hex_byte
 .export nbox_copy_arg_from_y
@@ -123,8 +82,6 @@
 .export nbox_require_two_args
 .export nbox_default_arg_dot_if_empty
 .export nbox_default_arg_root_if_empty
-.export nbox_strlen_dirent_name
-.export nbox_ls_close_dir
 
 .segment "USER_DATA"
 
@@ -146,34 +103,16 @@ nbox_arg_len:
 nbox_arg2_len:
     .byte 0
 
-nbox_cwd_buf:
-    .res NBOX_PATH_MAX
-
-nbox_dir_entry:
-    .res DIR_ENTRY_SIZE
-
-nbox_cat_buf:
-    .res NBOX_CAT_BUF_SIZE
-
-nbox_dir_fd:
-    .byte NBOX_DIR_FD_NONE
-
-nbox_file_fd:
-    .byte NBOX_FILE_FD_NONE
-
-nbox_cp_src_fd:
-    .byte NBOX_FILE_FD_NONE
-
-nbox_cp_dst_fd:
-    .byte NBOX_FILE_FD_NONE
+nbox_child_get_args:
+    .word nbox_arg_buf
+    .byte NBOX_PATH_MAX
+    .word nbox_arg2_buf
+    .byte NBOX_PATH_MAX
+    .byte 0          ; argc_out
+    .byte 0          ; arg0_len_out
+    .byte 0          ; arg1_len_out
 
 nbox_cmd_idx:
-    .byte 0
-
-nbox_src_idx:
-    .byte 0
-
-nbox_dst_idx:
     .byte 0
 
 nbox_name_offset:
@@ -182,14 +121,17 @@ nbox_name_offset:
 nbox_jmpvec:
     .word 0
 
-nbox_cmd_buf:
-    .res NBOX_CMD_NAME_SLOT
+nbox_exec_mode:
+    .byte NBOX_EXEC_NONE
 
-nbox_ps_pid:
+nbox_launch_id:
+    .byte NBOX_APPLET_NONE
+
+nbox_line_idx:
     .byte 0
 
-nbox_procinfo_buf:
-    .res PROCINFO_RECORD_SIZE
+nbox_cmd_buf:
+    .res NBOX_CMD_NAME_SLOT
 
 nbox_hex_byte:
     .byte 0
@@ -197,106 +139,22 @@ nbox_hex_byte:
 nbox_hex_buf:
     .res 2
 
-nbox_type_prefix:
-    .byte "- "
-
 nbox_cr:
     .byte 13
 
 nbox_msg_help:
-    .byte "COMMANDS: HELP PWD CD LS CAT RM MV MKDIR RMDIR CP PS SPAWN SPAWNC", 13
+    .byte "COMMANDS: HELP PWD CD LS CAT RM MV MKDIR RMDIR CP PS", 13
 NBOX_MSG_HELP_LEN = * - nbox_msg_help
 
 nbox_msg_unknown:
     .byte "?", 13
 NBOX_MSG_UNKNOWN_LEN = * - nbox_msg_unknown
 
-nbox_msg_cd_fail:
-    .byte "CD FAIL", 13
-NBOX_MSG_CD_FAIL_LEN = * - nbox_msg_cd_fail
-
-nbox_msg_ls_fail:
-    .byte "LS FAIL", 13
-NBOX_MSG_LS_FAIL_LEN = * - nbox_msg_ls_fail
-
-nbox_msg_readdir_fail:
-    .byte "READDIR FAIL", 13
-NBOX_MSG_READDIR_FAIL_LEN = * - nbox_msg_readdir_fail
-
-nbox_msg_cat_fail:
-    .byte "CAT FAIL", 13
-NBOX_MSG_CAT_FAIL_LEN = * - nbox_msg_cat_fail
-
-nbox_msg_rm_fail:
-    .byte "RM FAIL", 13
-NBOX_MSG_RM_FAIL_LEN = * - nbox_msg_rm_fail
-
-nbox_msg_mv_fail:
-    .byte "MV FAIL", 13
-NBOX_MSG_MV_FAIL_LEN = * - nbox_msg_mv_fail
-
-nbox_msg_mkdir_fail:
-    .byte "MKDIR FAIL", 13
-NBOX_MSG_MKDIR_FAIL_LEN = * - nbox_msg_mkdir_fail
-
-nbox_msg_rmdir_fail:
-    .byte "RMDIR FAIL", 13
-NBOX_MSG_RMDIR_FAIL_LEN = * - nbox_msg_rmdir_fail
-
-nbox_msg_cp_fail:
-    .byte "CP FAIL", 13
-NBOX_MSG_CP_FAIL_LEN = * - nbox_msg_cp_fail
-
-nbox_msg_ps_fail:
-    .byte "PS FAIL", 13
-NBOX_MSG_PS_FAIL_LEN = * - nbox_msg_ps_fail
-
-nbox_msg_ps_header:
-    .byte "PID PPID ST  WAIT SIG", 13
-
 nbox_space:
     .byte " "
 
 nbox_hex_digits:
     .byte "0123456789ABCDEF"
-
-nbox_ps_state_empty:
-    .byte "EMP"
-nbox_ps_state_new:
-    .byte "NEW"
-nbox_ps_state_ready:
-    .byte "RDY"
-nbox_ps_state_running:
-    .byte "RUN"
-nbox_ps_state_blocked:
-    .byte "BLK"
-nbox_ps_state_stopped:
-    .byte "STP"
-nbox_ps_state_zombie:
-    .byte "ZOM"
-nbox_ps_state_setup:
-    .byte "SET"
-nbox_ps_state_unknown:
-    .byte "???"
-
-nbox_ps_wait_none:
-    .byte "----"
-nbox_ps_wait_console:
-    .byte "CON "
-nbox_ps_wait_device:
-    .byte "DEV "
-nbox_ps_wait_pipe_read:
-    .byte "PIPR"
-nbox_ps_wait_timer:
-    .byte "TIMR"
-nbox_ps_wait_proc:
-    .byte "PROC"
-nbox_ps_wait_lock:
-    .byte "LOCK"
-nbox_ps_wait_pipe_write:
-    .byte "PIPW"
-nbox_ps_wait_unknown:
-    .byte "????"
 
 nbox_msg_arg_fail:
     .byte "ARG?", 13
@@ -307,108 +165,6 @@ nbox_stdout_args:
     .byte 0
     .word 0
     .word 0
-
-nbox_getcwd_args:
-    .word nbox_cwd_buf
-    .word NBOX_PATH_MAX
-    .word 0
-    .byte NEOX_PATH_FLAGS_NONE
-    .byte 0
-
-nbox_chdir_args:
-    .word nbox_arg_buf
-    .word NBOX_PATH_MAX
-    .byte 0
-    .byte NEOX_PATH_FLAGS_NONE
-
-nbox_opendir_args:
-    .word nbox_arg_buf
-    .word NBOX_PATH_MAX
-    .byte 0
-    .byte NEOX_PATH_FLAGS_NONE
-
-nbox_readdir_args:
-    .byte NBOX_DIR_FD_NONE
-    .byte 0
-    .word nbox_dir_entry
-    .word DIR_ENTRY_SIZE
-
-nbox_closedir_args:
-    .byte NBOX_DIR_FD_NONE
-    .byte 0
-
-nbox_open_args:
-    .word nbox_arg_buf
-    .word NBOX_PATH_MAX
-    .byte OPEN_READ
-    .byte 0
-
-nbox_cat_rw_args:
-    .byte NBOX_FILE_FD_NONE
-    .byte 0
-    .word nbox_cat_buf
-    .word NBOX_CAT_BUF_SIZE
-
-nbox_cp_src_open_args:
-    .word nbox_arg_buf
-    .word NBOX_PATH_MAX
-    .byte OPEN_READ
-    .byte 0
-
-nbox_cp_dst_open_args:
-    .word nbox_arg2_buf
-    .word NBOX_PATH_MAX
-    .byte OPEN_WRITE_TRUNC
-    .byte 0
-
-nbox_cp_dst_opendir_args:
-    .word nbox_arg2_buf
-    .word NBOX_PATH_MAX
-    .byte 0
-    .byte NEOX_PATH_FLAGS_NONE
-
-nbox_cp_read_args:
-    .byte NBOX_FILE_FD_NONE
-    .byte 0
-    .word nbox_cat_buf
-    .word NBOX_CAT_BUF_SIZE
-
-nbox_cp_write_args:
-    .byte NBOX_FILE_FD_NONE
-    .byte 0
-    .word nbox_cat_buf
-    .word 0
-
-nbox_delete_args:
-    .word nbox_arg_buf
-    .word NBOX_PATH_MAX
-    .byte 0
-    .byte FS_PATH_FLAGS_NONE
-
-nbox_rename_args:
-    .word nbox_arg_buf
-    .word nbox_arg2_buf
-    .word NBOX_PATH_MAX
-    .byte 0
-    .byte FS_PATH_FLAGS_NONE
-
-nbox_mkdir_args:
-    .word nbox_arg_buf
-    .word NBOX_PATH_MAX
-    .byte 0
-    .byte NEOX_PATH_FLAGS_NONE
-
-nbox_rmdir_args:
-    .word nbox_arg_buf
-    .word NBOX_PATH_MAX
-    .byte 0
-    .byte NEOX_PATH_FLAGS_NONE
-
-nbox_procinfo_args:
-    .byte 0
-    .byte 0
-    .word nbox_procinfo_buf
-    .word PROCINFO_RECORD_SIZE
 
 .segment "USER_TEXT"
 
@@ -456,76 +212,6 @@ nbox_procinfo_args:
     lda #<nbox_msg_arg_fail
     ldx #>nbox_msg_arg_fail
     ldy #NBOX_MSG_ARG_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_cd_fail
-    lda #<nbox_msg_cd_fail
-    ldx #>nbox_msg_cd_fail
-    ldy #NBOX_MSG_CD_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_ls_fail
-    lda #<nbox_msg_ls_fail
-    ldx #>nbox_msg_ls_fail
-    ldy #NBOX_MSG_LS_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_readdir_fail
-    lda #<nbox_msg_readdir_fail
-    ldx #>nbox_msg_readdir_fail
-    ldy #NBOX_MSG_READDIR_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_cat_fail
-    lda #<nbox_msg_cat_fail
-    ldx #>nbox_msg_cat_fail
-    ldy #NBOX_MSG_CAT_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_rm_fail
-    lda #<nbox_msg_rm_fail
-    ldx #>nbox_msg_rm_fail
-    ldy #NBOX_MSG_RM_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_mv_fail
-    lda #<nbox_msg_mv_fail
-    ldx #>nbox_msg_mv_fail
-    ldy #NBOX_MSG_MV_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_mkdir_fail
-    lda #<nbox_msg_mkdir_fail
-    ldx #>nbox_msg_mkdir_fail
-    ldy #NBOX_MSG_MKDIR_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_rmdir_fail
-    lda #<nbox_msg_rmdir_fail
-    ldx #>nbox_msg_rmdir_fail
-    ldy #NBOX_MSG_RMDIR_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_cp_fail
-    lda #<nbox_msg_cp_fail
-    ldx #>nbox_msg_cp_fail
-    ldy #NBOX_MSG_CP_FAIL_LEN
-    jmp nbox_print_msg
-.endproc
-
-.proc nbox_print_ps_fail
-    lda #<nbox_msg_ps_fail
-    ldx #>nbox_msg_ps_fail
-    ldy #NBOX_MSG_PS_FAIL_LEN
     jmp nbox_print_msg
 .endproc
 
@@ -730,45 +416,6 @@ nbox_procinfo_args:
 .endproc
 
 ; ------------------------------------------------------------
-; nbox_strlen_dirent_name
-;
-; Return:
-;   Y = length of nbox_dir_entry.name, capped at DIR_ENTRY_NAME_SIZE
-; ------------------------------------------------------------
-.proc nbox_strlen_dirent_name
-    ldy #0
-@loop:
-    cpy #DIR_ENTRY_NAME_SIZE
-    bcs @done
-    lda nbox_dir_entry + dir_entry::name,y
-    beq @done
-    iny
-    bra @loop
-@done:
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; nbox_ls_close_dir
-;
-; Close the currently-open directory handle.  The close result is ignored
-; because this helper is used on both normal EOF and error cleanup paths.
-; ------------------------------------------------------------
-.proc nbox_ls_close_dir
-    lda nbox_dir_fd
-    cmp #NBOX_DIR_FD_NONE
-    beq @done
-
-    SYSCALL nbox_closedir_args, sys_closedir
-    lda #NBOX_DIR_FD_NONE
-    sta nbox_dir_fd
-    sta nbox_readdir_args + readdir_args::fd
-    sta nbox_closedir_args + closedir_args::fd
-@done:
-    rts
-.endproc
-
-; ------------------------------------------------------------
 ; nbox_clear_cmd_buf
 ; ------------------------------------------------------------
 .proc nbox_clear_cmd_buf
@@ -794,9 +441,6 @@ nbox_procinfo_args:
 ;   nbox_cmd_buf = zero-padded uppercase command token
 ;   nbox_line_idx = offset just after command token
 ; ------------------------------------------------------------
-nbox_line_idx:
-    .byte 0
-
 .proc nbox_copy_command_token
     jsr nbox_clear_cmd_buf
     stz nbox_dst_idx
@@ -883,14 +527,38 @@ nbox_line_idx:
 .endproc
 
 ; ------------------------------------------------------------
-; nbox_dispatch_line
+; nbox_resolve_line
+;
+; Resolves the clean command line into the current nbox command metadata.
+; This does not execute the command.  The resolver is shared by the direct
+; dispatcher and by neosh when it decides whether a command must execute in
+; the parent process or in a spawned resident child.
+;
+; Return:
+;   C clear = resolved or empty line
+;       nbox_exec_mode = NBOX_EXEC_PARENT / CHILD / NONE
+;       nbox_launch_id = NBOX_APPLET_* or NBOX_APPLET_NONE
+;       nbox_jmpvec    = direct handler for parent execution
+;       nbox_line_idx  = offset just after command token
+;   C set = unknown/invalid command
+;       nbox_exec_mode = NBOX_EXEC_UNKNOWN
 ; ------------------------------------------------------------
-.proc nbox_dispatch_line
+.proc nbox_resolve_line
+    lda #NBOX_EXEC_UNKNOWN
+    sta nbox_exec_mode
+    lda #NBOX_APPLET_NONE
+    sta nbox_launch_id
+    stz nbox_jmpvec
+    stz nbox_jmpvec+1
+
     ldy #0
 @skip:
     lda nbox_line_buf,y
     bne @not_empty
-    jmp @done
+    lda #NBOX_EXEC_NONE
+    sta nbox_exec_mode
+    clc
+    rts
 @not_empty:
     cmp #' '
     beq @skip_next
@@ -904,7 +572,8 @@ nbox_line_idx:
 @cmd:
     jsr nbox_copy_command_token
     bcc @lookup
-    jmp nbox_print_unknown
+    sec
+    rts
 
 @lookup:
     stz nbox_cmd_idx
@@ -927,6 +596,12 @@ nbox_line_idx:
     bra @table_loop
 
 @found:
+    ldx nbox_cmd_idx
+    lda nbox_cmd_exec_modes,x
+    sta nbox_exec_mode
+    lda nbox_cmd_launch_ids,x
+    sta nbox_launch_id
+
     lda nbox_cmd_idx
     asl
     tax
@@ -936,15 +611,176 @@ nbox_line_idx:
     lda nbox_cmd_handlers,x
     sta nbox_jmpvec+1
 
-    ldy nbox_line_idx
-    jmp (nbox_jmpvec)
+    clc
+    rts
 
 @unknown:
+    lda #NBOX_EXEC_UNKNOWN
+    sta nbox_exec_mode
+    lda #NBOX_APPLET_NONE
+    sta nbox_launch_id
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; nbox_dispatch_line
+; ------------------------------------------------------------
+.proc nbox_dispatch_line
+    jsr nbox_resolve_line
+    bcc @resolved
     jmp nbox_print_unknown
+
+@resolved:
+    lda nbox_exec_mode
+    cmp #NBOX_EXEC_NONE
+    beq @done
+
+    ldy nbox_line_idx
+    jmp (nbox_jmpvec)
 
 @done:
     clc
     rts
+.endproc
+
+; ------------------------------------------------------------
+; nbox_clear_child_args
+;
+; Prepare an empty argument environment for nbox_child_entry.
+; ------------------------------------------------------------
+.proc nbox_clear_child_args
+    stz nbox_line_buf
+    stz nbox_line_len
+    stz nbox_arg_buf
+    stz nbox_arg2_buf
+    stz nbox_arg_len
+    stz nbox_arg2_len
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; nbox_load_child_args
+;
+; Load argc/arg0/arg1 from the kernel launch state into the normal nbox
+; applet argument buffers. This keeps existing applets unchanged.
+; ------------------------------------------------------------
+.proc nbox_load_child_args
+    jsr nbox_clear_child_args
+    SYSCALL nbox_child_get_args, sys_get_launch_args2
+    bcc @ok
+
+    sec
+    rts
+
+@ok:
+    lda nbox_child_get_args + spawn_get_args2_args::arg0_len_out
+    sta nbox_arg_len
+    lda nbox_child_get_args + spawn_get_args2_args::arg1_len_out
+    sta nbox_arg2_len
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; nbox_child_entry
+;
+; Resident child process entry. The parent configured launch id and up
+; to two arguments while the process was still PROC_SETUP. The child
+; loads that launch state, dispatches one resident applet, then exits.
+; ------------------------------------------------------------
+.proc nbox_child_entry
+    jsr sys_get_launch_id
+    bcc @have_id
+
+    lda #EINVAL
+    jmp sys_exit
+
+@have_id:
+    pha
+    jsr nbox_load_child_args
+    bcc @args_ok
+
+    pla
+    lda #EINVAL
+    jmp sys_exit
+
+@args_ok:
+    pla
+
+    cmp #NBOX_APPLET_HELP
+    beq @help
+    cmp #NBOX_APPLET_PWD
+    beq @pwd
+    cmp #NBOX_APPLET_CD
+    beq @cd
+    cmp #NBOX_APPLET_LS
+    beq @ls
+    cmp #NBOX_APPLET_CAT
+    beq @cat
+    cmp #NBOX_APPLET_RM
+    beq @rm
+    cmp #NBOX_APPLET_MV
+    beq @mv
+    cmp #NBOX_APPLET_MKDIR
+    beq @mkdir
+    cmp #NBOX_APPLET_RMDIR
+    beq @rmdir
+    cmp #NBOX_APPLET_CP
+    beq @cp
+    cmp #NBOX_APPLET_PS
+    beq @ps
+
+    jsr nbox_print_unknown
+    lda #EINVAL
+    jmp sys_exit
+
+@help:
+    jsr nbox_help
+    bra @ok
+
+@pwd:
+    jsr nbox_pwd
+    bra @ok
+
+@cd:
+    jsr nbox_cd
+    bra @ok
+
+@ls:
+    jsr nbox_ls
+    bra @ok
+
+@cat:
+    jsr nbox_cat
+    bra @ok
+
+@rm:
+    jsr nbox_rm
+    bra @ok
+
+@mv:
+    jsr nbox_mv
+    bra @ok
+
+@mkdir:
+    jsr nbox_mkdir
+    bra @ok
+
+@rmdir:
+    jsr nbox_rmdir
+    bra @ok
+
+@cp:
+    jsr nbox_cp
+    bra @ok
+
+@ps:
+    jsr nbox_ps
+
+@ok:
+    lda #EXIT_OK
+    jmp sys_exit
 .endproc
 
 ; ------------------------------------------------------------
@@ -966,9 +802,33 @@ nbox_cmd_names:
     .byte "RMDIR", 0, 0
     .byte "CP", 0, 0, 0, 0, 0
     .byte "PS", 0, 0, 0, 0, 0
-    .byte "SPAWN", 0, 0
-    .byte "SPAWNC", 0
     .byte $FF, $FF, $FF, $FF, $FF, $FF, $FF
+
+nbox_cmd_launch_ids:
+    .byte NBOX_APPLET_HELP
+    .byte NBOX_APPLET_PWD
+    .byte NBOX_APPLET_CD
+    .byte NBOX_APPLET_LS
+    .byte NBOX_APPLET_CAT
+    .byte NBOX_APPLET_RM
+    .byte NBOX_APPLET_MV
+    .byte NBOX_APPLET_MKDIR
+    .byte NBOX_APPLET_RMDIR
+    .byte NBOX_APPLET_CP
+    .byte NBOX_APPLET_PS
+
+nbox_cmd_exec_modes:
+    .byte NBOX_EXEC_CHILD       ; HELP
+    .byte NBOX_EXEC_CHILD       ; PWD
+    .byte NBOX_EXEC_PARENT      ; CD changes parent/shell cwd
+    .byte NBOX_EXEC_CHILD       ; LS
+    .byte NBOX_EXEC_CHILD       ; CAT
+    .byte NBOX_EXEC_CHILD       ; RM
+    .byte NBOX_EXEC_CHILD       ; MV
+    .byte NBOX_EXEC_CHILD       ; MKDIR
+    .byte NBOX_EXEC_CHILD       ; RMDIR
+    .byte NBOX_EXEC_CHILD       ; CP
+    .byte NBOX_EXEC_CHILD       ; PS
 
 nbox_cmd_handlers:
     .word nbox_cmd_help
@@ -982,5 +842,3 @@ nbox_cmd_handlers:
     .word nbox_cmd_rmdir
     .word nbox_cmd_cp
     .word nbox_cmd_ps
-    .word nbox_cmd_spawn
-    .word nbox_cmd_spawnc

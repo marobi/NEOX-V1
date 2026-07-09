@@ -68,6 +68,11 @@ SYS_SPAWN_FD_DUP_CHILD = $1D
 SYS_SPAWN_FD_CLOSE   = $1E
 SYS_SPAWN_COMMIT     = $1F
 SYS_SPAWN_ABORT      = $20
+SYS_WAITPID          = $21
+SYS_SPAWN_SET_LAUNCH_ID = $22
+SYS_GET_LAUNCH_ID   = $23
+SYS_SPAWN_SET_ARGS2 = $24
+SYS_GET_LAUNCH_ARGS2 = $25
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -106,6 +111,11 @@ sys_spawn_fd_dup_child = SYSCALL_BASE + (SYS_SPAWN_FD_DUP_CHILD * SYSCALL_ENTRY_
 sys_spawn_fd_close = SYSCALL_BASE + (SYS_SPAWN_FD_CLOSE * SYSCALL_ENTRY_SIZE)
 sys_spawn_commit = SYSCALL_BASE + (SYS_SPAWN_COMMIT * SYSCALL_ENTRY_SIZE)
 sys_spawn_abort = SYSCALL_BASE + (SYS_SPAWN_ABORT * SYSCALL_ENTRY_SIZE)
+sys_waitpid = SYSCALL_BASE + (SYS_WAITPID * SYSCALL_ENTRY_SIZE)
+sys_spawn_set_launch_id = SYSCALL_BASE + (SYS_SPAWN_SET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
+sys_get_launch_id = SYSCALL_BASE + (SYS_GET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
+sys_spawn_set_args2 = SYSCALL_BASE + (SYS_SPAWN_SET_ARGS2 * SYSCALL_ENTRY_SIZE)
+sys_get_launch_args2 = SYSCALL_BASE + (SYS_GET_LAUNCH_ARGS2 * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values

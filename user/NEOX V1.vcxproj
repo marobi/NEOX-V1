@@ -170,6 +170,7 @@
     <None Include="user\task3.asm" />
     <None Include="user\task6.asm" />
     <None Include="user\nbox.asm" />
+    <None Include="user\applets\applet_scratch.asm" />
     <None Include="user\applets\help.asm" />
     <None Include="user\applets\pwd.asm" />
     <None Include="user\applets\cd.asm" />
@@ -181,7 +182,6 @@
     <None Include="user\applets\rmdir.asm" />
     <None Include="user\applets\cp.asm" />
     <None Include="user\applets\ps.asm" />
-    <None Include="user\applets\spawn.asm" />
     <None Include="user\applets\common.inc" />
     <None Include="user\nbox.inc" />
     <None Include="user\nbox.mk" />

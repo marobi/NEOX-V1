@@ -42,6 +42,7 @@
 .import proc_cwd_device
 .import proc_cwd_len
 .import proc_cwd_path
+.import proc_cwd_store_current_to_shared
 .import proc_context
 
 .import fd_alloc_open
@@ -920,6 +921,7 @@ ksys_rmdir_flags       = ksys_delete_flags
     ldy #0
     lda #0
     sta (fd_ptr),y
+    jsr proc_cwd_store_current_to_shared
     clc
     rts
 
@@ -936,6 +938,7 @@ ksys_rmdir_flags       = ksys_delete_flags
     bne @loop
     lda #0
     sta (fd_ptr),y
+    jsr proc_cwd_store_current_to_shared
     clc
     rts
 .endproc

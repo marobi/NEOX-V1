@@ -8,12 +8,21 @@
 .include "applets/common.inc"
 
 .export nbox_cmd_pwd
+.export nbox_pwd
 
+.segment "USER_DATA"
+
+nbox_pwd_getcwd_args:
+    .word nbox_cwd_buf
+    .word NBOX_PATH_MAX
+    .word 0
+    .byte NEOX_PATH_FLAGS_NONE
+    .byte 0
 .segment "USER_TEXT"
 
 ; ------------------------------------------------------------
 .proc nbox_pwd
-    SYSCALL nbox_getcwd_args, sys_getcwd
+    SYSCALL nbox_pwd_getcwd_args, sys_getcwd
     bcc @ok
     jmp nbox_print_unknown
 @ok:
