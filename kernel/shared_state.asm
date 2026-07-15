@@ -10,10 +10,9 @@
 ;   This file owns:
 ;     - real shared kernel state
 ;     - RP/monitor-visible process tables
-;     - RP/monitor-visible lock/debug state
+;     - RP/monitor-visible lock and gate state
 ;
-;   Debug fields stay here intentionally because the RP monitor
-;   reads shared kernel state directly.
+;   The RP monitor reads this shared kernel state directly.
 ; ============================================================
 
 .setcpu "65C02"
@@ -66,10 +65,11 @@ rp_lock:
 ;     read, write, close, pipe, dup, dup2.
 ;
 ; Policy:
-;   This is a sleepable gate, not an IRQ-preemption blocker.
-;   It must not be held across sched_yield. A syscall that must
-;   block releases the gate, sets WAIT_LOCK / LOCK_ID_FILE_IO,
-;   yields, and retries.
+;   This is a sleepable PID-owned gate, not an IRQ-preemption blocker.
+;   Timer scheduling may continue while the gate is owned. A process that
+;   cannot acquire it blocks on WAIT_LOCK / LOCK_ID_FILE_IO. Normal console
+;   and pipe waits release the gate before yielding; the planned generic RP
+;   transaction may retain it while the owner blocks on WAIT_RP.
 ;
 ; FIFO queue:
 ;   file_io_gate_wait_head / tail hold waiting PIDs or $FF.
@@ -78,14 +78,12 @@ rp_lock:
 
 .export file_io_gate
 .export file_io_gate_owner
-.export file_io_gate_phase
 .export file_io_gate_wait_head
 .export file_io_gate_wait_tail
 .export file_io_gate_next
 
 .export proc_gate
 .export proc_gate_owner
-.export proc_gate_phase
 .export proc_gate_wait_head
 .export proc_gate_wait_tail
 .export proc_gate_next
@@ -94,9 +92,6 @@ file_io_gate:
     .res 1
 
 file_io_gate_owner:
-    .res 1
-
-file_io_gate_phase:
     .res 1
 
 file_io_gate_wait_head:
@@ -116,9 +111,6 @@ proc_gate:
     .res 1
 
 proc_gate_owner:
-    .res 1
-
-proc_gate_phase:
     .res 1
 
 proc_gate_wait_head:
@@ -243,12 +235,6 @@ proc_signal_pending:
 ;   or call leave when C is set.  This is not a FIFO gate and must
 ;   never block or yield.  It is deliberately non-recursive.
 ;
-; sched_lock_owner / phase / depth / underflow:
-;   Monitor-visible diagnostics for scheduler-lock correctness.
-;   Owner is diagnostic only; scheduler handoff may enter in one
-;   process/context and leave after another PID has been selected.
-;   Depth is diagnostic only: 0 = unlocked, 1 = locked.
-;
 ; console_owner_pid:
 ;   Identifies which process currently owns console input.
 ;   $FF = none / monitor-side default.
@@ -261,30 +247,13 @@ proc_signal_pending:
 ;   This is paired with active_pid and changes only at the
 ;   final scheduler/context handoff boundary.
 ; ------------------------------------------------------------
-; ------------------------------------------------------------
 
 .export sched_lock
-.export sched_lock_owner
-.export sched_lock_phase
-.export sched_lock_depth
-.export sched_lock_underflow
 .export console_owner_pid
 .export monitor_active
 .export active_context
 
 sched_lock:
-    .res 1
-
-sched_lock_owner:
-    .res 1
-
-sched_lock_phase:
-    .res 1
-
-sched_lock_depth:
-    .res 1
-
-sched_lock_underflow:
     .res 1
 
 console_owner_pid:
@@ -354,7 +323,7 @@ open_file_handle:
 ;
 ; wait_reason[pid]:
 ;   WAIT_NONE, WAIT_CONSOLE, WAIT_DEVICE, WAIT_PIPE_READ,
-;   WAIT_TIMER, WAIT_PROC, WAIT_LOCK, WAIT_PIPE_WRITE, ...
+;   WAIT_TIMER, WAIT_PROC, WAIT_LOCK, WAIT_PIPE_WRITE, WAIT_RP, ...
 ;   WAIT_PIPE remains a compatibility alias for WAIT_PIPE_READ.
 ;
 ; wait_object[pid]:
@@ -419,27 +388,6 @@ proc_launch_arg0:
 
 proc_launch_arg1:
     .res MAX_PROCS * SPAWN_ARG_MAX
-
-; ------------------------------------------------------------
-; Per-process cwd mirror
-;
-; The active process still has context-private cwd BSS used by the
-; filesystem resolver. This shared mirror is the authoritative source
-; for spawn inheritance and first-run cwd initialization.
-; ------------------------------------------------------------
-
-.export proc_cwd_shared_device
-.export proc_cwd_shared_len
-.export proc_cwd_shared_path
-
-proc_cwd_shared_device:
-    .res MAX_PROCS
-
-proc_cwd_shared_len:
-    .res MAX_PROCS
-
-proc_cwd_shared_path:
-    .res MAX_PROCS * NEOX_CWD_MAX
 
 ; ------------------------------------------------------------
 ; Global scheduler tick counter
@@ -536,8 +484,10 @@ init_task_ptr:
 ; ------------------------------------------------------------
 ; Pipe state
 ;
-; pipe_state/head/tail/count/readers/writers:
+; pipe_state/head/tail/count:
 ;   Pipe metadata indexed by pipe id.
+;   pipe_state contains PIPE_STATE_READ_OPEN and
+;   PIPE_STATE_WRITE_OPEN endpoint-presence bits.
 ;
 ; pipe_buf:
 ;   Pipe storage:
@@ -552,8 +502,6 @@ init_task_ptr:
 .export pipe_head
 .export pipe_tail
 .export pipe_count
-.export pipe_readers
-.export pipe_writers
 .export pipe_buf
 
 .export open_pipe
@@ -571,12 +519,6 @@ pipe_tail:
 pipe_count:
     .res MAX_PIPES
 
-pipe_readers:
-    .res MAX_PIPES
-
-pipe_writers:
-    .res MAX_PIPES
-
 pipe_buf:
     .res MAX_PIPES * PIPE_BUF_SIZE
 
@@ -585,211 +527,3 @@ open_pipe:
 
 open_pipe_mode:
     .res OPEN_MAX
-
-; ============================================================
-; RP-visible debug state
-;
-; Important:
-;   These fields are diagnostics only.
-;   They must never be used as scratch required for
-;   correctness.
-;
-;   They stay in shared_state.asm intentionally because the RP
-;   monitor reads shared kernel state directly.
-; ============================================================
-
-; ------------------------------------------------------------
-; Legacy scheduler debug markers
-;
-; Kept for existing monitor / ps output.
-; ------------------------------------------------------------
-
-.export sched_debug_marker
-.export sched_debug_pid
-
-sched_debug_marker:
-    .res 1
-
-sched_debug_pid:
-    .res 1
-
-.export sched_debug_old_pid
-.export sched_debug_old_state
-
-sched_debug_old_pid:
-    .res 1
-
-sched_debug_old_state:
-    .res 1
-
-.export sched_debug_state_pid
-.export sched_debug_state_old
-.export sched_debug_state_new
-
-sched_debug_state_pid:
-    .res 1
-
-sched_debug_state_old:
-    .res 1
-
-sched_debug_state_new:
-    .res 1
-
-; ------------------------------------------------------------
-; Explicit scheduler debug state
-;
-; These fields give unambiguous scheduler snapshots and should
-; replace overloaded legacy debug bytes over time.
-; ------------------------------------------------------------
-
-.export dbg_sched_path
-.export dbg_sched_current_pid
-.export dbg_sched_selected_pid
-
-dbg_sched_path:
-    .res 1
-
-dbg_sched_current_pid:
-    .res 1
-
-dbg_sched_selected_pid:
-    .res 1
-
-.export dbg_sched_saved_pid
-.export dbg_sched_saved_sp
-.export dbg_sched_saved_mode
-
-dbg_sched_saved_pid:
-    .res 1
-
-dbg_sched_saved_sp:
-    .res 1
-
-dbg_sched_saved_mode:
-    .res 1
-
-.export dbg_sched_loaded_pid
-.export dbg_sched_loaded_sp
-
-dbg_sched_loaded_pid:
-    .res 1
-
-dbg_sched_loaded_sp:
-    .res 1
-
-.export dbg_sched_resume_mode
-.export dbg_sched_resume_pid
-.export dbg_sched_resume_context
-
-dbg_sched_resume_mode:
-    .res 1
-
-dbg_sched_resume_pid:
-    .res 1
-
-dbg_sched_resume_context:
-    .res 1
-
-; ------------------------------------------------------------
-; Explicit process-state debug fields
-;
-; These are separate from the legacy sched_debug_state_* fields.
-; During migration, scheduler code may update both.
-; ------------------------------------------------------------
-
-.export dbg_proc_state_pid
-.export dbg_proc_state_old
-.export dbg_proc_state_new
-
-dbg_proc_state_pid:
-    .res 1
-
-dbg_proc_state_old:
-    .res 1
-
-dbg_proc_state_new:
-    .res 1
-
-; ------------------------------------------------------------
-; Lock owner debug fields
-;
-; $FF = no owner / lock is free.
-;
-; These fields are diagnostics only. They do not implement the
-; locks themselves.
-; ------------------------------------------------------------
-
-.export rp_lock_owner
-
-rp_lock_owner:
-    .res 1
-
-; ------------------------------------------------------------
-; Sleepable gate debug fields
-;
-; file_io_gate_phase examples:
-;   $00 = idle
-;   $11 = read acquired
-;   $12 = read calling fd/backend
-;   $13 = read returned from fd/backend
-;   $14 = read releasing
-;   $21 = write acquired
-;   $22 = write calling fd/backend
-;   $23 = write returned from fd/backend
-;   $24 = write releasing
-; ------------------------------------------------------------
-
-.export dbg_gate_wait_reason
-.export dbg_gate_wait_object
-
-
-dbg_gate_wait_reason:
-    .res 1
-
-dbg_gate_wait_object:
-    .res 1
-
-; ------------------------------------------------------------
-; Timer debug fields
-; ------------------------------------------------------------
-
-.export dbg_timer_pid
-.export dbg_timer_slot
-.export dbg_timer_until_lo
-.export dbg_timer_until_hi
-.export dbg_timer_now_lo
-.export dbg_timer_now_hi
-
-dbg_timer_pid:
-    .res 1
-
-dbg_timer_slot:
-    .res 1
-
-dbg_timer_until_lo:
-    .res 1
-
-dbg_timer_until_hi:
-    .res 1
-
-dbg_timer_now_lo:
-    .res 1
-
-dbg_timer_now_hi:
-    .res 1
-
-.export dbg_irq_preempt_count
-.export dbg_irq_current_pid
-.export dbg_irq_selected_pid
-.export dbg_irq_saved_sp
-.export dbg_irq_loaded_sp
-.export dbg_irq_skip_reason
-
-dbg_irq_preempt_count: .res 1
-dbg_irq_current_pid:   .res 1
-dbg_irq_selected_pid:  .res 1
-dbg_irq_saved_sp:      .res 1
-dbg_irq_loaded_sp:     .res 1
-dbg_irq_skip_reason:   .res 1
-
-

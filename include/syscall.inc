@@ -308,10 +308,9 @@ RW_ARGS_SIZE = .sizeof(rw_args)
 ; ------------------------------------------------------------
 
 .macro SYSCALL argblk, entry
-    ; Keep the register argument pointer stable across the tiny
-    ; user-side setup window. The kernel read/write wrapper copies
-    ; the argument block immediately and re-enables IRQs after that
-    ; snapshot, before taking file_io_gate.
+    ; Keep the register argument pointer stable across the tiny user-side
+    ; setup window. The kernel snapshots the process-private pointer before
+    ; taking file_io_gate and decodes the block after the owner resumes.
     sei
     ldx #<argblk
     ldy #>argblk
@@ -429,9 +428,15 @@ RMDIR_ARGS_SIZE = .sizeof(rmdir_args)
 ;   +2 state
 ;   +3 wait_reason
 ;   +4 signal_pending
+;   +5 wait_object
+;   +6 held_gate_mask (PROC_HOLD_*)
+;
+; Kernels accepting the extended record remain compatible with callers
+; that provide the original five-byte buffer.
 ; ------------------------------------------------------------
 
-PROCINFO_RECORD_SIZE = 5
+PROCINFO_RECORD_MIN_SIZE = 5
+PROCINFO_RECORD_SIZE     = 7
 
 .struct procinfo_args
     pid             .byte

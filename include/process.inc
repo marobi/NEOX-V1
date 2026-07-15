@@ -58,8 +58,21 @@ WAIT_LOCK       = $06
 ; readers and writers can be woken by the correct readiness event.
 WAIT_PIPE_WRITE = $07
 
+; Blocked while retaining FILE_IO ownership until the RP2350 completes
+; the single active generic filesystem request. wait_object contains the
+; filesystem operation code.
+WAIT_RP         = $08
+
 LOCK_ID_FILE_IO = $00
 LOCK_ID_PROC    = $01
+
+; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+PROC_HOLD_NONE     = $00
+PROC_HOLD_FILE_IO  = $01
+PROC_HOLD_PROC     = $02
+
+; Sentinel used for free gate owners and empty gate wait queues.
+GATE_OWNER_NONE = $FF
 
 EXIT_OK         = $00
 

@@ -7,7 +7,6 @@
 
 .include "scheduler_defs.inc"
 .include "process.inc"
-.include "debug.inc"
 .include "syscall.inc"
 .include "signal.inc"
 .include "context.inc"
@@ -21,14 +20,13 @@
 .export proc_create
 .export proc_terminate
 .export proc_send_signal
-.export proc_apply_signal
 .export proc_apply_scheduler_signal
 .export proc_mark_zombie
 .export proc_reap_zombies
 
 .import proc_gate_acquire
 .import proc_gate_release
-.import proc_gate_phase
+.import proc_gate_cancel_wait
 .import proc_gate
 .import proc_gate_owner
 .import fd_init_process
@@ -36,8 +34,9 @@
 .import fd_close_process
 .import file_io_gate_acquire
 .import file_io_gate_release
-.import file_io_gate_phase
+.import file_io_gate_cancel_wait
 .import file_io_gate
+.import file_io_gate_owner
 
 .import active_pid
 .import proc_state
@@ -53,8 +52,6 @@
 .import proc_launch_argc
 .import proc_launch_arg0_len
 .import proc_launch_arg1_len
-.import proc_cwd_shared_device
-.import proc_cwd_shared_len
 .import timer_free
 
 .import wait_reason
@@ -129,8 +126,6 @@ proc_alloc_entryH:
     stz proc_launch_argc,x
     stz proc_launch_arg0_len,x
     stz proc_launch_arg1_len,x
-    stz proc_cwd_shared_device,x
-    stz proc_cwd_shared_len,x
     rts
 .endproc
 
@@ -150,6 +145,8 @@ proc_alloc_entryH:
 ;
 ; Notes:
 ;   - Caller must hold proc_gate.
+;   - This routine acquires file_io_gate while initializing descriptors.
+;   - Lock order is PROC -> FILE_IO.
 ;   - PID is allocated by the kernel.
 ;   - MMU context is allocated from CTX_PRELOADED_FREE slots.
 ;   - State is written last so partially initialized slots are never
@@ -213,8 +210,26 @@ proc_alloc_entryH:
     lda #PROC_FLAG_NONE
     sta proc_flags,x
 
-    ; Initialise FD list.
+    ; FD/open-object tables and fd.asm shared scratch are protected by
+    ; file_io_gate. Preserve the allocated PID on the private stack because
+    ; file_io_gate_acquire may block/yield and returns X = active_pid.
+    phx
+    jsr file_io_gate_acquire
+    bcs @file_gate_acquired
+
+    plx
+    jsr ctx_free_for_pid
+    jmp @fail
+
+@file_gate_acquired:
+    plx
     jsr fd_init_process
+    bcs @fd_fail_release
+
+    phx
+    jsr file_io_gate_release
+    bcc @file_release_fail
+    plx
 
     ; Publish process last.
     lda #PROC_NEW
@@ -223,6 +238,17 @@ proc_alloc_entryH:
     txa
     clc
     rts
+
+@fd_fail_release:
+    phx
+    jsr file_io_gate_release
+    plx
+    jsr ctx_free_for_pid
+    jmp @fail
+
+@file_release_fail:
+    plx
+    jsr ctx_free_for_pid
 
 @fail:
     sec
@@ -245,6 +271,8 @@ proc_alloc_entryH:
 ;
 ; Notes:
 ;   - Caller must hold proc_gate.
+;   - This routine acquires file_io_gate while clearing descriptors.
+;   - Lock order is PROC -> FILE_IO.
 ;   - Allocates a PID and CTX_PRELOADED_FREE context.
 ;   - Leaves the child in PROC_SETUP, not runnable.
 ;   - The child FD table is cleared but no default fd 0/1/2 are
@@ -297,9 +325,26 @@ proc_alloc_entryH:
     lda #PROC_FLAG_NONE
     sta proc_flags,x
 
-    ; Setup children start with an empty fd table.  They are not
-    ; runnable, so only the creating parent can configure them.
+    ; Setup children start with an empty fd table. FD/open-object tables and
+    ; fd.asm shared scratch are protected by file_io_gate even though the
+    ; child itself is not runnable yet.
+    phx
+    jsr file_io_gate_acquire
+    bcs @file_gate_acquired
+
+    plx
+    jsr ctx_free_for_pid
+    jmp @fail
+
+@file_gate_acquired:
+    plx
     jsr fd_clear_process_slots
+    bcs @fd_fail_release
+
+    phx
+    jsr file_io_gate_release
+    bcc @file_release_fail
+    plx
 
     ; Publish process last, but only as pending setup.
     lda #PROC_SETUP
@@ -308,6 +353,17 @@ proc_alloc_entryH:
     txa
     clc
     rts
+
+@fd_fail_release:
+    phx
+    jsr file_io_gate_release
+    plx
+    jsr ctx_free_for_pid
+    jmp @fail
+
+@file_release_fail:
+    plx
+    jsr ctx_free_for_pid
 
 @fail:
     sec
@@ -345,10 +401,6 @@ proc_alloc_entryH:
     rts
 
 @gate_acquired:
-    ; DEBUG BEGIN: proc_gate phase marker
-    lda #DBG_PROC_GATE_CREATE
-    sta proc_gate_phase
-    ; DEBUG END: proc_gate phase marker
 
     ; Read first-run entry address from the static task table.
     ldy #proc_create_args::entry
@@ -581,18 +633,10 @@ proc_alloc_entryH:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    ; DEBUG BEGIN: file_io_gate phase marker
-    lda #DBG_FILE_IO_PROC_TERM_ACQ_FAIL
-    sta file_io_gate_phase
-    ; DEBUG END: file_io_gate phase marker
     plx
     rts
 
 @gate_acquired:
-    ; DEBUG BEGIN: file_io_gate phase marker
-    lda #DBG_FILE_IO_PROC_TERM_ACQ
-    sta file_io_gate_phase
-    ; DEBUG END: file_io_gate phase marker
 
     ; file_io_gate_acquire clobbers X with active_pid.
     ; Restore the target PID before closing that process's FDs,
@@ -656,7 +700,13 @@ proc_alloc_entryH:
 ;
 ; Return:
 ;   C clear = accepted
-;   C set   = invalid target
+;   C set   = rejected, Y = errno
+;
+; Policy:
+;   SIG_KILL cannot terminate a different process while that process owns
+;   FILE_IO or PROC. Destroying a preempted gate owner would strand the gate.
+;   Self-kill remains valid because ksys_signal releases its own PROC gate
+;   before yielding away.
 ; ------------------------------------------------------------
 
 .proc proc_send_signal
@@ -685,10 +735,31 @@ proc_alloc_entryH:
     rts
 
 @kill:
+    ; A preempted FILE_IO owner must run again to release the gate.
+    cpx file_io_gate_owner
+    beq @busy
+
+    ; A different preempted PROC owner must also be allowed to finish.
+    ; The active process may kill itself from ksys_signal: in that case the
+    ; PROC gate is owned only by the signal syscall and is released before
+    ; sched_yield, so preserve the existing self-kill behavior.
+    cpx proc_gate_owner
+    bne @mark_killed
+
+    cpx active_pid
+    bne @busy
+
+@mark_killed:
     lda #$FF        ; killed by signal
     jmp proc_mark_zombie
 
+@busy:
+    ldy #EAGAIN
+    sec
+    rts
+
 @fail:
+    ldy #EINVAL
     sec
     rts
 .endproc
@@ -735,18 +806,38 @@ proc_alloc_entryH:
     ; SIG_KILL has now been consumed by the lifecycle layer.
     stz proc_signal_pending,x
 
-    ; If the process was sleeping on a timer, release the timer slot
-    ; immediately.  Otherwise the timer table would retain a stale PID
-    ; until expiry.
+    ; Release reason-specific wait ownership before clearing the generic
+    ; wait fields. A killed FIFO gate waiter must be unlinked so gate debug
+    ; state and the next wake-up cannot retain a stale zombie PID.
     lda wait_reason,x
     cmp #WAIT_TIMER
+    beq @free_timer
+
+    cmp #WAIT_LOCK
     bne @clear_wait
 
+    lda wait_object,x
+    cmp #LOCK_ID_FILE_IO
+    beq @cancel_file_io_wait
+
+    cmp #LOCK_ID_PROC
+    beq @cancel_proc_wait
+    bra @clear_wait
+
+@free_timer:
     lda wait_object,x
     phx
     tax
     jsr timer_free
     plx
+    bra @clear_wait
+
+@cancel_file_io_wait:
+    jsr file_io_gate_cancel_wait
+    bra @clear_wait
+
+@cancel_proc_wait:
+    jsr proc_gate_cancel_wait
 
 @clear_wait:
     jsr proc_clear_wait
@@ -837,19 +928,13 @@ proc_alloc_entryH:
     lda active_pid
     sta proc_gate_owner
 
-    ; DEBUG BEGIN: proc_gate zombie reaper phase marker
-    lda #DBG_PROC_GATE_EXIT
-    sta proc_gate_phase
-    ; DEBUG END: proc_gate zombie reaper phase marker
 
     lda proc_exit_code,x
     jsr proc_terminate
 
-    lda #DBG_OWNER_NONE
+    lda #GATE_OWNER_NONE
     sta proc_gate_owner
 
-    lda #DBG_PROC_GATE_IDLE
-    sta proc_gate_phase
 
     stz proc_gate
 
@@ -906,6 +991,16 @@ proc_alloc_entryH:
     rts
 
 @halt:
+    ; A runnable process may have been timer-preempted while owning a
+    ; sleepable gate. Keep SIG_HALT pending until it releases that gate.
+    ; Otherwise the process could be stopped permanently with protected
+    ; subsystem state still owned.
+    cpx file_io_gate_owner
+    beq @none
+
+    cpx proc_gate_owner
+    beq @none
+
     lda proc_state,x
     cmp #PROC_NEW
     beq @halt_runnable
@@ -956,51 +1051,3 @@ proc_alloc_entryH:
     rts
 .endproc
 
-; ------------------------------------------------------------
-; proc_apply_signal
-;
-; Input:
-;   X = PID
-;
-; Return:
-;   C clear
-;
-; Notes:
-;   Backward-compatible full signal application entry point.
-;   This routine is no longer called by sched_pick_next.  Keep any
-;   caller out of the scheduler picker/scan path.  SIG_KILL is first
-;   converted to PROC_ZOMBIE; final termination is done by the idle
-;   reaper outside the picker/signal phase.
-; ------------------------------------------------------------
-
-.proc proc_apply_signal
-    lda proc_signal_pending,x
-    beq @done
-
-    cmp #SIG_HALT
-    beq @halt_or_cont
-
-    cmp #SIG_CONT
-    beq @halt_or_cont
-
-    cmp #SIG_KILL
-    beq @kill
-
-    ; Unknown signal value: consume it as invalid.
-    stz proc_signal_pending,x
-
-@done:
-    clc
-    rts
-
-@halt_or_cont:
-    jsr proc_apply_scheduler_signal
-    clc
-    rts
-
-@kill:
-    lda #$FF        ; killed by signal
-    jsr proc_mark_zombie
-    clc
-    rts
-.endproc

@@ -10,6 +10,7 @@
 .include "syscall.inc"
 .include "spawn.inc"
 .include "fd.inc"
+.include "mailbox.inc"
 
 .export ksys_spawn_alloc_resident
 .export ksys_spawn_fd_inherit
@@ -28,6 +29,7 @@
 .import proc_gate_release
 .import file_io_gate_acquire
 .import file_io_gate_release
+.import rp_fs_exec
 
 .import proc_alloc_preloaded_setup
 .import proc_set_state
@@ -53,9 +55,6 @@
 .import proc_launch_arg1_len
 .import proc_launch_arg0
 .import proc_launch_arg1
-.import proc_cwd_shared_device
-.import proc_cwd_shared_len
-.import proc_cwd_shared_path
 .import wait_reason
 .import wait_object
 
@@ -197,29 +196,6 @@ spawn_fd_clone_args:
     rts
 .endproc
 
-.proc spawn_set_cwd_dev_ptr
-    stz spawn_offset_hi
-    ; offset = pid * NEOX_CWD_MAX. Current NEOX_CWD_MAX is 32.
-    txa
-    asl
-    rol spawn_offset_hi
-    asl
-    rol spawn_offset_hi
-    asl
-    rol spawn_offset_hi
-    asl
-    rol spawn_offset_hi
-    asl
-    rol spawn_offset_hi
-
-    clc
-    adc #<proc_cwd_shared_path
-    sta dev_ptr
-    lda spawn_offset_hi
-    adc #>proc_cwd_shared_path
-    sta dev_ptr+1
-    rts
-.endproc
 
 ; ------------------------------------------------------------
 ; spawn_clear_launch_state_for_pid
@@ -233,8 +209,6 @@ spawn_fd_clone_args:
     stz proc_launch_argc,x
     stz proc_launch_arg0_len,x
     stz proc_launch_arg1_len,x
-    stz proc_cwd_shared_device,x
-    stz proc_cwd_shared_len,x
     rts
 .endproc
 
@@ -249,43 +223,6 @@ spawn_fd_clone_args:
 ;   mirror. first_run_entry later copies the child mirror into the child
 ;   context-private cwd storage.
 ; ------------------------------------------------------------
-.proc spawn_clone_parent_cwd_to_child
-    ldy active_pid
-    lda proc_cwd_shared_device,y
-    sta proc_cwd_shared_device,x
-
-    lda proc_cwd_shared_len,y
-    sta proc_cwd_shared_len,x
-    sta spawn_copy_len
-    beq @done
-
-    ; Save child PID while deriving source pointer from parent PID.
-    phx
-    tya
-    tax
-    jsr spawn_set_cwd_dev_ptr
-    lda dev_ptr
-    sta io_ptr
-    lda dev_ptr+1
-    sta io_ptr+1
-
-    ; Restore child PID and derive destination pointer.
-    plx
-    jsr spawn_set_cwd_dev_ptr
-
-    ldy #0
-@copy:
-    lda (io_ptr),y
-    sta (dev_ptr),y
-    iny
-    cpy spawn_copy_len
-    bne @copy
-    lda #0
-    sta (dev_ptr),y
-@done:
-    clc
-    rts
-.endproc
 
 ; ------------------------------------------------------------
 ; spawn_copy_parent_to_launch_slot
@@ -558,7 +495,6 @@ spawn_fd_clone_args:
     ; Initialize launch metadata and snapshot the parent's cwd before
     ; the child is allowed to run.
     jsr spawn_clear_launch_state_for_pid
-    jsr spawn_clone_parent_cwd_to_child
 
     jsr proc_gate_release
     bcs @released_ok
@@ -844,6 +780,25 @@ spawn_fd_clone_args:
     jsr spawn_validate_setup_child
     bcs @fail_release
 
+    ; Clone RP-owned CWD while the child is still PROC_SETUP. Gate order is
+    ; PROC -> FILE_IO; both may remain owned while the parent waits for RP.
+    jsr file_io_gate_acquire
+    bcc @cwd_gate_fail
+    stz io_ptr
+    stz io_ptr+1
+    lda #RP_FS_OP_CWD_CLONE
+    ldx spawn_child_pid
+    ldy active_pid
+    jsr rp_fs_exec
+    php
+    phy
+    jsr file_io_gate_release
+    ply
+    plp
+    bcs @fail_release
+
+    lda spawn_child_pid
+    ldx spawn_child_pid
     lda #PROC_NEW
     jsr proc_set_state
 
@@ -852,6 +807,9 @@ spawn_fd_clone_args:
 
     clc
     rts
+
+@cwd_gate_fail:
+    ldy #EAGAIN
 
 @fail_release:
     sty spawn_errno

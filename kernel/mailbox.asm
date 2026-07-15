@@ -28,7 +28,6 @@
 .export rp_try_acquire_lock
 .export rp_acquire_lock
 .export rp_release_lock
-.export rp_wait_idle
 .export rp_wait_done
 .export rp_mailbox_clear_request
 .export rp_mailbox_trigger
@@ -88,19 +87,6 @@
     rts
 .endproc
 
-; <summary>
-; rp_wait_idle waits until RP_STATUS reports the interface as idle.
-; </summary>
-; <returns>C clear on success.</returns>
-.proc rp_wait_idle
-@loop:
-    lda RP_STATUS
-    cmp #RP_IDLE
-    bne @loop
-
-    clc
-    rts
-.endproc
 
 ; <summary>
 ; rp_wait_done waits until RP_STATUS reports completion or failure.

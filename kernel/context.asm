@@ -24,7 +24,6 @@
 .include "context.inc"
 
 .export ctx_init_table
-.export ctx_find_free_preloaded
 .export ctx_alloc_preloaded_for_pid
 .export ctx_free_for_pid
 
@@ -99,43 +98,6 @@ ctx_tmp_pid:
     rts
 .endproc
 
-; ------------------------------------------------------------
-; ctx_find_free_preloaded
-;
-; Purpose:
-;   Find a free context containing the resident preloaded user image.
-;
-; Return:
-;   C clear = found, A = context id
-;   C set   = no preloaded free context available
-;
-; Clobbers:
-;   A, X
-; ------------------------------------------------------------
-
-.proc ctx_find_free_preloaded
-    ldx #$01
-
-@scan:
-    cpx #MAX_CONTEXTS
-    beq @fail
-
-    lda context_state,x
-    cmp #CTX_PRELOADED_FREE
-    beq @found
-
-    inx
-    bra @scan
-
-@found:
-    txa
-    clc
-    rts
-
-@fail:
-    sec
-    rts
-.endproc
 
 ; ------------------------------------------------------------
 ; ctx_alloc_preloaded_for_pid

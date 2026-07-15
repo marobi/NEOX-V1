@@ -35,16 +35,12 @@
 .export kernel_main
 .export set_brk_vector
 
-.import sched_debug_marker
-.import sched_debug_pid
-
 .import kernel_version
 
 .import irq_entry
 .import brk_vector
 .import irq_restore
 
-.import debug_init
 
 .import scheduler_init
 .import scheduler_set_current_context
@@ -107,25 +103,18 @@
 	lda #>irq_restore
 	sta brk_vector+1
 	
-	jsr debug_init
-    KLOG_OK msg_klog_debug_init
-	
 	jsr rp_init
     KLOG_OK msg_klog_rp_init
 	
     ; --------------------------------------------------------
 	; set the version of the kernel
     ; --------------------------------------------------------
-	lda #$03				; minor
+	lda #$09				; minor: pipe endpoint flags folded into pipe_state
 	sta kernel_version
 	Lda #$02				; major
 	sta kernel_version+1
     KLOG_OK msg_klog_version
 	
-	; debug
-	stz sched_debug_marker
-	stx sched_debug_pid
-	; end debug
 	
     ; --------------------------------------------------------
     ; Initialize scheduler tables and mark current execution as
@@ -192,8 +181,6 @@ msg_klog_start:
     .byte "NEOX kernel "
     NEOX_VERSION_BYTES
     .byte " start", $00
-msg_klog_debug_init:
-    .byte "debug init", $00
 msg_klog_rp_init:
     .byte "rp init", $00
 msg_klog_version:

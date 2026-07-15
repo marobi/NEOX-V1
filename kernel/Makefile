@@ -84,7 +84,6 @@ KERNEL_SRCS := \
 	kernel/supervisor.asm \
 	kernel/idle_task.asm \
 	kernel/process_control.asm \
-	kernel/process_cwd.asm \
 	kernel/fd.asm \
 	kernel/spawn.asm \
 	kernel/pipe.asm \
@@ -98,8 +97,7 @@ KERNEL_SRCS := \
 	kernel/rp_console_io.asm \
 	kernel/rp_fs_io.asm \
 	kernel/mailbox.asm \
-	kernel/init_tasks.asm \
-	kernel/debug.asm
+	kernel/init_tasks.asm
 
 USER_SRCS := \
 	user/user_space.asm

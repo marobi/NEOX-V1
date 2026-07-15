@@ -17,7 +17,6 @@
 ;   - This is deliberately not a FIFO/sleepable gate. The scheduler
 ;     cannot block on itself and IRQ handlers cannot sleep/yield.
 ;   - This lock is not recursive.
-;   - sched_lock_depth is diagnostic only: 0 = unlocked, 1 = locked.
 ;
 ; IRQ semantics:
 ;   - On successful try_enter, IRQ remains masked until leave or a
@@ -30,18 +29,10 @@
 
 .setcpu "65C02"
 
-.include "debug.inc"
-
 .export sched_lock_try_enter
 .export sched_lock_leave
 
-.import active_pid
-.import sched_debug_marker
 .import sched_lock
-.import sched_lock_owner
-.import sched_lock_phase
-.import sched_lock_depth
-.import sched_lock_underflow
 
 SCHED_LOCK_BIT = $01
 
@@ -72,29 +63,12 @@ SCHED_LOCK_BIT = $01
     ; instead of PLP: restoring P here would re-enable IRQs inside
     ; the scheduler critical section.
     pla
-
-    lda active_pid
-    sta sched_lock_owner
-
-    lda #DBG_SCHED_LOCK_ENTER
-    sta sched_lock_phase
-
-    lda #$01
-    sta sched_lock_depth
-
     clc
     rts
 
 @busy:
-    ; The bit was already set before TSB.  Keep IRQ masked while the
-    ; busy diagnostic is recorded, then restore the caller's P because
+    ; The bit was already set before TSB. Restore the caller's P because
     ; this caller did not acquire the scheduler guard.
-    lda #DBG_MARK_SCHED_LOCK_OVERFLOW
-    sta sched_debug_marker
-
-    lda #DBG_SCHED_LOCK_NESTED
-    sta sched_lock_phase
-
     plp
     sec
     rts
@@ -119,31 +93,10 @@ SCHED_LOCK_BIT = $01
 
     lda sched_lock
     and #SCHED_LOCK_BIT
-    beq @underflow
+    beq @done
 
     lda #SCHED_LOCK_BIT
     trb sched_lock
-
-    lda #DBG_OWNER_NONE
-    sta sched_lock_owner
-
-    stz sched_lock_phase
-    stz sched_lock_depth
-    bra @done
-
-@underflow:
-    lda #DBG_MARK_SCHED_LOCK_UNDERFLOW
-    sta sched_debug_marker
-
-    lda #DBG_SCHED_LOCK_BAD_LEAVE
-    sta sched_lock_phase
-
-    stz sched_lock_depth
-
-    lda sched_lock_underflow
-    cmp #$ff
-    beq @done
-    inc sched_lock_underflow
 
 @done:
     pla

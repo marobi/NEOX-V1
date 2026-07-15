@@ -24,6 +24,9 @@
 ;        -> count the tick
 ;        -> if sched_lock or rp_lock is held, resume unchanged
 ;        -> else perform normal scheduler context switch
+;
+;   Sleepable gates do not suppress timer preemption. Gate ownership is
+;   tracked by PID and remains valid while another process runs.
 ;   5. All other IRQ sources:
 ;        -> restore interrupted context unchanged
 ;
@@ -44,6 +47,8 @@
 
 .include "bios.inc"
 .include "mailbox.inc"
+.include "process.inc"
+.include "scheduler_defs.inc"
 
 .export irq_entry
 .export nmi_entry
@@ -58,8 +63,11 @@
 .import monitor_active
 
 .import rp_lock
-.import file_io_gate
-.import proc_gate
+
+.import file_io_gate_owner
+.import proc_state
+.import wait_reason
+.import proc_wake
 
 .segment "KERN_TEXT"
 
@@ -117,11 +125,50 @@
     cmp #RP_IRQ_SRC_MONITOR		; MONITOR IRQ
     beq @monitor
 
+    cmp #RP_IRQ_SRC_FS_DONE        ; RP filesystem completion
+    beq @fs_done
+
     ; unknown → just return
     bra irq_restore
 
 @monitor:
     jmp supervisor_enter_from_irq	; must be JMP
+
+@fs_done:
+    ; The FILE_IO gate owner is the sole possible generic filesystem
+    ; request owner. Wake it only when the recorded process state still
+    ; matches an active WAIT_RP transaction. The owner itself will read
+    ; the mailbox result and release FILE_IO after resuming.
+    ldx file_io_gate_owner
+    cpx #GATE_OWNER_NONE
+    beq irq_restore
+
+    cpx #MAX_PROCS
+    bcs irq_restore
+
+    lda proc_state,x
+    cmp #PROC_BLOCKED
+    bne irq_restore
+
+    lda wait_reason,x
+    cmp #WAIT_RP
+    bne irq_restore
+
+    jsr proc_wake
+
+    ; MICMON remains a freeze-style supervisor. Keep the owner READY but
+    ; do not leave the monitor through a filesystem completion interrupt.
+    lda monitor_active
+    bne irq_restore
+
+    ; A completion IRQ does not advance ticks. If a short scheduler or
+    ; mailbox critical section is active, leave the owner READY and let
+    ; the next scheduling opportunity select it.
+    lda sched_lock
+    ora rp_lock
+    bne irq_restore
+
+    jmp sched_context_switch
 	
 @timer:
     ; Freeze-style monitor:
@@ -134,15 +181,13 @@
     ; Count every hardware timer IRQ outside monitor mode.
     jsr scheduler_irq_tick
 
-    ; Only context-switch when no shared-scratch kernel region is active.
-    ; Preemptive model rule:
-    ;   file_io_gate/proc_gate protect module-global syscall scratch.
-    ;   Until that scratch is removed or made per-process, timer IRQ
-    ;   must not preempt into another syscall while a gate is owned.
+    ; sched_lock protects the scheduler handoff itself. rp_lock remains a
+    ; short non-sleeping mailbox lock until the generic RP request path
+    ; replaces it. Sleepable FILE_IO/PROC gates deliberately do not block
+    ; timer preemption: another process may run, but cannot enter the same
+    ; protected subsystem until the owning PID releases its gate.
     lda sched_lock
     ora rp_lock
-    ora file_io_gate
-    ora proc_gate
     bne irq_restore
 
     jmp sched_context_switch

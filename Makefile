@@ -87,7 +87,6 @@ KERNEL_SRCS := \
 	kernel/supervisor.asm \
 	kernel/idle_task.asm \
 	kernel/process_control.asm \
-	kernel/process_cwd.asm \
 	kernel/fd.asm \
 	kernel/spawn.asm \
 	kernel/pipe.asm \
@@ -101,8 +100,7 @@ KERNEL_SRCS := \
 	kernel/rp_console_io.asm \
 	kernel/rp_fs_io.asm \
 	kernel/mailbox.asm \
-	kernel/init_tasks.asm \
-	kernel/debug.asm
+	kernel/init_tasks.asm
 
 USER_SRCS := \
 	user/user_space.asm \
@@ -172,7 +170,7 @@ $(SYS_DIS): $(SYS_BIN) $(SYS_MAP) $(SYS_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(SYS_BIN) C000 $(SYS_MAP) $(SYS_LBL) > $@
 
 $(KRN_DIS): $(KRN_BIN) $(KRN_MAP) $(KRN_LBL) $(DISASM) | dirs
-	$(PYTHON) $(DISASM) $(KRN_BIN) 8000 $(KRN_MAP) $(KRN_LBL) > $@
+	$(PYTHON) $(DISASM) $(KRN_BIN) 6000 $(KRN_MAP) $(KRN_LBL) > $@
 
 $(USR_DIS): $(USR_BIN) $(USR_MAP) $(USR_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(USR_BIN) 2000 $(USR_MAP) $(USR_LBL) > $@

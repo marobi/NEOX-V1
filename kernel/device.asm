@@ -9,7 +9,6 @@
 .include "syscall.inc"
 
 .export dev_resolve_op
-.export dev_call
 
 .import open_dev
 .import console_ops
@@ -107,18 +106,3 @@ no_device_ops:
     rts
 .endproc
 
-; ------------------------------------------------------------
-; dev_call
-;
-; Input:
-;   dev_ptr = routine address
-;
-; Notes:
-;   65C02 has no JSR (addr), so syscall code does:
-;       jsr dev_call
-;   and this routine tail-jumps indirectly.
-; ------------------------------------------------------------
-
-.proc dev_call
-    jmp (dev_ptr)
-.endproc

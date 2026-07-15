@@ -88,22 +88,31 @@ RP_CON_CMD_READ     = $02
 ; ------------------------------------------------------------
 
 RP_FS_CMD_NONE      = $00
-RP_FS_CMD_STATUS    = $01
-RP_FS_CMD_OPEN      = $02
-RP_FS_CMD_READ      = $03
-RP_FS_CMD_CLOSE     = $04
-RP_FS_CMD_WRITE     = $05
-RP_FS_CMD_LOAD      = $06
-RP_FS_CMD_SAVE      = $07
-RP_FS_CMD_SEEK      = $08
-RP_FS_CMD_TELL      = $09
-RP_FS_CMD_DELETE    = $0A
-RP_FS_CMD_RENAME    = $0B
-RP_FS_CMD_OPENDIR   = $0C
-RP_FS_CMD_READDIR   = $0D
-RP_FS_CMD_CLOSEDIR  = $0E
-RP_FS_CMD_MKDIR     = $0F
-RP_FS_CMD_RMDIR     = $10
+RP_FS_CMD_EXEC      = $11
+
+; Generic filesystem operations carried in RP_STATE. Values $01-$10 retain
+; their established numeric assignments, but are no longer accepted as direct
+; RP_CMD values.
+RP_FS_OP_STATUS        = $01
+RP_FS_OP_OPEN          = $02
+RP_FS_OP_READ          = $03
+RP_FS_OP_CLOSE         = $04
+RP_FS_OP_WRITE         = $05
+RP_FS_OP_LOAD          = $06
+RP_FS_OP_SAVE          = $07
+RP_FS_OP_SEEK          = $08
+RP_FS_OP_TELL          = $09
+RP_FS_OP_DELETE        = $0A
+RP_FS_OP_RENAME        = $0B
+RP_FS_OP_OPENDIR       = $0C
+RP_FS_OP_READDIR       = $0D
+RP_FS_OP_CLOSEDIR      = $0E
+RP_FS_OP_MKDIR         = $0F
+RP_FS_OP_RMDIR         = $10
+RP_FS_OP_CWD_INIT_ROOT = $12
+RP_FS_OP_CWD_CLONE     = $13
+RP_FS_OP_CHDIR         = $14
+RP_FS_OP_GETCWD        = $15
 
 RP_FS_SEEK_SET      = $00
 RP_FS_SEEK_CUR      = $01
@@ -128,5 +137,6 @@ RP_FLAG_NONE        = $00
 RP_IRQ_SRC_NONE     = $00
 RP_IRQ_SRC_TIMER    = $01
 RP_IRQ_SRC_MONITOR  = $02
+RP_IRQ_SRC_FS_DONE  = $03
 
 .endif

@@ -39,6 +39,8 @@
 .import proc_signal_pending
 .import wait_reason
 .import wait_object
+.import file_io_gate_owner
+.import proc_gate_owner
 
 
 .segment "KERN_BSS"
@@ -222,8 +224,12 @@ ksys_signal_self_kill:
     jmp sched_yield
 
 @invalid_target:
+    ; proc_send_signal returns the specific rejection reason in Y. Preserve
+    ; it across gate release so a protected gate owner reports EAGAIN rather
+    ; than being misreported as an invalid PID.
+    phy
     jsr proc_gate_release
-    ldy #EINVAL
+    ply
     sec
     rts
 .endproc
@@ -384,13 +390,14 @@ ksys_signal_self_kill:
 ;   +2 state
 ;   +3 wait_reason
 ;   +4 signal_pending
+;   +5 wait_object
+;   +6 held_gate_mask
 ;
 ; Notes:
-;   This is a small diagnostic syscall.  It keeps IRQs disabled while
-;   reading the process arrays and writing the five-byte caller record,
-;   avoiding shared scratch that would otherwise live across a blocking
-;   gate acquisition.  The snapshot is intentionally compact and may be
-;   extended later through a new record version.
+;   This is a small diagnostic syscall. It keeps IRQs disabled while
+;   reading process and gate state. Callers supplying the original
+;   five-byte buffer receive the original record; buffers of seven bytes
+;   or more receive the wait object and derived gate-hold mask as well.
 ; ------------------------------------------------------------
 .proc ksys_getprocinfo
     php
@@ -412,14 +419,31 @@ ksys_signal_self_kill:
 @pid_ok:
     tax
 
-    ; Require caller buffer size >= PROCINFO_RECORD_SIZE.
+    ; Preserve compatibility with the original five-byte record. A
+    ; seven-byte or larger buffer receives the extended diagnostic fields.
     ldy #procinfo_args::buffer_size + 1
     lda (io_ptr),y
-    bne @size_ok
+    bne @extended_size
+
     dey
     lda (io_ptr),y
+    cmp #PROCINFO_RECORD_MIN_SIZE
+    bcc @size_fail
+
     cmp #PROCINFO_RECORD_SIZE
-    bcs @size_ok
+    bcs @extended_size
+
+    lda #$00
+    bra @save_size_mode
+
+@extended_size:
+    lda #$01
+
+@save_size_mode:
+    pha                         ; 0 = legacy record, 1 = extended record
+    bra @size_ok
+
+@size_fail:
     plp
     cli
     ldy #EINVAL
@@ -456,6 +480,29 @@ ksys_signal_self_kill:
     lda proc_signal_pending,x
     sta (io_ptr),y
 
+    pla                         ; extended-record flag
+    beq @record_done
+
+    iny
+    lda wait_object,x
+    sta (io_ptr),y
+
+    iny
+    lda #PROC_HOLD_NONE
+
+    cpx file_io_gate_owner
+    bne @not_file_io_owner
+    ora #PROC_HOLD_FILE_IO
+
+@not_file_io_owner:
+    cpx proc_gate_owner
+    bne @hold_mask_ready
+    ora #PROC_HOLD_PROC
+
+@hold_mask_ready:
+    sta (io_ptr),y
+
+@record_done:
     plp
     cli
     clc

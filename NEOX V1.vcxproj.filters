@@ -121,9 +121,6 @@
     <None Include="kernel\process_control.asm">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="kernel\process_cwd.asm">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="include\lock.inc">
       <Filter>Header Files</Filter>
     </None>
@@ -209,9 +206,6 @@
       <Filter>Header Files</Filter>
     </None>
     <None Include="kernel\pipe.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="kernel\debug.asm">
       <Filter>Source Files</Filter>
     </None>
     <None Include="kernel\klog.asm">

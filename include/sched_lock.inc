@@ -3,8 +3,7 @@
 ; NEOX - public scheduler-lock interface
 ;
 ; Purpose:
-;   Provides callable scheduler-lock imports and shared lock-state
-;   imports used by scheduler initialization/diagnostics.
+;   Provides the callable scheduler-lock interface and real guard byte.
 ;
 ; Rule:
 ;   All exits, including final context handoff after the target
@@ -18,10 +17,6 @@ __SCHED_LOCK_INC__ = 1
 .import sched_lock_leave
 
 .import sched_lock
-.import sched_lock_owner
-.import sched_lock_phase
-.import sched_lock_depth
-.import sched_lock_underflow
 
 SCHED_LOCK_BIT = $01
 

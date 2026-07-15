@@ -7,8 +7,8 @@
 ;   - 6502-only pipe buffer
 ;   - pipe_read remains a nonblocking primitive
 ;   - ksys_read converts empty+writers EAGAIN into WAIT_PIPE_READ
-;   - EOF when writers == 0
-;   - EPIPE/EIO when readers == 0
+;   - EOF when PIPE_STATE_WRITE_OPEN is clear
+;   - EPIPE when PIPE_STATE_READ_OPEN is clear
 ;   - short write when buffer becomes full
 ;   - ksys_write converts full+readers EAGAIN into WAIT_PIPE_WRITE
 ; ============================================================
@@ -17,23 +17,16 @@
 
 .include "fd.inc"
 .include "pipe.inc"
-.include "debug.inc"
 .include "syscall.inc"
-.include "lock.inc"
 .include "process.inc"
 
 .export pipe_init_tables
-.export pipe_alloc
-.export pipe_free
-.export pipe_endpoint_init
 .export pipe_read
 .export pipe_write
 .export pipe_close_endpoint
 
 .export pipe_create
 .export pipe_create_between_fd
-
-.import active_pid
 
 .import fd_alloc_open
 .import fd_free_open
@@ -49,8 +42,6 @@
 .import pipe_head
 .import pipe_tail
 .import pipe_count
-.import pipe_readers
-.import pipe_writers
 .import pipe_buf
 
 .import open_pipe
@@ -61,7 +52,6 @@
 
 .import file_io_gate_acquire
 .import file_io_gate_release
-.import file_io_gate_phase
 .import scheduler_wake_one
 
 .segment "KERN_BSS"
@@ -81,95 +71,64 @@
 ; scratch under a subsystem lock, instead of stack-frame state.
 ; ------------------------------------------------------------
 
-pipe_obj:           .res 1      ; open object index
+pipe_obj:           .res 1      ; pair read open object
 pipe_idx:           .res 1      ; pipe table index
-pipe_mode:          .res 1      ; PIPE_END_READ / PIPE_END_WRITE
+pipe_mode:          .res 1      ; pair write object / close mode or wait reason
 
-pipe_req_lo:        .res 1      ; requested byte count low
+pipe_req_lo:        .res 1      ; requested byte count low / temporary errno
 pipe_req_hi:        .res 1      ; requested byte count high
 
-pipe_done_lo:       .res 1      ; completed byte count low
-pipe_done_hi:       .res 1      ; completed byte count high
+pipe_done_lo:       .res 1      ; completed byte count, always 0..PIPE_BUF_SIZE
 
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
-; pipe_set_buf_ptr
+; pipe_set_buf_base
 ;
 ; Input:
 ;   X = pipe index
-;   A = byte offset within pipe buffer
 ;
 ; Output:
-;   pipe_buf_ptr = pipe_buf + X * PIPE_BUF_SIZE + offset
+;   pipe_buf_ptr = pipe_buf + X * PIPE_BUF_SIZE
 ;
 ; Requires:
 ;   PIPE_BUF_SIZE = 64
+;   MAX_PIPES <= 8
 ;
 ; Clobbers:
-;   A, Y, flags
+;   A, flags
 ;
 ; Preserves:
-;   X
+;   X, Y
 ;
 ; Notes:
-;   The low-byte carry is handled explicitly so pipe_buf does
-;   not need to be page-aligned.
+;   Six shifts produce the 64-byte block offset. The final carry
+;   is the high byte of X * 64 for pipe indices 0..7.
 ; ------------------------------------------------------------
 
-.proc pipe_set_buf_ptr
-    pha                         ; save offset
-    phx                         ; save pipe index
-
-    ; Low byte:
-    ;   <pipe_buf + ((pipe_idx & 3) * 64)
+.proc pipe_set_buf_base
     txa
-    and #$03
     asl
     asl
     asl
     asl
     asl
     asl
-    clc
-    adc #<pipe_buf
     sta pipe_buf_ptr
 
-    ; Preserve carry from low-byte base calculation in Y.
-    ldy #$00
-    bcc @no_low_carry
-    iny
-
-@no_low_carry:
-    ; High byte:
-    ;   >pipe_buf + (pipe_idx / 4) + low_carry
-    pla                         ; A = pipe index
-    pha                         ; keep for PLX
-
-    lsr
-    lsr
-    clc
-    adc #>pipe_buf
-
-    cpy #$00
-    beq @store_high
-    ina
-
-@store_high:
-    sta pipe_buf_ptr+1
-
-    plx                         ; restore pipe index
-
-    ; Add byte offset.
-    pla                         ; A = offset
-    clc
-    adc pipe_buf_ptr
-    sta pipe_buf_ptr
-
-    lda pipe_buf_ptr+1
+    lda #>pipe_buf
     adc #$00
     sta pipe_buf_ptr+1
 
+    lda pipe_buf_ptr
+    clc
+    adc #<pipe_buf
+    sta pipe_buf_ptr
+    bcc @done
+
+    inc pipe_buf_ptr+1
+
+@done:
     rts
 .endproc
 
@@ -192,8 +151,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     stz pipe_head,x
     stz pipe_tail,x
     stz pipe_count,x
-    stz pipe_readers,x
-    stz pipe_writers,x
     inx
     cpx #MAX_PIPES
     bne @clear_pipes
@@ -209,6 +166,138 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     clc
     rts
+.endproc
+
+; ------------------------------------------------------------
+; pipe_alloc_pair
+;
+; Allocate and initialize one complete pipe backend pair.
+;
+; Caller:
+;   must hold file_io_gate
+;
+; Return:
+;   C clear:
+;       A = pipe index
+;       X = read open object
+;       Y = write open object
+;
+;   C set:
+;       Y = errno
+;
+; Notes:
+;   This routine owns all common open-object, pipe-table, endpoint
+;   initialization, and pre-attachment rollback work.
+;
+;   pipe_obj / pipe_mode / pipe_idx are used as protected scratch:
+;       pipe_obj  = read open object
+;       pipe_mode = write open object
+;       pipe_idx  = pipe index
+; ------------------------------------------------------------
+
+.proc pipe_alloc_pair
+    lda #PIPE_NONE
+    sta pipe_obj
+    sta pipe_mode
+    sta pipe_idx
+
+    jsr fd_alloc_open
+    bcc @read_obj_ok
+    rts
+
+@read_obj_ok:
+    stx pipe_obj
+
+    lda #OBJ_PIPE
+    ldy #FD_FLAG_READ
+    jsr fd_init_open
+
+    jsr fd_alloc_open
+    bcc @write_obj_ok
+
+    sty pipe_req_lo
+    ldx pipe_obj
+    jsr fd_free_open
+    ldy pipe_req_lo
+    sec
+    rts
+
+@write_obj_ok:
+    stx pipe_mode
+
+    lda #OBJ_PIPE
+    ldy #FD_FLAG_WRITE
+    jsr fd_init_open
+
+    jsr pipe_alloc
+    bcc @pipe_ok
+
+    sty pipe_req_lo
+
+    ldx pipe_mode
+    jsr fd_free_open
+
+    ldx pipe_obj
+    jsr fd_free_open
+
+    ldy pipe_req_lo
+    sec
+    rts
+
+@pipe_ok:
+    sta pipe_idx
+
+    lda pipe_obj
+    ldx pipe_idx
+    ldy #PIPE_END_READ
+    jsr pipe_endpoint_init
+
+    lda pipe_mode
+    ldx pipe_idx
+    ldy #PIPE_END_WRITE
+    jsr pipe_endpoint_init
+
+    lda pipe_idx
+    ldx pipe_obj
+    ldy pipe_mode
+    clc
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; pipe_release_pair
+;
+; Roll back a complete, unattached pipe pair.
+;
+; Input:
+;   X = read open object
+;   Y = write open object
+;
+; Caller:
+;   must hold file_io_gate
+;
+; Return:
+;   C clear
+; ------------------------------------------------------------
+
+.proc pipe_release_pair
+    phx
+
+    tya
+    pha
+    jsr pipe_close_endpoint
+
+    pla
+    tax
+    jsr fd_free_open
+
+    pla
+    pha
+    jsr pipe_close_endpoint
+
+    pla
+    tax
+    jmp fd_free_open
 .endproc
 
 ; ------------------------------------------------------------
@@ -228,269 +317,123 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   $0101,S = errno
 ;   $0102,S = read open object
 ;   $0103,S = write open object
-;   $0104,S = pipe index
-;   $0105,S = read fd
-;   $0106,S = write fd
-;
-; Notes:
-;   - Reentrant: no module-global scratch.
-;   - file_io_gate is held while FD/open-object state is allocated.
-;   - file_io_gate is held while pipe table/endpoint state is touched.
-;   - pipe_close_endpoint expects file_io_gate to be held.
+;   $0104,S = read fd
+;   $0105,S = write fd
 ; ------------------------------------------------------------
 
 .proc pipe_create
-    ; Allocate local stack frame, initialized to $FF.
-    lda #$ff
-    pha                         ; write fd
-    pha                         ; read fd
-    pha                         ; pipe index
-    pha                         ; write open object
-    pha                         ; read open object
-    pha                         ; errno
+    lda #PIPE_NONE
+    pha
+    pha
+    pha
+    pha
 
+    lda #EIO
+    pha
 
-    ; --------------------------------------------------------
-    ; Allocate and initialize read endpoint open object.
-    ; --------------------------------------------------------
-
-    jsr fd_alloc_open
-    bcc @read_obj_ok
+    jsr pipe_alloc_pair
+    bcc @pair_ok
 
     tya
     tsx
-    sta $0101,x                 ; errno
-    jmp @fail_fdlock
+    sta $0101,x
+    jmp @fail_frame
 
-@read_obj_ok:
-    txa                         ; A = read open object
+@pair_ok:
     tsx
+    lda pipe_obj
     sta $0102,x
 
-    lda $0102,x
-    tax                         ; X = read open object
-    lda #OBJ_PIPE
-    ldy #FD_FLAG_READ
-    jsr fd_init_open
-
-    ; --------------------------------------------------------
-    ; Allocate and initialize write endpoint open object.
-    ; --------------------------------------------------------
-
-    jsr fd_alloc_open
-    bcc @write_obj_ok
-
-    tya
-    tsx
-    sta $0101,x                 ; errno
-    jmp @fail_readobj
-
-@write_obj_ok:
-    txa                         ; A = write open object
-    tsx
+    lda pipe_mode
     sta $0103,x
-
-    lda $0103,x
-    tax                         ; X = write open object
-    lda #OBJ_PIPE
-    ldy #FD_FLAG_WRITE
-    jsr fd_init_open
-
-    ; --------------------------------------------------------
-    ; Allocate pipe table entry and attach endpoint metadata.
-    ; --------------------------------------------------------
-
-
-    jsr pipe_alloc
-    bcc @pipe_ok
-
-    tya
-    tsx
-    sta $0101,x                 ; errno
-
-    jmp @fail_writeobj
-
-@pipe_ok:
-    tsx
-    sta $0104,x                 ; pipe index
-
-    ; read endpoint: A = read object, X = pipe index, Y = read mode
-    lda $0102,x                 ; read open object
-    pha
-
-    lda $0104,x                 ; pipe index
-    tax
-
-    pla                         ; A = read open object
-    ldy #PIPE_END_READ
-    jsr pipe_endpoint_init
-
-    ; write endpoint: A = write object, X = pipe index, Y = write mode
-    tsx
-    lda $0103,x                 ; write open object
-    pha
-
-    lda $0104,x                 ; pipe index
-    tax
-
-    pla                         ; A = write open object
-    ldy #PIPE_END_WRITE
-    jsr pipe_endpoint_init
-
-
-    ; --------------------------------------------------------
-    ; Allocate read fd and attach it.
-    ; --------------------------------------------------------
 
     jsr fd_alloc_fd_current
     bcc @read_fd_ok
 
     tya
     tsx
-    sta $0101,x                 ; errno
-    jmp @fail_endpoints
+    sta $0101,x
+    jmp @fail_pair
 
 @read_fd_ok:
-    tya                         ; A = read fd
+    tya
     tsx
-    sta $0105,x
+    sta $0104,x
 
-    ; Attach read fd.
-    ; Keep X as stack index until Y has been loaded.
-    lda $0102,x                 ; read open object
-    pha
-
-    ldy $0105,x                 ; read fd
-
-    pla
-    tax                         ; X = read open object
-
+    ldy $0104,x
+    lda $0102,x
+    tax
     lda #FD_FLAG_READ
     jsr fd_attach_current
-
-    ; --------------------------------------------------------
-    ; Allocate write fd and attach it.
-    ; --------------------------------------------------------
 
     jsr fd_alloc_fd_current
     bcc @write_fd_ok
 
     tya
     tsx
-    sta $0101,x                 ; errno
-    jmp @fail_readfd
+    sta $0101,x
+    jmp @fail_read_fd
 
 @write_fd_ok:
-    tya                         ; A = write fd
+    tya
     tsx
-    sta $0106,x
+    sta $0105,x
 
-    ; Attach write fd.
-    ; Keep X as stack index until Y has been loaded.
-    lda $0103,x                 ; write open object
-    pha
-
-    ldy $0106,x                 ; write fd
-
-    pla
-    tax                         ; X = write open object
-
+    ldy $0105,x
+    lda $0103,x
+    tax
     lda #FD_FLAG_WRITE
     jsr fd_attach_current
 
-    ; --------------------------------------------------------
-    ; Success.
-    ; --------------------------------------------------------
-
-
-    ; Save return values above the local frame.
     tsx
-    lda $0105,x                 ; read fd
+    lda $0104,x
     pha
 
-    lda $0106,x                 ; write fd
+    lda $0105,x
     pha
 
-    ; Restore return values first.
     pla
-    tax                         ; X = write fd
+    tax
 
     pla
-    tay                         ; Y = read fd
+    tay
 
-    ; Drop local frame.
-    pla                         ; errno
-    pla                         ; read open object
-    pla                         ; write open object
-    pla                         ; pipe index
-    pla                         ; read fd
-    pla                         ; write fd
+    pla
+    pla
+    pla
+    pla
+    pla
 
-    tya                         ; A = read fd
+    tya
     clc
     rts
 
-    ; --------------------------------------------------------
-    ; Rollback paths.
-    ; --------------------------------------------------------
-
-@fail_readfd:
-    ; Undo read fd attachment.
-    ; file_io_gate is still held.
+@fail_read_fd:
     tsx
-    lda $0105,x
+    lda $0104,x
     jsr fd_detach_current
 
-@fail_endpoints:
-    ; file_io_gate is held here.
-    ; pipe_close_endpoint expects file_io_gate to be held.
-
+@fail_pair:
     tsx
-    lda $0103,x                 ; write open object
-    cmp #$ff
-    beq @close_read_endpoint
+    lda $0102,x
+    pha
 
-    jsr pipe_close_endpoint
+    lda $0103,x
+    tay
 
-@close_read_endpoint:
-    tsx
-    lda $0102,x                 ; read open object
-    cmp #$ff
-    beq @fail_writeobj
-
-    jsr pipe_close_endpoint
-
-@fail_writeobj:
-    tsx
-    lda $0103,x                 ; write open object
-    cmp #$ff
-    beq @fail_readobj
-
+    pla
     tax
-    jsr fd_free_open
+    jsr pipe_release_pair
 
-@fail_readobj:
-    tsx
-    lda $0102,x                 ; read open object
-    cmp #$ff
-    beq @fail_fdlock
-
-    tax
-    jsr fd_free_open
-
-@fail_fdlock:
-
-    ; Load errno before dropping frame.
+@fail_frame:
     tsx
     ldy $0101,x
 
-    ; Drop local frame.
-    pla                         ; errno
-    pla                         ; read open object
-    pla                         ; write open object
-    pla                         ; pipe index
-    pla                         ; read fd
-    pla                         ; write fd
+    pla
+    pla
+    pla
+    pla
+    pla
 
     sec
     rts
@@ -506,37 +449,18 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ;   X = writer PID
 ;   Y = fd number to install in both processes
 ;
-; Example:
-;   A = 2
-;   X = 1
-;   Y = 3
-;
-; Result:
-;   PID 2 fd 3 = read endpoint
-;   PID 1 fd 3 = write endpoint
-;
 ; Return:
 ;   C clear = success
 ;   C set   = failure, Y = errno
-;
-; Notes:
-;   - Not a syscall.
-;   - Caller should use this during kernel/static task setup.
-;   - Same PID is rejected because this helper uses one common fd.
-;     Use normal pipe_create for same-process pipes.
 ; ------------------------------------------------------------
 
 .proc pipe_create_between_fd
-    ; This entry-table helper can be called outside ksys_io.asm,
-    ; so it acquires file_io_gate itself.
     pha
     phx
     phy
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    lda #DBG_FILE_IO_PIPE_LINK_ACQ_FAIL
-    sta file_io_gate_phase
     ply
     plx
     pla
@@ -545,8 +469,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @gate_acquired:
-    lda #DBG_FILE_IO_PIPE_LINK_ACQ
-    sta file_io_gate_phase
     ply
     plx
     pla
@@ -565,36 +487,41 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 .endproc
 
+; ------------------------------------------------------------
+; pipe_create_between_fd_inner
+;
+; Input:
+;   A = reader PID
+;   X = writer PID
+;   Y = common fd
+;
+; Caller:
+;   must hold file_io_gate
+;
+; Stack frame:
+;   $0101,S = errno
+;   $0102,S = write open object
+;   $0103,S = read open object
+;   $0104,S = common fd
+;   $0105,S = writer PID
+;   $0106,S = reader PID
+; ------------------------------------------------------------
+
 .proc pipe_create_between_fd_inner
-    ; Stack frame:
-    ;   $0101,x = errno
-    ;   $0102,x = pipe index
-    ;   $0103,x = write open object
-    ;   $0104,x = read open object
-    ;   $0105,x = common fd
-    ;   $0106,x = writer PID
-    ;   $0107,x = reader PID
-
-    pha                         ; reader PID
-    phx                         ; writer PID
-    phy                         ; common fd
+    pha
+    phx
+    phy
 
     lda #PIPE_NONE
-    pha                         ; read open object
-
-    lda #PIPE_NONE
-    pha                         ; write open object
-
-    lda #PIPE_NONE
-    pha                         ; pipe index
+    pha
+    pha
 
     lda #EIO
-    pha                         ; errno
+    pha
 
-    ; Reject same PID for this fixed-fd helper.
     tsx
-    lda $0107,x                 ; reader PID
-    cmp $0106,x                 ; writer PID
+    lda $0106,x
+    cmp $0105,x
     bne @pids_ok
 
     lda #EINVAL
@@ -602,14 +529,8 @@ pipe_done_hi:       .res 1      ; completed byte count high
     jmp @fail_frame
 
 @pids_ok:
-
-    ; --------------------------------------------------------
-    ; Validate reader fd is free.
-    ; --------------------------------------------------------
-
-    tsx
-    ldy $0105,x                 ; common fd
-    lda $0107,x                 ; reader PID
+    ldy $0104,x
+    lda $0106,x
     tax
     jsr fd_check_free_pid_fd
     bcc @reader_fd_free
@@ -617,16 +538,12 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd
+    jmp @fail_frame
 
 @reader_fd_free:
-    ; --------------------------------------------------------
-    ; Validate writer fd is free.
-    ; --------------------------------------------------------
-
     tsx
-    ldy $0105,x                 ; common fd
-    lda $0106,x                 ; writer PID
+    ldy $0104,x
+    lda $0105,x
     tax
     jsr fd_check_free_pid_fd
     bcc @writer_fd_free
@@ -634,206 +551,76 @@ pipe_done_hi:       .res 1      ; completed byte count high
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd
+    jmp @fail_frame
 
 @writer_fd_free:
-    ; --------------------------------------------------------
-    ; Allocate and initialize read endpoint open object.
-    ; --------------------------------------------------------
-
-    jsr fd_alloc_open
-    bcc @read_obj_ok
+    jsr pipe_alloc_pair
+    bcc @pair_ok
 
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd
+    jmp @fail_frame
 
-@read_obj_ok:
-    txa                         ; A = read open object
+@pair_ok:
     tsx
-    sta $0104,x
+    lda pipe_mode
+    sta $0102,x
 
-    lda $0104,x
-    tax                         ; X = read open object
-    lda #OBJ_PIPE
-    ldy #FD_FLAG_READ
-    jsr fd_init_open
-
-    ; --------------------------------------------------------
-    ; Allocate and initialize write endpoint open object.
-    ; --------------------------------------------------------
-
-    jsr fd_alloc_open
-    bcc @write_obj_ok
-
-    tya
-    tsx
-    sta $0101,x
-
-    lda $0104,x                 ; read open object
-    tax
-    jsr fd_free_open
-
-    jmp @fail_fd
-
-@write_obj_ok:
-    txa                         ; A = write open object
-    tsx
+    lda pipe_obj
     sta $0103,x
 
+    ldy $0104,x
     lda $0103,x
-    tax                         ; X = write open object
-    lda #OBJ_PIPE
-    ldy #FD_FLAG_WRITE
-    jsr fd_init_open
-
-    ; --------------------------------------------------------
-    ; Allocate pipe and initialize endpoint metadata.
-    ; --------------------------------------------------------
-
-
-    jsr pipe_alloc
-    bcc @pipe_ok
-
-
-    tya
-    tsx
-    sta $0101,x
-
-    lda $0104,x                 ; read open object
-    tax
-    jsr fd_free_open
-
-    tsx
-    lda $0103,x                 ; write open object
-    tax
-    jsr fd_free_open
-
-    jmp @fail_fd
-
-@pipe_ok:
-    tsx
-    sta $0102,x                 ; pipe index returned in A
-
-    ; read endpoint metadata:
-    ;   A = read open object
-    ;   X = pipe index
-    ;   Y = PIPE_END_READ
-
-    lda $0104,x                 ; read open object
     pha
 
-    lda $0102,x                 ; pipe index
-    tax
-
-    pla                         ; A = read open object
-    ldy #PIPE_END_READ
-    jsr pipe_endpoint_init
-
-    ; write endpoint metadata:
-    ;   A = write open object
-    ;   X = pipe index
-    ;   Y = PIPE_END_WRITE
-
-    tsx
-    lda $0103,x                 ; write open object
-    pha
-
-    lda $0102,x                 ; pipe index
-    tax
-
-    pla                         ; A = write open object
-    ldy #PIPE_END_WRITE
-    jsr pipe_endpoint_init
-
-
-    ; --------------------------------------------------------
-    ; Attach read endpoint to reader PID/fd.
-    ;
-    ; Input to fd_attach_pid_fd_read:
-    ;   A = PID
-    ;   X = open object
-    ;   Y = fd
-    ; --------------------------------------------------------
-
-    tsx
-    ldy $0105,x                 ; common fd
-
-    lda $0104,x                 ; read open object
-    pha
-
-    lda $0107,x                 ; reader PID
-    plx                         ; X = read open object
-
+    lda $0106,x
+    plx
     jsr fd_attach_pid_fd_read
-    bcc @read_attach_ok
+    bcc @read_attached
 
-    ; Should be unreachable because file_io_gate is still held and the
-    ; fd slot was prechecked.
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd
+    jmp @fail_frame
 
-@read_attach_ok:
-    ; --------------------------------------------------------
-    ; Attach write endpoint to writer PID/fd.
-    ;
-    ; Input to fd_attach_pid_fd_write:
-    ;   A = PID
-    ;   X = open object
-    ;   Y = fd
-    ; --------------------------------------------------------
-
+@read_attached:
     tsx
-    ldy $0105,x                 ; common fd
-
-    lda $0103,x                 ; write open object
+    ldy $0104,x
+    lda $0102,x
     pha
 
-    lda $0106,x                 ; writer PID
-    plx                         ; X = write open object
-
+    lda $0105,x
+    plx
     jsr fd_attach_pid_fd_write
-    bcc @write_attach_ok
+    bcc @success
 
-    ; Should be unreachable because file_io_gate is still held and the
-    ; fd slot was prechecked.
     tya
     tsx
     sta $0101,x
-    jmp @fail_fd
+    jmp @fail_frame
 
-@write_attach_ok:
-
-    ; Drop stack frame.
-    pla                         ; errno
-    pla                         ; pipe index
-    pla                         ; write open object
-    pla                         ; read open object
-    pla                         ; common fd
-    pla                         ; writer PID
-    pla                         ; reader PID
+@success:
+    pla
+    pla
+    pla
+    pla
+    pla
+    pla
 
     clc
     rts
 
-@fail_fd:
-
 @fail_frame:
     tsx
-    lda $0101,x
-    tay
+    ldy $0101,x
 
-    ; Drop stack frame.
-    pla                         ; errno
-    pla                         ; pipe index
-    pla                         ; write open object
-    pla                         ; read open object
-    pla                         ; common fd
-    pla                         ; writer PID
-    pla                         ; reader PID
+    pla
+    pla
+    pla
+    pla
+    pla
+    pla
 
     sec
     rts
@@ -870,16 +657,12 @@ pipe_done_hi:       .res 1      ; completed byte count high
     rts
 
 @found:
-    lda #PIPE_USED
+    lda #PIPE_STATE_USED
     sta pipe_state,x
 
     stz pipe_head,x
     stz pipe_tail,x
     stz pipe_count,x
-
-    lda #$01
-    sta pipe_readers,x
-    sta pipe_writers,x
 
     txa
     clc
@@ -910,8 +693,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     stz pipe_head,x
     stz pipe_tail,x
     stz pipe_count,x
-    stz pipe_readers,x
-    stz pipe_writers,x
 
     clc
     rts
@@ -950,6 +731,53 @@ pipe_done_hi:       .res 1      ; completed byte count high
 .endproc
 
 ; ------------------------------------------------------------
+; pipe_resolve_endpoint
+;
+; Resolve and validate one pipe endpoint.
+;
+; Input:
+;   A = required endpoint mode
+;   X = open object index
+;
+; Return:
+;   C clear:
+;       X = pipe index
+;       pipe_idx = pipe index
+;
+;   C set:
+;       Y = EBADF
+;
+; Caller:
+;   must hold file_io_gate
+;
+; Clobbers:
+;   A, X, Y, flags
+; ------------------------------------------------------------
+
+.proc pipe_resolve_endpoint
+    cmp open_pipe_mode,x
+    bne @bad_endpoint
+
+    lda open_pipe,x
+    cmp #PIPE_NONE
+    beq @bad_endpoint
+
+    sta pipe_idx
+    tax
+
+    lda pipe_state,x
+    beq @bad_endpoint
+
+    clc
+    rts
+
+@bad_endpoint:
+    ldy #EBADF
+    sec
+    rts
+.endproc
+
+; ------------------------------------------------------------
 ; pipe_close_endpoint
 ;
 ; Close pipe endpoint effects.
@@ -976,10 +804,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 ; ------------------------------------------------------------
 
 .proc pipe_close_endpoint
-    sta pipe_obj
-
-
-    ldx pipe_obj
+    tax
 
     lda open_pipe,x
     cmp #PIPE_NONE
@@ -994,66 +819,63 @@ pipe_done_hi:       .res 1      ; completed byte count high
     lda open_pipe_mode,x
     sta pipe_mode
 
-    ; Detach open object from pipe metadata.
+    ; Detach the final open-object reference from its endpoint.
     lda #PIPE_NONE
     sta open_pipe,x
     stz open_pipe_mode,x
 
-    ldx pipe_idx
-
+    ; PIPE_END_READ/WRITE use the same bit values as the corresponding
+    ; pipe_state endpoint-presence flags.
     lda pipe_mode
     cmp #PIPE_END_READ
-    bne @check_write
+    beq @valid_mode
 
-    lda pipe_readers,x
-    beq @maybe_free
-
-    dec pipe_readers,x
-    bne @maybe_free
-
-    ; Last reader closed. Wake all writers blocked on this pipe so
-    ; they can retry pipe_write and receive EPIPE instead of sleeping
-    ; forever. file_io_gate is still held here.
-@wake_writers_for_epipe:
-    lda #WAIT_PIPE_WRITE
-    ldy pipe_idx
-    jsr scheduler_wake_one
-    bcc @wake_writers_for_epipe
-
-    ldx pipe_idx
-    bra @maybe_free
-
-@check_write:
     cmp #PIPE_END_WRITE
     bne @maybe_free
 
-    lda pipe_writers,x
-    beq @maybe_free
-
-    dec pipe_writers,x
-    bne @maybe_free
-
-    ; Last writer closed. Wake all readers blocked on this pipe so
-    ; they can retry pipe_read and receive EOF instead of sleeping
-    ; forever. file_io_gate is still held here.
-@wake_readers_for_eof:
-    lda #WAIT_PIPE_READ
-    ldy pipe_idx
-    jsr scheduler_wake_one
-    bcc @wake_readers_for_eof
-
+@valid_mode:
     ldx pipe_idx
 
+    lda pipe_state,x
+    and pipe_mode
+    beq @maybe_free
+
+    ; Clear the endpoint-presence bit selected by pipe_mode.
+    lda pipe_mode
+    eor #$FF
+    and pipe_state,x
+    sta pipe_state,x
+
+    ; Closing the read end wakes writers for EPIPE.
+    ; Closing the write end wakes readers for data/EOF.
+    lda pipe_mode
+    cmp #PIPE_END_READ
+    beq @wake_writers
+
+    lda #WAIT_PIPE_READ
+    bra @wake_all
+
+@wake_writers:
+    lda #WAIT_PIPE_WRITE
+
+@wake_all:
+    sta pipe_mode
+
+@wake_next:
+    lda pipe_mode
+    ldy pipe_idx
+    jsr scheduler_wake_one
+    bcc @wake_next
+
 @maybe_free:
-    lda pipe_readers,x
-    ora pipe_writers,x
+    ldx pipe_idx
+    lda pipe_state,x
     bne @done
 
     txa
     jsr pipe_free
 
 @done:
-
     clc
     rts
 .endproc
@@ -1113,8 +935,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
 
     ; file_io_gate is already held by the syscall wrapper.
-    ply
-    sty pipe_obj
+    ply                         ; Y = open object
 
     plx
     stx pipe_req_hi
@@ -1122,32 +943,14 @@ pipe_done_hi:       .res 1      ; completed byte count high
     pla
     sta pipe_req_lo
 
-    ; Validate endpoint mode.
-    ldx pipe_obj
+    ; Resolve and validate the read endpoint.
+    tya
+    tax
+    lda #PIPE_END_READ
+    jsr pipe_resolve_endpoint
+    bcc @state_ok
 
-    lda open_pipe_mode,x
-    cmp #PIPE_END_READ
-    beq @mode_ok
-
-    jmp @err_ebadf
-
-@mode_ok:
-    ; Resolve open object -> pipe index.
-    lda open_pipe,x
-    cmp #PIPE_NONE
-    bne @pipe_ok
-
-    jmp @err_ebadf
-
-@pipe_ok:
-    sta pipe_idx
-    tax                         ; X = pipe index
-
-    lda pipe_state,x
-    cmp #PIPE_USED
-    beq @state_ok
-
-    jmp @err_ebadf
+    rts
 
 @state_ok:
     ; Empty pipe:
@@ -1156,7 +959,8 @@ pipe_done_hi:       .res 1      ; completed byte count high
     lda pipe_count,x
     bne @can_read
 
-    lda pipe_writers,x
+    lda pipe_state,x
+    and #PIPE_STATE_WRITE_OPEN
     bne @err_eagain
 
 
@@ -1167,7 +971,9 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
 @can_read:
     stz pipe_done_lo
-    stz pipe_done_hi
+
+    ; Resolve this pipe's 64-byte buffer base once for the call.
+    jsr pipe_set_buf_base
 
 @read_loop:
     ; Stop when requested length has been reached.
@@ -1182,26 +988,17 @@ pipe_done_hi:       .res 1      ; completed byte count high
     beq @done
 
 @check_available:
-    ldx pipe_idx
-
     lda pipe_count,x
     beq @done
 
-    ; Compute source pointer:
-    ;   pipe_buf_ptr = pipe buffer base + tail
-    lda pipe_tail,x
-    jsr pipe_set_buf_ptr
-
-    ; Copy one byte from pipe buffer to user buffer[done].
-    ldy #$00
+    ; Read one byte from pipe buffer[tail] into user buffer[done].
+    ldy pipe_tail,x
     lda (pipe_buf_ptr),y
 
     ldy pipe_done_lo
     sta (pipe_ptr),y
 
     ; Advance tail.
-    ldx pipe_idx
-
     lda pipe_tail,x
     ina
     and #(PIPE_BUF_SIZE - 1)
@@ -1209,44 +1006,26 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     dec pipe_count,x
 
-    ; done++
+    ; done++. One call can transfer at most PIPE_BUF_SIZE bytes,
+    ; so the one-byte counter cannot wrap.
     inc pipe_done_lo
-    bne @read_loop
-
-    inc pipe_done_hi
     bra @read_loop
 
 @done:
-    ; Save pipe_done_* before waking writers and returning through the
-    ; backend ABI. If at least one byte was read, wake one writer blocked
-    ; on this pipe. file_io_gate is still held here, so the woken writer
-    ; cannot race the consumed pipe state before the reader returns.
+    ; If at least one byte was read, wake one blocked writer.
+    ; The backend can return at most PIPE_BUF_SIZE bytes, so X is zero.
     lda pipe_done_lo
-    pha
-
-    lda pipe_done_hi
-    pha
-
-    lda pipe_done_lo
-    ora pipe_done_hi
     beq @return_done
 
+    pha
     lda #WAIT_PIPE_WRITE
     ldy pipe_idx
     jsr scheduler_wake_one
+    pla
 
 @return_done:
-    pla
-    tax                         ; X = bytes read high
-
-    pla                         ; A = bytes read low
+    ldx #$00
     clc
-    rts
-
-@err_ebadf:
-
-    ldy #EBADF
-    sec
     rts
 
 @err_eagain:
@@ -1312,8 +1091,7 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
 
     ; file_io_gate is already held by the syscall wrapper.
-    ply
-    sty pipe_obj
+    ply                         ; Y = open object
 
     plx
     stx pipe_req_hi
@@ -1321,43 +1099,28 @@ pipe_done_hi:       .res 1      ; completed byte count high
     pla
     sta pipe_req_lo
 
-    ; Validate endpoint mode.
-    ldx pipe_obj
+    ; Resolve and validate the write endpoint.
+    tya
+    tax
+    lda #PIPE_END_WRITE
+    jsr pipe_resolve_endpoint
+    bcc @state_ok
 
-    lda open_pipe_mode,x
-    cmp #PIPE_END_WRITE
-    beq @mode_ok
-
-    jmp @err_ebadf
-
-@mode_ok:
-    ; Resolve open object -> pipe index.
-    lda open_pipe,x
-    cmp #PIPE_NONE
-    bne @pipe_ok
-
-    jmp @err_ebadf
-
-@pipe_ok:
-    sta pipe_idx
-    tax                         ; X = pipe index
-
-    lda pipe_state,x
-    cmp #PIPE_USED
-    beq @state_ok
-
-    jmp @err_ebadf
+    rts
 
 @state_ok:
     ; Broken pipe: no readers.
-    lda pipe_readers,x
+    lda pipe_state,x
+    and #PIPE_STATE_READ_OPEN
     bne @can_start
 
     jmp @err_epipe
 
 @can_start:
     stz pipe_done_lo
-    stz pipe_done_hi
+
+    ; Resolve this pipe's 64-byte buffer base once for the call.
+    jsr pipe_set_buf_base
 
 @write_loop:
     ; Stop when requested length has been reached.
@@ -1372,8 +1135,6 @@ pipe_done_hi:       .res 1      ; completed byte count high
     beq @done
 
 @check_space:
-    ldx pipe_idx
-
     lda pipe_count,x
     cmp #PIPE_BUF_SIZE
     bne @space_available
@@ -1381,28 +1142,20 @@ pipe_done_hi:       .res 1      ; completed byte count high
     ; Full pipe.
     ; If some progress was made, return a short write.
     lda pipe_done_lo
-    ora pipe_done_hi
     bne @done
 
     ; Full with zero progress: nonblocking would-block.
     jmp @err_eagain
 
 @space_available:
-    ; Compute destination pointer:
-    ;   pipe_buf_ptr = pipe buffer base + head
-    lda pipe_head,x
-    jsr pipe_set_buf_ptr
-
-    ; Copy one byte from user buffer[done] to pipe buffer.
+    ; Write one byte from user buffer[done] to pipe buffer[head].
     ldy pipe_done_lo
     lda (pipe_ptr),y
 
-    ldy #$00
+    ldy pipe_head,x
     sta (pipe_buf_ptr),y
 
     ; Advance head.
-    ldx pipe_idx
-
     lda pipe_head,x
     ina
     and #(PIPE_BUF_SIZE - 1)
@@ -1410,49 +1163,26 @@ pipe_done_hi:       .res 1      ; completed byte count high
 
     inc pipe_count,x
 
-    ; done++
+    ; done++. One call can transfer at most PIPE_BUF_SIZE bytes,
+    ; so the one-byte counter cannot wrap.
     inc pipe_done_lo
-    bne @write_loop
-
-    inc pipe_done_hi
     bra @write_loop
 
 @done:
-    ; If at least one byte was written, wake one reader blocked on
-    ; this pipe.  The syscall wrapper still owns file_io_gate here,
-    ; so the woken reader cannot race the pipe state before the writer
-    ; returns and releases the gate.
+    ; If at least one byte was written, wake one blocked reader.
+    ; The backend can return at most PIPE_BUF_SIZE bytes, so X is zero.
     lda pipe_done_lo
-    ora pipe_done_hi
     beq @return_done
 
-    lda pipe_done_lo
     pha
-
-    lda pipe_done_hi
-    pha
-
     lda #WAIT_PIPE_READ
     ldy pipe_idx
     jsr scheduler_wake_one
-
     pla
-    tax                         ; X = bytes written high
-
-    pla                         ; A = bytes written low
-    clc
-    rts
 
 @return_done:
-    lda pipe_done_lo
-    ldx pipe_done_hi
+    ldx #$00
     clc
-    rts
-
-@err_ebadf:
-
-    ldy #EBADF
-    sec
     rts
 
 @err_eagain:

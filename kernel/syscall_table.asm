@@ -154,21 +154,6 @@ syscall_table:
 
 .segment "KERN_TEXT"
 
-; ------------------------------------------------------------
-; sys_ok_ax0
-;
-; Return:
-;   C clear
-;   A = 0
-;   X = 0
-; ------------------------------------------------------------
-
-.proc sys_ok_ax0
-    lda #0
-    tax
-    clc
-    rts
-.endproc
 
 
 .proc k_exit

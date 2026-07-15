@@ -16,7 +16,6 @@
 .setcpu "65C02"
 
 .include "bios.inc"
-.include "debug.inc"
 .include "sched_lock.inc"
 
 .export enter_monitor

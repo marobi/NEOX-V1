@@ -19,8 +19,8 @@
 .setcpu "65C02"
 
 .include "fd.inc"
-.include "debug.inc"
 .include "lock.inc"
+.include "mailbox.inc"
 .include "math8.inc"
 .include "scheduler_defs.inc"
 .include "syscall.inc"
@@ -39,7 +39,6 @@
 .export fd_dup
 .export fd_dup2
 .export fd_clone_between
-.export fd_clone_stdio_between
 .export fd_close_pid
 .export fd_clear_process_slots
 
@@ -79,12 +78,8 @@
 .import pipe_read
 .import pipe_write
 .import pipe_close_endpoint
-.import file_io_gate_phase
 
-.import rp_fs_read
-.import rp_fs_write
-.import rp_fs_close
-.import rp_fs_closedir
+.import rp_fs_exec
 
 .segment "KERN_BSS"
 
@@ -153,18 +148,6 @@ fd_clone_target_pid:
 
 fd_clone_target_fd:
     .res 1              ; target fd for cross-process fd clone
-
-fd_clone_stdio_source_pid:
-    .res 1              ; source PID used by fd_clone_stdio_between
-
-fd_clone_stdio_target_pid:
-    .res 1              ; target PID used by fd_clone_stdio_between
-
-fd_clone_stdio_fd:
-    .res 1              ; fd iterator used by fd_clone_stdio_between
-
-fd_clone_stdio_args:
-    .res FD_CLONE_ARGS_SIZE
 
 .segment "KERN_TEXT"
 
@@ -997,91 +980,7 @@ fd_clone_stdio_args:
     rts
 .endproc
 
-; ------------------------------------------------------------
-; fd_clone_stdio_between
-;
-; Purpose:
-;   Clone fd 0, 1, and 2 from one process to another process.
-;
-; Input:
-;   A = source PID
-;   X = target PID
-;
-; Output:
-;   C clear = success
-;   C set   = failure, Y = errno
-;
-; Requirements:
-;   Caller owns file_io_gate.
-;
-; Notes:
-;   This helper prepares the normal spawn inheritance case:
-;     parent fd 0 -> child fd 0
-;     parent fd 1 -> child fd 1
-;     parent fd 2 -> child fd 2
-;
-;   Redirection can later use fd_clone_between directly to map an
-;   arbitrary parent fd to a specific child fd.
-; ------------------------------------------------------------
 
-.proc fd_clone_stdio_between
-    sta fd_clone_stdio_source_pid
-    stx fd_clone_stdio_target_pid
-
-    lda #STDIN
-    sta fd_clone_stdio_fd
-    jsr fd_clone_one_stdio
-    bcs @fail
-
-    lda #STDOUT
-    sta fd_clone_stdio_fd
-    jsr fd_clone_one_stdio
-    bcs @fail
-
-    lda #STDERR
-    sta fd_clone_stdio_fd
-    jsr fd_clone_one_stdio
-    bcs @fail
-
-    clc
-    rts
-
-@fail:
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; fd_clone_one_stdio
-;
-; Internal helper for fd_clone_stdio_between.
-;
-; Input:
-;   fd_clone_stdio_source_pid = source PID
-;   fd_clone_stdio_target_pid = target PID
-;   fd_clone_stdio_fd         = fd to clone
-;
-; Requirements:
-;   Caller owns file_io_gate.
-; ------------------------------------------------------------
-
-.proc fd_clone_one_stdio
-    lda fd_clone_stdio_source_pid
-    sta fd_clone_stdio_args + fd_clone_args::source_pid
-
-    lda fd_clone_stdio_fd
-    sta fd_clone_stdio_args + fd_clone_args::source_fd
-
-    lda fd_clone_stdio_target_pid
-    sta fd_clone_stdio_args + fd_clone_args::target_pid
-
-    lda fd_clone_stdio_fd
-    sta fd_clone_stdio_args + fd_clone_args::target_fd
-
-    ldx #<fd_clone_stdio_args
-    ldy #>fd_clone_stdio_args
-    jmp fd_clone_between
-.endproc
 
 ; ------------------------------------------------------------
 ; fd_close_pid
@@ -1221,20 +1120,24 @@ fd_clone_stdio_args:
     bra @done
 
 @close_file:
-    ; X = open object. File close is synchronous and serialized by
-    ; file_io_gate plus rp_lock in the RP mailbox transport.
-    phx
-    lda open_file_handle,x
-    jsr rp_fs_close
-    plx
-    jsr fd_free_open
-    bra @done
+    lda #RP_FS_OP_CLOSE
+    bra @close_rp_object
 
 @close_dir:
-    ; X = open object. Directory close releases the RP-owned DIR handle.
+    lda #RP_FS_OP_CLOSEDIR
+
+@close_rp_object:
+    ; X = open object, A = generic RP close operation. file_io_gate remains
+    ; owned while rp_fs_exec blocks or PID 0 polls.
     phx
+    pha
     lda open_file_handle,x
-    jsr rp_fs_closedir
+    tax
+    stz io_ptr
+    stz io_ptr+1
+    pla
+    ldy #$00
+    jsr rp_fs_exec
     plx
     jsr fd_free_open
     bra @done
@@ -1329,6 +1232,9 @@ fd_clone_stdio_args:
 ;   previous descriptors have already been closed/reaped.  It is used
 ;   by spawn allocation for a new PROC_SETUP child so the parent can
 ;   explicitly configure fd 0/1/2 before commit.
+;
+; Locking:
+;   Caller owns file_io_gate while clearing descriptor slots.
 ; ------------------------------------------------------------
 
 .proc fd_clear_process_slots
@@ -1409,6 +1315,7 @@ fd_clone_stdio_args:
 ;
 ; Locking:
 ;   Caller owns file_io_gate while clearing/attaching descriptors.
+;   The only exception is early boot before timer IRQ scheduling starts.
 ;
 ; mul8u rule:
 ;   Uses fd_calc_pid_offset.
@@ -1700,8 +1607,6 @@ fd_clone_stdio_args:
     bcc @fd_ok
 
     ; fd_lookup returns errno in Y.
-    phy
-    ply
     sec
     rts
 
@@ -1715,8 +1620,6 @@ fd_clone_stdio_args:
 
     ; fd_check_perm returns errno in Y.
     plx                         ; discard saved open object
-    phy
-    ply
     sec
     rts
 
@@ -1733,14 +1636,7 @@ fd_clone_stdio_args:
     lda open_dev,x
     tay
 
-    phx
-    phy
-
-
-    ply                         ; Y = device id
-    plx                         ; X = open object
     pla                         ; A = object type
-
     clc
     rts
 .endproc
@@ -1869,12 +1765,8 @@ fd_clone_stdio_args:
     pha
     phx
 
-    lda #DBG_FILE_IO_FD_READ_ENTER
-    sta file_io_gate_phase
 
     ; Resolve fd -> open object.
-    lda #DBG_FILE_IO_FD_READ_LOOKUP_CALL
-    sta file_io_gate_phase
 
     tya
     jsr fd_lookup
@@ -1886,14 +1778,10 @@ fd_clone_stdio_args:
     rts
 
 @fd_ok:
-    lda #DBG_FILE_IO_FD_READ_LOOKUP_RET
-    sta file_io_gate_phase
 
     ; Save open object across permission check.
     phx
 
-    lda #DBG_FILE_IO_FD_READ_PERM_CALL
-    sta file_io_gate_phase
 
     lda #FD_FLAG_READ
     jsr fd_check_perm
@@ -1907,13 +1795,9 @@ fd_clone_stdio_args:
     rts
 
 @perm_ok:
-    lda #DBG_FILE_IO_FD_READ_PERM_RET
-    sta file_io_gate_phase
 
     plx                         ; X = open object
 
-    lda #DBG_FILE_IO_FD_READ_TYPE
-    sta file_io_gate_phase
 
     lda open_type,x
     cmp #OBJ_PIPE
@@ -1922,35 +1806,18 @@ fd_clone_stdio_args:
     cmp #OBJ_DEVICE
     beq @device_ok
 
-    cmp #OBJ_FILE
-    beq @file_ok
-
-
-
+    ; Files are handled directly by ksys_read through rp_fs_exec.
     plx
     pla
     ldy #ENODEV
     sec
     rts
 
-@file_ok:
-    ; X = open object. Restore requested length and tail-call the
-    ; RP filesystem read backend. io_ptr already points to caller buffer.
-    lda open_file_handle,x
-    tay                         ; Y = RP file handle
-
-    plx                         ; X = length high
-    pla                         ; A = length low
-
-    jmp rp_fs_read
-
 @pipe_ok:
     ; Save open object above saved length.
     txa
     pha
 
-    lda #DBG_FILE_IO_FD_READ_PIPE
-    sta file_io_gate_phase
 
     ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
     lda io_ptr
@@ -1968,8 +1835,6 @@ fd_clone_stdio_args:
     jmp pipe_read
 
 @device_ok:
-    lda #DBG_FILE_IO_FD_READ_DEV
-    sta file_io_gate_phase
 
     lda #DEVOP_READ
     jsr dev_resolve_op
@@ -2057,26 +1922,12 @@ fd_clone_stdio_args:
     cmp #OBJ_DEVICE
     beq @device_ok
 
-    cmp #OBJ_FILE
-    beq @file_ok
-
-
+    ; Files are handled directly by ksys_write through rp_fs_exec.
     plx
     pla
     ldy #ENODEV
     sec
     rts
-
-@file_ok:
-    ; X = open object. Restore requested length and tail-call the
-    ; RP filesystem write backend. io_ptr already points to caller buffer.
-    lda open_file_handle,x
-    tay                         ; Y = RP file handle
-
-    plx                         ; X = length high
-    pla                         ; A = length low
-
-    jmp rp_fs_write
 
 @pipe_ok:
     ; Save open object above saved length.

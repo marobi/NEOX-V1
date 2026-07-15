@@ -35,7 +35,7 @@
 
 .import monitor_active
 
-.import ksys_console_read_blocking
+.import rp_console_read
 .import rp_console_write
 
 .import console_read_len_lo
@@ -177,7 +177,7 @@ console_ops:
 @has_data:
     lda console_read_len_lo
     ldx console_read_len_hi
-    jmp ksys_console_read_blocking
+    jmp rp_console_read
 	
 ; ------------------------------------------------------------
 ; Return 0 bytes (no data or not owner)

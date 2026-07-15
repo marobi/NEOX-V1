@@ -14,10 +14,12 @@
 ;     - FD table, open-object table, pipe table and buffers
 ;     - console device dispatch
 ;
-;   No gate may be held across sched_yield. Console input waits
-;   block on WAIT_CONSOLE, empty pipe reads block on WAIT_PIPE_READ,
-;   and full pipe writes block on WAIT_PIPE_WRITE; file_io_gate is
-;   released before the blocked task enters sched_yield.
+;   Current console and pipe waits do not retain file_io_gate across
+;   the scheduler blocking transition. Console input blocks on
+;   WAIT_CONSOLE, empty pipe reads
+;   block on WAIT_PIPE_READ, and full pipe writes block on
+;   WAIT_PIPE_WRITE; file_io_gate is released before those waits. Generic
+;   RP file operations retain file_io_gate while blocked in WAIT_RP.
 ;
 ; Calling convention from syscall stubs:
 ;   X/Y -> rw_args block for read/write
@@ -32,15 +34,13 @@
 
 .setcpu "65C02"
 
-.include "debug.inc"
 .include "syscall.inc"
 .include "fd.inc"
 .include "process.inc"
-.include "pipe.inc"
+.include "mailbox.inc"
 
 .export ksys_io_init
 .export ksys_read
-.export ksys_console_read_blocking
 .export ksys_write
 .export ksys_close
 .export ksys_dup
@@ -51,12 +51,8 @@
 .import proc_gate_init
 .import file_io_gate_acquire
 .import file_io_gate_release
-.import file_io_gate_phase
-.import active_pid
 
-.import rp_console_read_start
-.import rp_console_read_finish
-.import rp_console_write_finish
+.import rp_fs_exec
 
 .import fd_resolve_read
 .import fd_resolve_write
@@ -67,9 +63,9 @@
 .import fd_dup
 .import fd_dup2
 .import pipe_create
+.import open_file_handle
 
-.import proc_set_wait
-.import sched_yield
+.import sched_block_current
 
 .importzp io_ptr
 
@@ -101,49 +97,22 @@ ksys_rw_buf_lo:
 ksys_rw_buf_hi:
     .res 1
 
-; Non-zero while the current gate-protected read dispatch is known
-; to target the console device. Used to convert console EAGAIN into
-; WAIT_CONSOLE without accidentally blocking pipe EAGAIN here.
-ksys_rw_is_console:
+; Local EAGAIN conversion selected during descriptor classification.
+; A zero reason means that EAGAIN must be returned to the caller.
+ksys_rw_wait_reason:
     .res 1
 
-; Non-zero while the current gate-protected read/write dispatch is
-; known to target a pipe. ksys_rw_pipe_idx stores the pipe table index
-; used as WAIT_PIPE_READ / WAIT_PIPE_WRITE wait_object.
-ksys_rw_is_pipe:
+ksys_rw_wait_object:
     .res 1
 
-ksys_rw_pipe_idx:
+.segment "BSS"
+
+; Process-private read/write syscall argument pointer. Each MMU context owns
+; its copy, so the pointer remains stable while FILE_IO acquisition blocks.
+ksys_rw_args_lo:
     .res 1
 
-; Per-PID read/write syscall argument snapshot.
-;
-; Read/write syscalls receive X/Y -> rw_args in the caller context.
-; The complete argument block is copied immediately at syscall entry
-; while IRQs are masked, before file_io_gate_acquire can block/yield.
-; Later FD/backend code must use only this per-PID snapshot, never
-; dereference the caller rw_args pointer after a scheduler boundary.
-ksys_rw_fd_by_pid:
-    .res MAX_PROCS
-
-ksys_rw_buf_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_rw_buf_hi_by_pid:
-    .res MAX_PROCS
-
-ksys_rw_len_lo_by_pid:
-    .res MAX_PROCS
-
-ksys_rw_len_hi_by_pid:
-    .res MAX_PROCS
-
-; Short-lived entry scratch used only while IRQs are masked during
-; argument-block snapshot. It is not live across yield.
-ksys_rw_entry_lo:
-    .res 1
-
-ksys_rw_entry_hi:
+ksys_rw_args_hi:
     .res 1
 
 
@@ -160,88 +129,44 @@ ksys_rw_entry_hi:
     jmp proc_gate_init
 .endproc
 
+
+
+
 ; ------------------------------------------------------------
-; ksys_console_read_blocking
+; ksys_io_block
 ;
-; Submit a console read request and wait for RP completion.
+; Block the active process for a local console or pipe wait.
 ;
-; Current implementation polls until RP completion. It does not
-; call sched_yield and therefore does not violate the gate rule.
+; Input:
+;   A = wait reason
+;   Y = wait object
+;
+; Caller:
+;   owns file_io_gate
+;
+; Behavior:
+;   - preserves the wait reason/object across gate release
+;   - releases file_io_gate
+;   - enters the scheduler-owned blocking transition
+;   - resumes at the instruction following the JSR when woken
+;
+; Notes:
+;   WAIT_CONSOLE and WAIT_PIPE_* cannot complete synchronously inside
+;   sched_block_current, so this helper normally does not return until
+;   the process has been woken and rescheduled.
 ; ------------------------------------------------------------
 
-.proc ksys_console_read_blocking
-    jsr rp_console_read_start
-    bcs @fail
+.proc ksys_io_block
+    pha
+    phy
 
-@wait:
-    jsr rp_console_read_finish
-    bcc @done
+    jsr file_io_gate_release
 
-    cpy #E_OK
-    bne @fail
-
-    bra @wait
-
-@done:
-    clc
-    rts
-
-@fail:
-    sec
-    rts
+    ply
+    pla
+    jmp sched_block_current
 .endproc
 
-; ------------------------------------------------------------
-; ksys_console_write_wait
-;
-; Wait for an async RP console write to complete.
-; Polling only; no sched_yield while file_io_gate is owned.
-; ------------------------------------------------------------
-
-.proc ksys_console_write_wait
-@wait:
-    jsr rp_console_write_finish
-    bcc @done
-
-    cpy #E_OK
-    bne @fail
-
-    bra @wait
-
-@done:
-    clc
-    rts
-
-@fail:
-    sec
-    rts
-.endproc
-
-; ------------------------------------------------------------
-; ksys_console_read_wait
-;
-; Wait for an async RP console read to complete.
-; Polling only; no sched_yield while file_io_gate is owned.
-; ------------------------------------------------------------
-
-.proc ksys_console_read_wait
-@wait:
-    jsr rp_console_read_finish
-    bcc @done
-
-    cpy #E_OK
-    bne @fail
-
-    bra @wait
-
-@done:
-    clc
-    rts
-
-@fail:
-    sec
-    rts
-.endproc
 
 ; ------------------------------------------------------------
 ; ksys_read
@@ -250,121 +175,101 @@ ksys_rw_entry_hi:
 ; ------------------------------------------------------------
 
 .proc ksys_read
-    ; Snapshot the complete caller rw_args block immediately at
-    ; syscall entry.  Do not keep only a pointer: file_io_gate_acquire
-    ; may block/yield, and the caller's context/address view is not a
-    ; valid late-dereference boundary in a preemptive kernel.
-    php
-    sei
-    stx ksys_rw_entry_lo
-    sty ksys_rw_entry_hi
-
-    lda ksys_rw_entry_lo
-    sta io_ptr
-    lda ksys_rw_entry_hi
-    sta io_ptr+1
-
-    ldx active_pid
-
-    ldy #rw_args::fd
-    lda (io_ptr),y
-    sta ksys_rw_fd_by_pid,x
-
-    ldy #rw_args::buf_ptr
-    lda (io_ptr),y
-    sta ksys_rw_buf_lo_by_pid,x
-    iny
-    lda (io_ptr),y
-    sta ksys_rw_buf_hi_by_pid,x
-
-    ldy #rw_args::len
-    lda (io_ptr),y
-    sta ksys_rw_len_lo_by_pid,x
-    iny
-    lda (io_ptr),y
-    sta ksys_rw_len_hi_by_pid,x
-    plp
-    ; The user-side syscall macro masks IRQs only while it loads
-    ; X/Y and enters the kernel. Re-enable after the argument block
-    ; has been copied; file_io_gate itself is the syscall serializer.
-    cli
+    ; Save the caller argument pointer in this process context before gate
+    ; acquisition can block. Other processes cannot access this private copy.
+    stx ksys_rw_args_lo
+    sty ksys_rw_args_hi
 
 @retry_gate:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    lda #DBG_FILE_IO_READ_ACQ_FAIL
-    sta file_io_gate_phase
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    lda #DBG_FILE_IO_READ_ACQ
-    sta file_io_gate_phase
-
-    ; Copy the per-PID syscall-entry snapshot into gate-protected
-    ; module scratch. From here until release, these scratch values are
-    ; owned by the current file_io_gate holder.
-    ldx active_pid
-    lda ksys_rw_fd_by_pid,x
-    sta ksys_rw_fd_tmp
-    lda ksys_rw_buf_lo_by_pid,x
-    sta ksys_rw_buf_lo
-    lda ksys_rw_buf_hi_by_pid,x
-    sta ksys_rw_buf_hi
-    lda ksys_rw_len_lo_by_pid,x
-    sta ksys_rw_len_lo
-    lda ksys_rw_len_hi_by_pid,x
-    sta ksys_rw_len_hi
-
-    ; FD/backend layer expects io_ptr to point to caller buffer.
-    lda ksys_rw_buf_lo
+    ; Restore the caller argument pointer in the caller's active context.
+    lda ksys_rw_args_lo
     sta io_ptr
-    lda ksys_rw_buf_hi
+    lda ksys_rw_args_hi
     sta io_ptr+1
 
-    ; Classify the backend before dispatching. fd_read may return
-    ; EAGAIN for console or pipe. The syscall layer converts only
-    ; those known backends into blocking waits; all other EAGAIN
-    ; returns remain normal syscall failures.
-    stz ksys_rw_is_console
-    stz ksys_rw_is_pipe
-    lda #PIPE_NONE
-    sta ksys_rw_pipe_idx
+    ; Decode local dispatch fields once while file_io_gate is owned.
+    ldy #rw_args::fd
+    lda (io_ptr),y
+    sta ksys_rw_fd_tmp
+
+    ldy #rw_args::buf_ptr
+    lda (io_ptr),y
+    sta ksys_rw_buf_lo
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_buf_hi
+
+    ldy #rw_args::len
+    lda (io_ptr),y
+    sta ksys_rw_len_lo
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_len_hi
+
+    ; Classify and validate the descriptor. Files are submitted directly to
+    ; the generic RP request while console and pipe behavior remains local.
+    stz ksys_rw_wait_reason
+    stz ksys_rw_wait_object
 
     ldy ksys_rw_fd_tmp
     jsr fd_resolve_read
     bcc @read_resolve_ok
-    jmp @read_resolve_fail
+    jmp @read_fail
 
 @read_resolve_ok:
+    cmp #OBJ_FILE
+    beq @read_file
+
     cmp #OBJ_DEVICE
     beq @class_device
 
     cmp #OBJ_PIPE
     beq @class_pipe
 
-    bra @read_call
+    ldy #ENODEV
+    jmp @read_fail
+
+@read_file:
+    ; io_ptr still points to the original rw_args block. The kernel supplies
+    ; the trusted RP handle; the RP decodes buffer and length in caller context.
+    lda open_file_handle,x
+    tax
+    lda #RP_FS_OP_READ
+    ldy #$00
+    jsr rp_fs_exec
+    bcc @read_success
+    jmp @read_fail
 
 @class_device:
     cpy #DEV_CONSOLE
     bne @read_call
 
-    lda #$01
-    sta ksys_rw_is_console
+    lda #WAIT_CONSOLE
+    sta ksys_rw_wait_reason
     bra @read_call
 
 @class_pipe:
     ; X = open object from fd_resolve_read.
     lda open_pipe,x
-    sta ksys_rw_pipe_idx
-    lda #$01
-    sta ksys_rw_is_pipe
+    sta ksys_rw_wait_object
+
+    lda #WAIT_PIPE_READ
+    sta ksys_rw_wait_reason
 
 @read_call:
-    lda #DBG_FILE_IO_READ_CALL
-    sta file_io_gate_phase
+    ; Local console/pipe backends retain their existing ABI.
+    lda ksys_rw_buf_lo
+    sta io_ptr
+    lda ksys_rw_buf_hi
+    sta io_ptr+1
 
     ldy ksys_rw_fd_tmp
     lda ksys_rw_len_lo
@@ -372,66 +277,20 @@ ksys_rw_entry_hi:
     jsr fd_read
     bcc @read_success
 
-    ; Console backend reports EAGAIN when the console owner has no
-    ; input available. Pipe read reports EAGAIN when the pipe is empty
-    ; and writers are still present. Convert only those known backend
-    ; cases into blocking waits, release file_io_gate, yield, and retry
-    ; the original syscall from the per-PID snapshot after wake.
     cpy #EAGAIN
     bne @read_fail
 
-    lda ksys_rw_is_console
-    bne @wait_console
+    lda ksys_rw_wait_reason
+    beq @read_fail
 
-    lda ksys_rw_is_pipe
-    bne @wait_pipe_read
-
-    bra @read_fail
-
-@wait_console:
-    lda #DBG_FILE_IO_READ_WAIT_CONSOLE
-    sta file_io_gate_phase
-
-    lda #WAIT_CONSOLE
-    ldy #$00
-    bra @block_read
-
-@wait_pipe_read:
-    lda #DBG_FILE_IO_READ_WAIT_PIPE
-    sta file_io_gate_phase
-
-    lda #WAIT_PIPE_READ
-    ldy ksys_rw_pipe_idx
-
-@block_read:
-    php
-    sei
-
-    ldx active_pid
-    jsr proc_set_wait
-
-    lda #DBG_FILE_IO_READ_REL
-    sta file_io_gate_phase
-    jsr file_io_gate_release
-
-    ; Keep IRQs masked for the immediate scheduler handoff.  sched_yield
-    ; converts this continuation into an RTI frame with I cleared, so the
-    ; resumed task continues with IRQs enabled.
-    pla                         ; discard saved P byte
-    jsr sched_yield
+    ldy ksys_rw_wait_object
+    jsr ksys_io_block
     jmp @retry_gate
 
 @read_success:
     pha
     phx
-
-    lda #DBG_FILE_IO_READ_RET
-    sta file_io_gate_phase
-
-    lda #DBG_FILE_IO_READ_REL
-    sta file_io_gate_phase
     jsr file_io_gate_release
-
     plx
     pla
     clc
@@ -439,28 +298,11 @@ ksys_rw_entry_hi:
 
 @read_fail:
     phy
-
-    lda #DBG_FILE_IO_READ_RET
-    sta file_io_gate_phase
-
-    lda #DBG_FILE_IO_READ_REL
-    sta file_io_gate_phase
     jsr file_io_gate_release
-
     ply
     sec
     rts
 
-@read_resolve_fail:
-    phy
-
-    lda #DBG_FILE_IO_READ_REL
-    sta file_io_gate_phase
-    jsr file_io_gate_release
-
-    ply
-    sec
-    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -470,103 +312,89 @@ ksys_rw_entry_hi:
 ; ------------------------------------------------------------
 
 .proc ksys_write
-    ; Snapshot the complete caller rw_args block immediately at
-    ; syscall entry, before file_io_gate_acquire can block/yield.
-    php
-    sei
-    stx ksys_rw_entry_lo
-    sty ksys_rw_entry_hi
-
-    lda ksys_rw_entry_lo
-    sta io_ptr
-    lda ksys_rw_entry_hi
-    sta io_ptr+1
-
-    ldx active_pid
-
-    ldy #rw_args::fd
-    lda (io_ptr),y
-    sta ksys_rw_fd_by_pid,x
-
-    ldy #rw_args::buf_ptr
-    lda (io_ptr),y
-    sta ksys_rw_buf_lo_by_pid,x
-    iny
-    lda (io_ptr),y
-    sta ksys_rw_buf_hi_by_pid,x
-
-    ldy #rw_args::len
-    lda (io_ptr),y
-    sta ksys_rw_len_lo_by_pid,x
-    iny
-    lda (io_ptr),y
-    sta ksys_rw_len_hi_by_pid,x
-    plp
-    ; The user-side syscall macro masks IRQs only while it loads
-    ; X/Y and enters the kernel. Re-enable after the argument block
-    ; has been copied; file_io_gate itself is the syscall serializer.
-    cli
+    ; Save the caller argument pointer in this process context before gate
+    ; acquisition can block. Other processes cannot access this private copy.
+    stx ksys_rw_args_lo
+    sty ksys_rw_args_hi
 
 @retry_gate:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    lda #DBG_FILE_IO_WRITE_ACQ_FAIL
-    sta file_io_gate_phase
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    lda #DBG_FILE_IO_WRITE_ACQ
-    sta file_io_gate_phase
-
-    ; Copy the per-PID syscall-entry snapshot into gate-protected
-    ; module scratch. From here until release, these scratch values are
-    ; owned by the current file_io_gate holder.
-    ldx active_pid
-    lda ksys_rw_fd_by_pid,x
-    sta ksys_rw_fd_tmp
-    lda ksys_rw_buf_lo_by_pid,x
-    sta ksys_rw_buf_lo
-    lda ksys_rw_buf_hi_by_pid,x
-    sta ksys_rw_buf_hi
-    lda ksys_rw_len_lo_by_pid,x
-    sta ksys_rw_len_lo
-    lda ksys_rw_len_hi_by_pid,x
-    sta ksys_rw_len_hi
-
-    ; FD/backend layer expects io_ptr to point to caller buffer.
-    lda ksys_rw_buf_lo
+    ; Restore and decode the caller argument block in its active context.
+    lda ksys_rw_args_lo
     sta io_ptr
-    lda ksys_rw_buf_hi
+    lda ksys_rw_args_hi
     sta io_ptr+1
 
-    ; Classify pipe writes before dispatch. fd_write may return
-    ; EAGAIN for a full pipe with zero bytes written. Only known pipe
-    ; EAGAIN is converted into WAIT_PIPE_WRITE.
-    stz ksys_rw_is_pipe
-    lda #PIPE_NONE
-    sta ksys_rw_pipe_idx
+    ldy #rw_args::fd
+    lda (io_ptr),y
+    sta ksys_rw_fd_tmp
+
+    ldy #rw_args::buf_ptr
+    lda (io_ptr),y
+    sta ksys_rw_buf_lo
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_buf_hi
+
+    ldy #rw_args::len
+    lda (io_ptr),y
+    sta ksys_rw_len_lo
+    iny
+    lda (io_ptr),y
+    sta ksys_rw_len_hi
+
+    stz ksys_rw_wait_reason
+    stz ksys_rw_wait_object
 
     ldy ksys_rw_fd_tmp
     jsr fd_resolve_write
     bcc @write_resolve_ok
-    jmp @write_resolve_fail
+    jmp @write_fail
 
 @write_resolve_ok:
-    cmp #OBJ_PIPE
-    bne @write_call
+    cmp #OBJ_FILE
+    beq @write_file
 
+    cmp #OBJ_PIPE
+    beq @class_pipe
+
+    cmp #OBJ_DEVICE
+    beq @write_call
+
+    ldy #ENODEV
+    jmp @write_fail
+
+@write_file:
+    ; Keep io_ptr on rw_args and submit the trusted RP handle.
+    lda open_file_handle,x
+    tax
+    lda #RP_FS_OP_WRITE
+    ldy #$00
+    jsr rp_fs_exec
+    bcc @write_success
+    jmp @write_fail
+
+@class_pipe:
     ; X = open object from fd_resolve_write.
     lda open_pipe,x
-    sta ksys_rw_pipe_idx
-    lda #$01
-    sta ksys_rw_is_pipe
+    sta ksys_rw_wait_object
+
+    lda #WAIT_PIPE_WRITE
+    sta ksys_rw_wait_reason
 
 @write_call:
-    lda #DBG_FILE_IO_WRITE_CALL
-    sta file_io_gate_phase
+    ; Local console/pipe backends retain their existing ABI.
+    lda ksys_rw_buf_lo
+    sta io_ptr
+    lda ksys_rw_buf_hi
+    sta io_ptr+1
 
     ldy ksys_rw_fd_tmp
     lda ksys_rw_len_lo
@@ -577,43 +405,17 @@ ksys_rw_entry_hi:
     cpy #EAGAIN
     bne @write_fail
 
-    lda ksys_rw_is_pipe
+    lda ksys_rw_wait_reason
     beq @write_fail
 
-@wait_pipe_write:
-    lda #DBG_FILE_IO_WRITE_WAIT_PIPE
-    sta file_io_gate_phase
-
-    php
-    sei
-
-    lda #WAIT_PIPE_WRITE
-    ldy ksys_rw_pipe_idx
-    ldx active_pid
-    jsr proc_set_wait
-
-    lda #DBG_FILE_IO_WRITE_REL
-    sta file_io_gate_phase
-    jsr file_io_gate_release
-
-    ; Keep IRQs masked for the immediate scheduler handoff. sched_yield
-    ; converts this continuation into an RTI frame with I cleared, so the
-    ; resumed task continues with IRQs enabled.
-    pla                         ; discard saved P byte
-    jsr sched_yield
+    ldy ksys_rw_wait_object
+    jsr ksys_io_block
     jmp @retry_gate
 
 @write_success:
     pha
     phx
-
-    lda #DBG_FILE_IO_WRITE_RET
-    sta file_io_gate_phase
-
-    lda #DBG_FILE_IO_WRITE_REL
-    sta file_io_gate_phase
     jsr file_io_gate_release
-
     plx
     pla
     clc
@@ -621,28 +423,11 @@ ksys_rw_entry_hi:
 
 @write_fail:
     phy
-
-    lda #DBG_FILE_IO_WRITE_RET
-    sta file_io_gate_phase
-
-    lda #DBG_FILE_IO_WRITE_REL
-    sta file_io_gate_phase
     jsr file_io_gate_release
-
     ply
     sec
     rts
 
-@write_resolve_fail:
-    phy
-
-    lda #DBG_FILE_IO_WRITE_REL
-    sta file_io_gate_phase
-    jsr file_io_gate_release
-
-    ply
-    sec
-    rts
 .endproc
 
 ; ------------------------------------------------------------
@@ -656,16 +441,12 @@ ksys_rw_entry_hi:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    lda #DBG_FILE_IO_CLOSE_ACQ_FAIL
-    sta file_io_gate_phase
     pla
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    lda #DBG_FILE_IO_CLOSE_ACQ
-    sta file_io_gate_phase
     pla
 
     jsr fd_close
@@ -693,16 +474,12 @@ ksys_rw_entry_hi:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    lda #DBG_FILE_IO_DUP_ACQ_FAIL
-    sta file_io_gate_phase
     pla
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    lda #DBG_FILE_IO_DUP_ACQ
-    sta file_io_gate_phase
     pla
 
     jsr fd_dup
@@ -731,8 +508,6 @@ ksys_rw_entry_hi:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    lda #DBG_FILE_IO_DUP2_ACQ_FAIL
-    sta file_io_gate_phase
     ply
     pla
     ldy #EINVAL
@@ -740,8 +515,6 @@ ksys_rw_entry_hi:
     rts
 
 @gate_acquired:
-    lda #DBG_FILE_IO_DUP2_ACQ
-    sta file_io_gate_phase
     ply
     pla
 
@@ -771,15 +544,11 @@ ksys_rw_entry_hi:
     jsr file_io_gate_acquire
     bcs @gate_acquired
 
-    lda #DBG_FILE_IO_PIPE_ACQ_FAIL
-    sta file_io_gate_phase
     ldy #EINVAL
     sec
     rts
 
 @gate_acquired:
-    lda #DBG_FILE_IO_PIPE_ACQ
-    sta file_io_gate_phase
 
     jsr pipe_create
 

@@ -148,7 +148,6 @@
     <None Include="include\syscall.inc" />
     <None Include="include\timer.inc" />
     <None Include="include\version.inc" />
-    <None Include="kernel\debug.asm" />
     <None Include="kernel\entry_table.asm" />
     <None Include="kernel\fd.asm" />
     <None Include="kernel\spawn.asm" />
@@ -161,7 +160,6 @@
     <None Include="kernel\main.asm" />
     <None Include="kernel\pipe.asm" />
     <None Include="kernel\process_control.asm" />
-    <None Include="kernel\process_cwd.asm" />
     <None Include="kernel\rp2350.asm" />
     <None Include="kernel\scheduler.asm" />
     <None Include="kernel\sched_lock.asm" />
