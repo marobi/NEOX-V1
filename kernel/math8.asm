@@ -67,23 +67,20 @@
 ;   factor2 = product high
 ;
 ; Clobbers:
-;   Y
+;   flags
 ;
-; Notes:
-;   Preemption-safe public wrapper.
+; Concurrency:
+;   factor1 and factor2 are context-private zero-page storage.
+;   The routine is therefore safe across normal process preemption
+;   without disabling interrupts or acquiring a semaphore.
 ;
-;   The internal multiply core uses global zero-page scratch:
-;       factor1
-;       factor2
-;
-;   IRQs are disabled while operands/results are live in that
-;   shared scratch.
+; Restriction:
+;   IRQ handlers must not call mul8u or modify factor1/factor2.
+;   An IRQ runs in the interrupted context and shares that context's
+;   zero page until the scheduler switches context.
 ; ------------------------------------------------------------
 
 .proc mul8u
-    php
-    sei
-
     sta factor1
     stx factor2
 
@@ -91,7 +88,5 @@
 
     lda factor1
     ldx factor2
-
-    plp
     rts
 .endproc

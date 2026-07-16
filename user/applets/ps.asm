@@ -51,8 +51,6 @@ nbox_ps_state_stopped:
     .byte "STP"
 nbox_ps_state_zombie:
     .byte "ZOM"
-nbox_ps_state_setup:
-    .byte "SET"
 nbox_ps_state_unknown:
     .byte "???"
 
@@ -106,8 +104,6 @@ NBOX_PS_MSG_FAIL_LEN = * - nbox_ps_msg_fail
     beq @stopped
     cmp #PROC_ZOMBIE
     beq @zombie
-    cmp #PROC_SETUP
-    beq @setup
     lda #<nbox_ps_state_unknown
     ldx #>nbox_ps_state_unknown
     ldy #3
@@ -145,11 +141,6 @@ NBOX_PS_MSG_FAIL_LEN = * - nbox_ps_msg_fail
 @zombie:
     lda #<nbox_ps_state_zombie
     ldx #>nbox_ps_state_zombie
-    ldy #3
-    jmp nbox_print_msg
-@setup:
-    lda #<nbox_ps_state_setup
-    ldx #>nbox_ps_state_setup
     ldy #3
     jmp nbox_print_msg
 .endproc

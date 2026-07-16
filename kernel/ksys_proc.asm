@@ -306,9 +306,6 @@ ksys_signal_self_kill:
     cmp #PROC_EMPTY
     beq @invalid_state
 
-    cmp #PROC_SETUP
-    beq @invalid_state
-
     ; Child is still alive.  Commit the wait state while proc_gate is
     ; held, then release the gate and yield immediately with IRQs
     ; masked so no child-exit wake can be lost in between.

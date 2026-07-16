@@ -7,7 +7,8 @@
 ;   pwd
 ;   cd [path]
 ;   ls [path]
-;   cat path
+;   cat [path]
+;   echo [arg0 [arg1]]
 ;   rm path
 ;   mv old new
 ;   mkdir path
@@ -20,7 +21,8 @@
 ;   - input line should be clean command text
 ;   - nbox uppercases command tokens, but does not own prompt/input editing
 ;   - spaces and tabs separate command and arguments
-;   - no quotes, wildcards, redirection, or pipes
+;   - neosh removes shell redirection syntax before nbox sees the line
+;   - no quotes, wildcards, or pipes
 ; ============================================================
 
 .setcpu "65C02"
@@ -34,6 +36,7 @@
 .import nbox_cmd_cd
 .import nbox_cmd_ls
 .import nbox_cmd_cat
+.import nbox_cmd_echo
 .import nbox_cmd_rm
 .import nbox_cmd_mv
 .import nbox_cmd_mkdir
@@ -46,6 +49,7 @@
 .import nbox_cd
 .import nbox_ls
 .import nbox_cat
+.import nbox_echo
 .import nbox_rm
 .import nbox_mv
 .import nbox_mkdir
@@ -143,7 +147,7 @@ nbox_cr:
     .byte 13
 
 nbox_msg_help:
-    .byte "COMMANDS: HELP PWD CD LS CAT RM MV MKDIR RMDIR CP PS", 13
+    .byte "COMMANDS: HELP PWD CD LS CAT ECHO RM MV MKDIR RMDIR CP PS", 13
 NBOX_MSG_HELP_LEN = * - nbox_msg_help
 
 nbox_msg_unknown:
@@ -602,6 +606,8 @@ nbox_stdout_args:
     lda nbox_cmd_launch_ids,x
     sta nbox_launch_id
 
+    ; Native 6502 handler pointers are always two bytes. This is an
+    ; architectural invariant, not a configurable kernel record size.
     lda nbox_cmd_idx
     asl
     tax
@@ -686,7 +692,7 @@ nbox_stdout_args:
 ; nbox_child_entry
 ;
 ; Resident child process entry. The parent configured launch id and up
-; to two arguments while the process was still PROC_SETUP. The child
+; to two arguments before publishing the process as PROC_NEW. The child
 ; loads that launch state, dispatches one resident applet, then exits.
 ; ------------------------------------------------------------
 .proc nbox_child_entry
@@ -718,6 +724,8 @@ nbox_stdout_args:
     beq @ls
     cmp #NBOX_APPLET_CAT
     beq @cat
+    cmp #NBOX_APPLET_ECHO
+    beq @echo
     cmp #NBOX_APPLET_RM
     beq @rm
     cmp #NBOX_APPLET_MV
@@ -753,6 +761,10 @@ nbox_stdout_args:
 
 @cat:
     jsr nbox_cat
+    bra @ok
+
+@echo:
+    jsr nbox_echo
     bra @ok
 
 @rm:
@@ -796,6 +808,7 @@ nbox_cmd_names:
     .byte "CD", 0, 0, 0, 0, 0
     .byte "LS", 0, 0, 0, 0, 0
     .byte "CAT", 0, 0, 0, 0
+    .byte "ECHO", 0, 0, 0
     .byte "RM", 0, 0, 0, 0, 0
     .byte "MV", 0, 0, 0, 0, 0
     .byte "MKDIR", 0, 0
@@ -810,6 +823,7 @@ nbox_cmd_launch_ids:
     .byte NBOX_APPLET_CD
     .byte NBOX_APPLET_LS
     .byte NBOX_APPLET_CAT
+    .byte NBOX_APPLET_ECHO
     .byte NBOX_APPLET_RM
     .byte NBOX_APPLET_MV
     .byte NBOX_APPLET_MKDIR
@@ -823,6 +837,7 @@ nbox_cmd_exec_modes:
     .byte NBOX_EXEC_PARENT      ; CD changes parent/shell cwd
     .byte NBOX_EXEC_CHILD       ; LS
     .byte NBOX_EXEC_CHILD       ; CAT
+    .byte NBOX_EXEC_CHILD       ; ECHO
     .byte NBOX_EXEC_CHILD       ; RM
     .byte NBOX_EXEC_CHILD       ; MV
     .byte NBOX_EXEC_CHILD       ; MKDIR
@@ -830,12 +845,16 @@ nbox_cmd_exec_modes:
     .byte NBOX_EXEC_CHILD       ; CP
     .byte NBOX_EXEC_CHILD       ; PS
 
+NBOX_HANDLER_PTR_SIZE = 2
+.assert NBOX_HANDLER_PTR_SIZE = 2, error, "nbox handler table requires native 16-bit pointers"
+
 nbox_cmd_handlers:
     .word nbox_cmd_help
     .word nbox_cmd_pwd
     .word nbox_cmd_cd
     .word nbox_cmd_ls
     .word nbox_cmd_cat
+    .word nbox_cmd_echo
     .word nbox_cmd_rm
     .word nbox_cmd_mv
     .word nbox_cmd_mkdir

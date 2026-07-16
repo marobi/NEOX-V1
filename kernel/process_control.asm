@@ -14,7 +14,8 @@
 
 .export proc_find_free_pid
 .export proc_alloc_preloaded
-.export proc_alloc_preloaded_setup
+.export proc_alloc_preloaded_unpublished
+.export proc_clear_launch_state
 .export proc_exit_lifecycle
 .export proc_reap_waited_child
 .export proc_create
@@ -76,6 +77,9 @@ proc_alloc_entryL:
 proc_alloc_entryH:
     .res 1
 
+proc_alloc_mode:
+    .res 1
+
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
@@ -130,7 +134,16 @@ proc_alloc_entryH:
 .endproc
 
 ; ------------------------------------------------------------
+; Preloaded process allocation modes.
+; ------------------------------------------------------------
+
+PROC_ALLOC_MODE_BOOT        = 0
+PROC_ALLOC_MODE_UNPUBLISHED = 1
+
+; ------------------------------------------------------------
 ; proc_alloc_preloaded
+;
+; Allocate and publish a normal boot/preloaded process.
 ;
 ; Inputs:
 ;   A = parent PID
@@ -138,125 +151,22 @@ proc_alloc_entryH:
 ;   Y = entry high byte
 ;
 ; Return:
-;   C clear = success
-;             A = allocated PID
-;
+;   C clear = success, A = allocated PID
 ;   C set   = failure
 ;
-; Notes:
-;   - Caller must hold proc_gate.
-;   - This routine acquires file_io_gate while initializing descriptors.
-;   - Lock order is PROC -> FILE_IO.
-;   - PID is allocated by the kernel.
-;   - MMU context is allocated from CTX_PRELOADED_FREE slots.
-;   - State is written last so partially initialized slots are never
-;     visible as runnable.
-;   - This is the common allocator for static boot tasks and future
-;     resident/preloaded spawn.
+; Caller:
+;   must hold proc_gate
 ; ------------------------------------------------------------
 
 .proc proc_alloc_preloaded
-    sta proc_alloc_parent_pid
-    stx proc_alloc_entryL
-    sty proc_alloc_entryH
-
-    ; Process creation owns both allocations:
-    ;   1. allocate a free PID
-    ;   2. allocate a free preloaded MMU context for that PID
-    ; The context table is the authority for MMU context ownership.
-    jsr proc_find_free_pid
-    bcc @fail
-
-    ; X = allocated PID.  Allocate a preloaded context before
-    ; publishing the process.
-    jsr ctx_alloc_preloaded_for_pid
-    bcs @fail
-
-    ; Save allocated MMU context id.
-    sta proc_context,x
-
-    ; Save first-run entry address.
-    lda proc_alloc_entryL
-    sta proc_entryL,x
-
-    lda proc_alloc_entryH
-    sta proc_entryH,x
-
-    ; Record parent PID.
-    lda proc_alloc_parent_pid
-    sta proc_parent_pid,x
-
-    ; Initial task stack.
-    lda #$FF
-    sta proc_sp,x
-
-    ; Initial wait state.
-    lda #WAIT_NONE
-    sta wait_reason,x
-    stz wait_object,x
-
-    ; Initial pending signal.
-    stz proc_signal_pending,x
-
-    ; Initial exit code and launch metadata.
-    lda #EXIT_OK
-    sta proc_exit_code,x
-    jsr proc_clear_launch_state
-
-    ; New processes are bootstrapped once. After first run, every
-    ; saved runnable process frame is RTI-compatible.
-
-    ; Initial process flags.
-    lda #PROC_FLAG_NONE
-    sta proc_flags,x
-
-    ; FD/open-object tables and fd.asm shared scratch are protected by
-    ; file_io_gate. Preserve the allocated PID on the private stack because
-    ; file_io_gate_acquire may block/yield and returns X = active_pid.
-    phx
-    jsr file_io_gate_acquire
-    bcs @file_gate_acquired
-
-    plx
-    jsr ctx_free_for_pid
-    jmp @fail
-
-@file_gate_acquired:
-    plx
-    jsr fd_init_process
-    bcs @fd_fail_release
-
-    phx
-    jsr file_io_gate_release
-    bcc @file_release_fail
-    plx
-
-    ; Publish process last.
-    lda #PROC_NEW
-    jsr proc_set_state
-
-    txa
-    clc
-    rts
-
-@fd_fail_release:
-    phx
-    jsr file_io_gate_release
-    plx
-    jsr ctx_free_for_pid
-    jmp @fail
-
-@file_release_fail:
-    plx
-    jsr ctx_free_for_pid
-
-@fail:
-    sec
-    rts
+    clc                         ; boot/published mode
+    jmp proc_alloc_preloaded_common
 .endproc
 
 ; ------------------------------------------------------------
-; proc_alloc_preloaded_setup
+; proc_alloc_preloaded_unpublished
+;
+; Allocate a resident-spawn child without publishing proc_state.
 ;
 ; Inputs:
 ;   A = parent PID
@@ -264,81 +174,111 @@ proc_alloc_entryH:
 ;   Y = entry high byte
 ;
 ; Return:
-;   C clear = success
-;             A = allocated PID
-;
+;   C clear = success, A = allocated PID
 ;   C set   = failure
 ;
+; Caller:
+;   must hold proc_gate
+;
 ; Notes:
-;   - Caller must hold proc_gate.
-;   - This routine acquires file_io_gate while clearing descriptors.
-;   - Lock order is PROC -> FILE_IO.
-;   - Allocates a PID and CTX_PRELOADED_FREE context.
-;   - Leaves the child in PROC_SETUP, not runnable.
-;   - The child FD table is cleared but no default fd 0/1/2 are
-;     installed.  The parent-controlled spawn ABI must configure FDs
-;     explicitly before spawn_commit.
+;   Unified spawn keeps proc_gate until the fully initialized child is
+;   published as PROC_NEW or rolled back.
 ; ------------------------------------------------------------
 
-.proc proc_alloc_preloaded_setup
+.proc proc_alloc_preloaded_unpublished
+    sec                         ; unpublished spawn mode
+    jmp proc_alloc_preloaded_common
+.endproc
+
+; ------------------------------------------------------------
+; proc_alloc_preloaded_common
+;
+; Common PID/context/PCB/FD initialization for boot and resident spawn.
+;
+; Entry carry:
+;   clear = initialize default process descriptors and publish PROC_NEW
+;   set   = clear all descriptors and leave proc_state as PROC_EMPTY
+;
+; Locking:
+;   caller owns proc_gate
+;   this routine acquires file_io_gate
+;   lock order is PROC -> FILE_IO
+; ------------------------------------------------------------
+
+.proc proc_alloc_preloaded_common
+    ; STA/STX/STY preserve carry, so the wrapper-selected mode remains
+    ; available after saving the call arguments.
     sta proc_alloc_parent_pid
     stx proc_alloc_entryL
     sty proc_alloc_entryH
 
+    bcc @boot_mode
+
+    lda #PROC_ALLOC_MODE_UNPUBLISHED
+    sta proc_alloc_mode
+    bra @allocate
+
+@boot_mode:
+    stz proc_alloc_mode
+
+@allocate:
     jsr proc_find_free_pid
     bcc @fail
 
-    ; X = allocated PID.  Allocate a preloaded context before
-    ; publishing the process.
+    ; X = allocated PID. Allocate the MMU context before publishing.
     jsr ctx_alloc_preloaded_for_pid
     bcs @fail
 
-    ; Save allocated MMU context id.
     sta proc_context,x
 
-    ; Save first-run entry address.
     lda proc_alloc_entryL
     sta proc_entryL,x
 
     lda proc_alloc_entryH
     sta proc_entryH,x
 
-    ; Record parent PID.
     lda proc_alloc_parent_pid
     sta proc_parent_pid,x
 
-    ; Initial child stack.
     lda #$FF
     sta proc_sp,x
 
-    ; Initial wait state.
     lda #WAIT_NONE
     sta wait_reason,x
     stz wait_object,x
-
-    ; Initial pending signal and exit code.
     stz proc_signal_pending,x
+
     lda #EXIT_OK
     sta proc_exit_code,x
 
-    ; Initial process flags.
+    jsr proc_clear_launch_state
+
     lda #PROC_FLAG_NONE
     sta proc_flags,x
 
-    ; Setup children start with an empty fd table. FD/open-object tables and
-    ; fd.asm shared scratch are protected by file_io_gate even though the
-    ; child itself is not runnable yet.
+    ; FD/open-object state and fd.asm scratch are protected by
+    ; file_io_gate. Preserve the allocated PID across gate acquisition.
     phx
     jsr file_io_gate_acquire
     bcs @file_gate_acquired
 
     plx
     jsr ctx_free_for_pid
-    jmp @fail
+    bra @fail
 
 @file_gate_acquired:
     plx
+
+    lda proc_alloc_mode
+    beq @init_boot_fds
+
     jsr fd_clear_process_slots
+    bra @fd_initialized
+
+@init_boot_fds:
+    jsr fd_init_process
+
+@fd_initialized:
     bcs @fd_fail_release
 
     phx
@@ -346,10 +286,14 @@ proc_alloc_entryH:
     bcc @file_release_fail
     plx
 
-    ; Publish process last, but only as pending setup.
-    lda #PROC_SETUP
+    lda proc_alloc_mode
+    bne @return_unpublished
+
+    ; Publish normal boot/preloaded processes last.
+    lda #PROC_NEW
     jsr proc_set_state
 
+@return_unpublished:
     txa
     clc
     rts
@@ -359,7 +303,7 @@ proc_alloc_entryH:
     jsr file_io_gate_release
     plx
     jsr ctx_free_for_pid
-    jmp @fail
+    bra @fail
 
 @file_release_fail:
     plx
@@ -723,9 +667,6 @@ proc_alloc_entryH:
     cpy #PROC_ZOMBIE
     beq @fail
 
-    cpy #PROC_SETUP
-    beq @fail
-
     cmp #SIG_KILL
     beq @kill
 
@@ -795,9 +736,6 @@ proc_alloc_entryH:
 
     cpy #PROC_ZOMBIE
     beq @already_zombie
-
-    cpy #PROC_SETUP
-    beq @fail
 
     ; Store the final exit code before the process disappears from
     ; runnable scheduling state.

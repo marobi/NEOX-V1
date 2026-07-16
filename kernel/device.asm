@@ -12,6 +12,7 @@
 
 .import open_dev
 .import console_ops
+.import mul8u
 
 .importzp dev_ptr
 
@@ -26,6 +27,8 @@
 dev_ops:
     .word no_device_ops
     .word console_ops
+
+.assert (DEV_MAX * DEV_OPS_ENTRY_SIZE) <= $100, error, "device operation pointer table exceeds 8-bit indexed range"
 
 ; ------------------------------------------------------------
 ; no_device_ops
@@ -76,7 +79,8 @@ no_device_ops:
     rts
 
 @dev_ok:
-    asl
+    ldx #DEV_OPS_ENTRY_SIZE
+    jsr mul8u
     tay
 
     lda dev_ops,y

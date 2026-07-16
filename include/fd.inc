@@ -70,6 +70,9 @@ DEV_CONSOLE     = $01
 
 DEV_MAX         = $02
 
+; Each dev_ops entry is one 16-bit operation-table pointer.
+DEV_OPS_ENTRY_SIZE = 2
+
 ; ------------------------------------------------------------
 ; Device operation offsets
 ; ------------------------------------------------------------

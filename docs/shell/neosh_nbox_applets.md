@@ -32,3 +32,32 @@ Applets are individual command implementations. Command wrappers parse command-l
 ## Shared applet scratch
 
 Applet scratch storage is shared inside the resident user image. This is acceptable because one applet runs inside one process/context at a time. Kernel state must not rely on that assumption.
+
+## CAT stdin mode
+
+`cat` with a pathname opens and copies that file. With no pathname it
+copies inherited fd 0 to fd 1 until EOF:
+
+```text
+cat FILE.TXT
+cat < FILE.TXT
+```
+
+This also provides the required filter behavior for later pipelines.
+
+## ECHO
+
+`echo` is a resident child-mode applet used to exercise spawn and stdout
+redirection:
+
+```text
+echo
+echo HELLO
+echo HELLO WORLD
+echo TEST > TMP.OUT
+echo MORE >> TMP.OUT
+```
+
+The current command ABI supplies at most two arguments. `echo` joins
+them with one space and always writes a trailing CR. It does not yet
+implement quoting, escapes, variables, or `-n`.

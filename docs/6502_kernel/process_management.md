@@ -6,28 +6,22 @@ The NEOX process model is small and explicit. Processes have kernel-owned state 
 
 ```text
 PROC_EMPTY
-  -> PROC_SETUP
   -> PROC_NEW
   -> PROC_READY / PROC_RUNNING / PROC_BLOCKED
   -> PROC_ZOMBIE
   -> PROC_EMPTY
 ```
 
-## PROC_SETUP
+## Unpublished creation
 
-`PROC_SETUP` represents a child that has been allocated but is not runnable yet. It exists so the parent can safely configure the child before commit:
+Unified resident spawn allocates and initializes a PID/context while
+`proc_gate` is held, but leaves `proc_state` as `PROC_EMPTY`. The slot
+is invisible to the scheduler and lifecycle syscalls until the
+transaction publishes it as `PROC_NEW`.
 
-- fd inheritance/overrides
-- cwd snapshot
-- launch id
-- launch arguments
-- entry point
+## Publication
 
-Only the parent may configure, commit, or abort a setup child.
-
-## Commit
-
-`spawn_commit` makes the child runnable. Before commit, the child must not be scheduled as a normal runnable process.
+Unified spawn publishes the fully initialized child as `PROC_NEW` only after launch data, descriptors, and cwd are installed.
 
 ## Exit and zombie state
 

@@ -1230,8 +1230,8 @@ fd_clone_target_fd:
 ; Notes:
 ;   This is only valid for a PID that is not runnable and whose
 ;   previous descriptors have already been closed/reaped.  It is used
-;   by spawn allocation for a new PROC_SETUP child so the parent can
-;   explicitly configure fd 0/1/2 before commit.
+;   by unified spawn for a newly allocated, unpublished child so the
+;   parent can explicitly configure fd 0/1/2 before publication.
 ;
 ; Locking:
 ;   Caller owns file_io_gate while clearing descriptor slots.

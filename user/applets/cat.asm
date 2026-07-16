@@ -46,26 +46,37 @@ NBOX_CAT_MSG_FAIL_LEN = * - nbox_cat_msg_fail
 ; ------------------------------------------------------------
 .proc nbox_cat_close
     lda nbox_file_fd
-    cmp #NBOX_FILE_FD_NONE
-    beq @done
-
     pha
+
     lda #NBOX_FILE_FD_NONE
     sta nbox_file_fd
     sta nbox_cat_rw_args + rw_args::fd
+
     pla
+    cmp #NBOX_FILE_FD_NONE
+    beq @done
+
     jsr sys_close
+
 @done:
     rts
 .endproc
 
 ; ------------------------------------------------------------
 .proc nbox_cat
-    jsr nbox_require_arg
-    bcc @has_arg
-    jmp nbox_print_arg_fail
+    ; A missing pathname means: copy stdin to stdout. Keep
+    ; nbox_file_fd at NONE so cleanup never closes the inherited stdin.
+    lda #NBOX_FILE_FD_NONE
+    sta nbox_file_fd
 
-@has_arg:
+    lda nbox_arg_len
+    bne @open_named_file
+
+    lda #STDIN
+    sta nbox_cat_rw_args + rw_args::fd
+    bra @read_loop
+
+@open_named_file:
     SYSCALL nbox_cat_open_args, sys_open
     bcc @opened
     jmp nbox_print_cat_fail

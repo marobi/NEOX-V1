@@ -17,6 +17,7 @@ NBOX_SRCS := \
 	$(NBOX_APPLET_BASE)/cd.asm \
 	$(NBOX_APPLET_BASE)/ls.asm \
 	$(NBOX_APPLET_BASE)/cat.asm \
+	$(NBOX_APPLET_BASE)/echo.asm \
 	$(NBOX_APPLET_BASE)/rm.asm \
 	$(NBOX_APPLET_BASE)/mv.asm \
 	$(NBOX_APPLET_BASE)/mkdir.asm \

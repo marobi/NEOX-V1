@@ -11,6 +11,9 @@
 .exportzp factor1
 .exportzp factor2
 
+; Context-private arithmetic scratch.
+; IRQ handlers must not use these locations while an interrupted
+; context may be executing mul8u.
 factor1:        .res 1
 factor2:        .res 1
 

@@ -51,17 +51,10 @@
 .import ksys_mkdir
 .import ksys_rmdir
 .import ksys_getprocinfo
-.import ksys_spawn_alloc_resident
-.import ksys_spawn_fd_inherit
-.import ksys_spawn_fd_dup_child
-.import ksys_spawn_fd_close
-.import ksys_spawn_commit
-.import ksys_spawn_abort
 .import ksys_waitpid
-.import ksys_spawn_set_launch_id
 .import ksys_get_launch_id
-.import ksys_spawn_set_args2
 .import ksys_get_launch_args2
+.import ksys_spawn_resident
 
 .segment "KERNEL_ENTRY"
 
@@ -100,24 +93,17 @@ kernel_entry_table:
     jmp ksys_mkdir
     jmp ksys_rmdir
     jmp ksys_getprocinfo
-    jmp ksys_spawn_alloc_resident
-    jmp ksys_spawn_fd_inherit
-    jmp ksys_spawn_fd_dup_child
-    jmp ksys_spawn_fd_close
-    jmp ksys_spawn_commit
-    jmp ksys_spawn_abort
     jmp ksys_waitpid
-    jmp ksys_spawn_set_launch_id
     jmp ksys_get_launch_id
-    jmp ksys_spawn_set_args2
     jmp ksys_get_launch_args2
+    jmp ksys_spawn_resident
 
 ; KERNEL_ENTRY area is $0100 bytes.
-; Current table: 42 absolute JMP entries * 3 bytes = $7E bytes.
-; Remaining fixed padding: $0100 - $7E = $82 bytes.
+; Current table: 35 absolute JMP entries * 3 bytes = $69 bytes.
+; Remaining fixed padding: $0100 - $69 = $97 bytes.
 ; Keep this explicit because ca65 cannot use relocatable PC (*)
 ; in the .res count expression here.
-KERNEL_ENTRY_COUNT         = 42
+KERNEL_ENTRY_COUNT         = 35
 KERNEL_ENTRY_RESERVED_SIZE = $0100
 KERNEL_ENTRY_USED_BYTES    = KERNEL_ENTRY_COUNT * KERNEL_ENTRY_SIZE
 

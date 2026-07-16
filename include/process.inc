@@ -12,7 +12,6 @@ PROC_RUNNING    = $03
 PROC_BLOCKED    = $04
 PROC_STOPPED    = $05
 PROC_ZOMBIE     = $06
-PROC_SETUP      = $07        ; allocated child, not runnable until spawn_commit
 
 ; ------------------------------------------------------------
 ; Flags byte bit definitions

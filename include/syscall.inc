@@ -61,18 +61,11 @@ SYS_CHDIR           = $16
 SYS_GETCWD          = $17
 SYS_MKDIR           = $18
 SYS_RMDIR           = $19
-SYS_GETPROCINFO     = $1A
-SYS_SPAWN_ALLOC_RESIDENT = $1B
-SYS_SPAWN_FD_INHERIT = $1C
-SYS_SPAWN_FD_DUP_CHILD = $1D
-SYS_SPAWN_FD_CLOSE   = $1E
-SYS_SPAWN_COMMIT     = $1F
-SYS_SPAWN_ABORT      = $20
-SYS_WAITPID          = $21
-SYS_SPAWN_SET_LAUNCH_ID = $22
-SYS_GET_LAUNCH_ID   = $23
-SYS_SPAWN_SET_ARGS2 = $24
-SYS_GET_LAUNCH_ARGS2 = $25
+SYS_GETPROCINFO      = $1A
+SYS_WAITPID           = $1B
+SYS_GET_LAUNCH_ID     = $1C
+SYS_GET_LAUNCH_ARGS2  = $1D
+SYS_SPAWN_RESIDENT    = $1E
 
 ; ------------------------------------------------------------
 ; Fixed syscall entry addresses
@@ -104,18 +97,11 @@ sys_chdir           = SYSCALL_BASE + (SYS_CHDIR * SYSCALL_ENTRY_SIZE)
 sys_getcwd          = SYSCALL_BASE + (SYS_GETCWD * SYSCALL_ENTRY_SIZE)
 sys_mkdir           = SYSCALL_BASE + (SYS_MKDIR * SYSCALL_ENTRY_SIZE)
 sys_rmdir           = SYSCALL_BASE + (SYS_RMDIR * SYSCALL_ENTRY_SIZE)
-sys_getprocinfo     = SYSCALL_BASE + (SYS_GETPROCINFO * SYSCALL_ENTRY_SIZE)
-sys_spawn_alloc_resident = SYSCALL_BASE + (SYS_SPAWN_ALLOC_RESIDENT * SYSCALL_ENTRY_SIZE)
-sys_spawn_fd_inherit = SYSCALL_BASE + (SYS_SPAWN_FD_INHERIT * SYSCALL_ENTRY_SIZE)
-sys_spawn_fd_dup_child = SYSCALL_BASE + (SYS_SPAWN_FD_DUP_CHILD * SYSCALL_ENTRY_SIZE)
-sys_spawn_fd_close = SYSCALL_BASE + (SYS_SPAWN_FD_CLOSE * SYSCALL_ENTRY_SIZE)
-sys_spawn_commit = SYSCALL_BASE + (SYS_SPAWN_COMMIT * SYSCALL_ENTRY_SIZE)
-sys_spawn_abort = SYSCALL_BASE + (SYS_SPAWN_ABORT * SYSCALL_ENTRY_SIZE)
-sys_waitpid = SYSCALL_BASE + (SYS_WAITPID * SYSCALL_ENTRY_SIZE)
-sys_spawn_set_launch_id = SYSCALL_BASE + (SYS_SPAWN_SET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
-sys_get_launch_id = SYSCALL_BASE + (SYS_GET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
-sys_spawn_set_args2 = SYSCALL_BASE + (SYS_SPAWN_SET_ARGS2 * SYSCALL_ENTRY_SIZE)
+sys_getprocinfo      = SYSCALL_BASE + (SYS_GETPROCINFO * SYSCALL_ENTRY_SIZE)
+sys_waitpid          = SYSCALL_BASE + (SYS_WAITPID * SYSCALL_ENTRY_SIZE)
+sys_get_launch_id    = SYSCALL_BASE + (SYS_GET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
 sys_get_launch_args2 = SYSCALL_BASE + (SYS_GET_LAUNCH_ARGS2 * SYSCALL_ENTRY_SIZE)
+sys_spawn_resident   = SYSCALL_BASE + (SYS_SPAWN_RESIDENT * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
 ; Common errno values

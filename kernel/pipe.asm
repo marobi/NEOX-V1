@@ -53,6 +53,7 @@
 .import file_io_gate_acquire
 .import file_io_gate_release
 .import scheduler_wake_one
+.import mul8u
 
 .segment "KERN_BSS"
 
@@ -82,6 +83,8 @@ pipe_done_lo:       .res 1      ; completed byte count, always 0..PIPE_BUF_SIZE
 
 .segment "KERN_TEXT"
 
+.assert (MAX_PIPES * PIPE_BUF_SIZE) <= $10000, error, "configured pipe storage exceeds 16-bit address range"
+
 ; ------------------------------------------------------------
 ; pipe_set_buf_base
 ;
@@ -91,10 +94,6 @@ pipe_done_lo:       .res 1      ; completed byte count, always 0..PIPE_BUF_SIZE
 ; Output:
 ;   pipe_buf_ptr = pipe_buf + X * PIPE_BUF_SIZE
 ;
-; Requires:
-;   PIPE_BUF_SIZE = 64
-;   MAX_PIPES <= 8
-;
 ; Clobbers:
 ;   A, flags
 ;
@@ -102,33 +101,25 @@ pipe_done_lo:       .res 1      ; completed byte count, always 0..PIPE_BUF_SIZE
 ;   X, Y
 ;
 ; Notes:
-;   Six shifts produce the 64-byte block offset. The final carry
-;   is the high byte of X * 64 for pipe indices 0..7.
+;   Uses mul8u so PIPE_BUF_SIZE remains configurable.
 ; ------------------------------------------------------------
 
 .proc pipe_set_buf_base
+    phx
+
     txa
-    asl
-    asl
-    asl
-    asl
-    asl
-    asl
-    sta pipe_buf_ptr
+    ldx #PIPE_BUF_SIZE
+    jsr mul8u
 
-    lda #>pipe_buf
-    adc #$00
-    sta pipe_buf_ptr+1
-
-    lda pipe_buf_ptr
     clc
     adc #<pipe_buf
     sta pipe_buf_ptr
-    bcc @done
 
-    inc pipe_buf_ptr+1
+    txa
+    adc #>pipe_buf
+    sta pipe_buf_ptr+1
 
-@done:
+    plx
     rts
 .endproc
 
