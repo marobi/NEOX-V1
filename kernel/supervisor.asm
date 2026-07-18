@@ -31,7 +31,7 @@
 .import irq_restore
 
 MONITOR_CONTEXT     = $00
-MONITOR_ENTRY       = $B003
+MONITOR_ENTRY       = MICMON_BASE + 3
 
 SUP_RETURN_RTS      = $00
 SUP_RETURN_IRQ      = $01

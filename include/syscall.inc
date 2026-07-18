@@ -7,7 +7,7 @@
 ;   error codes, and common syscall argument structures.
 ;
 ; Architecture:
-;   - Syscall jump table is located in shared page C
+;   - Syscall jump table is located in the shared BIOS page at $F100
 ;   - Each syscall entry is a 3-byte JMP stub
 ;   - User code calls fixed syscall entry addresses
 ;

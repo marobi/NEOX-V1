@@ -34,6 +34,7 @@ SYS_CFG     := ./build/neox_syscall.cfg
 KRN_CFG     := ./build/neox_kernel.cfg
 USR_CFG     := ./build/neox_user.cfg
 
+
 SYS_BIN     := $(OUTDIR)/$(SYS_TARGET).bin
 SYS_ROM     := $(OUTDIR)/$(SYS_TARGET).rom
 SYS_MAP     := $(OUTDIR)/$(SYS_TARGET).map
@@ -167,10 +168,10 @@ $(USR_BIN): $(USR_OBJS) $(USR_CFG) | dirs
 # -------------------------------------------------
 
 $(SYS_DIS): $(SYS_BIN) $(SYS_MAP) $(SYS_LBL) $(DISASM) | dirs
-	$(PYTHON) $(DISASM) $(SYS_BIN) C000 $(SYS_MAP) $(SYS_LBL) > $@
+	$(PYTHON) $(DISASM) $(SYS_BIN) F100 $(SYS_MAP) $(SYS_LBL) > $@
 
 $(KRN_DIS): $(KRN_BIN) $(KRN_MAP) $(KRN_LBL) $(DISASM) | dirs
-	$(PYTHON) $(DISASM) $(KRN_BIN) 6000 $(KRN_MAP) $(KRN_LBL) > $@
+	$(PYTHON) $(DISASM) $(KRN_BIN) 8000 $(KRN_MAP) $(KRN_LBL) > $@
 
 $(USR_DIS): $(USR_BIN) $(USR_MAP) $(USR_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(USR_BIN) 2000 $(USR_MAP) $(USR_LBL) > $@
@@ -212,7 +213,7 @@ $(KRN_LST): $(KRN_PART_LSTS)
 $(USR_LST): $(USR_PART_LSTS)
 	$(CAT) $^ > $@
 
-listings: $(SYS_LST) $(KRN_LST) $(USR_LIST)
+listings: $(SYS_LST) $(KRN_LST) $(USR_LST)
 
 # -------------------------------------------------
 # Directories
@@ -229,7 +230,7 @@ dirs:
 # Install
 # -------------------------------------------------
 
-install: $(SYS_ROM) $(KRN_ROM)
+install: $(SYS_ROM) $(KRN_ROM) $(USR_ROM)
 	$(CP) $(SYS_ROM) $(INSTALL_DIR)
 	$(CP) $(KRN_ROM) $(INSTALL_DIR)
 	$(CP) $(USR_ROM) $(INSTALL_DIR)
@@ -260,33 +261,18 @@ print:
 	@echo "User    LST:  $(USR_LST)"
 	@echo "User    DIS:  $(USR_DIS)"
 	@echo
-	@echo "Syscall objects:"
-	@printf "  %s\n" $(SYS_OBJS)
 	@echo "Kernel objects:"
 	@printf "  %s\n" $(KRN_OBJS)
-	@echo "Userlib objects:"
-	@printf "  %s\n" $(USERLIB_OBJS)
-	@echo
-	@echo "Syscall listings:"
-	@printf "  %s\n" $(SYS_PART_LSTS)
-	@echo "Kernel listings:"
-	@printf "  %s\n" $(KRN_PART_LSTS)
-	@echo "Userlib listings:"
-	@printf "  %s\n" $(USERLIB_LSTS)
-	@echo
-	@echo "Disassembler:        $(DISASM)"
-	@echo "Get address syscall: $(GETADDRSYS)"
-	@echo "Get address kernel:  $(GETADDRKRN)"
-	@echo "Get address user:    $(GETADDRUSR)"
-	@echo "Dependency files:"
-	@printf "  %s\n" $(SYS_DEPS) $(KRN_DEPS) $(USR_DEPS) $(USERLIB_DEPS)
-	
+	@echo "User objects:"
+	@printf "  %s\n" $(USR_OBJS)
+	@echo "Get address kernel: $(GETADDRKRN)"
+	@echo "Get address user:   $(GETADDRUSR)"
+
 clean:
 	$(RMDIR) $(OUTDIR)
 
 distclean: clean
 
--include $(SYS_DEPS)
 -include $(KRN_DEPS)
 -include $(USR_DEPS)
 -include $(USERLIB_DEPS)

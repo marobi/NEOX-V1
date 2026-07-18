@@ -68,3 +68,9 @@ Diagnostic spawn test applets are intentionally omitted from normal documentatio
 ## Build/version rule
 
 Build numbers and generated ZIP names are release artifacts. Do not hard-code those identifiers into architectural documents. Record them in validation notes only when comparing specific builds.
+
+
+## Build 128 address-map migration
+
+See `docs/memory_layout_build128.md` for the final 32/32 virtual-memory map.
+The BIOS cartridge now includes the public syscall table; there is no separate syscall cartridge.

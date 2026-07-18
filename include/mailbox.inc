@@ -9,11 +9,11 @@
 ;
 ; Architecture:
 ;   - Logical pages 0..7 are private per context
-;   - Logical pages 8..F are shared across all contexts
+;   - Logical pages 8..F are shared across all contexts; page E is I/O
 ;   - MMIO control registers live in shared I/O page
 ;
 ; ABI v2:
-;   - RP_REQ_BASE remains $E000
+;   - RP_REQ_BASE is $B000 in ordinary shared RAM
 ;   - Request block starts with RP_GROUP and RP_CMD
 ;   - RP_DOORBELL is trigger-only; command identity is not
 ;     encoded in the doorbell value anymore.

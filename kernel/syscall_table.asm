@@ -3,15 +3,15 @@
 ; NEOX - syscall jump table and kernel-side syscall handlers
 ;
 ; Purpose:
-;   Defines the fixed syscall jump table in shared syscall page C
+;   Defines the fixed syscall jump table loaded into the BIOS page
 ;   and implements the kernel-side handlers for currently
 ;   supported syscalls.
 ;
 ; Design:
-;   - Syscall stubs live at SYSCALL_BASE ($C000)
+;   - Syscall stubs live at SYSCALL_BASE ($F100)
 ;   - Each entry is a 3-byte JMP
 ;   - User code calls fixed entry addresses
-;   - Handlers run in shared syscall code
+;   - Handlers run in the separately built syscall cartridge at $F100
 ;
 ; I/O pointer policy:
 ;   - io_ptr is used by the syscall/RP console path

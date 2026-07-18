@@ -46,34 +46,42 @@ NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
 
 USER_IMAGE_TABLE = $2000
 
+; Final 32/32 virtual-memory split.
+USER_SPACE_LIMIT = $8000
+KERNEL_SHARED_BASE = $B020
+KERNEL_OVERFLOW_BASE = $C000
+MICMON_BASE = $D000
+IO_PAGE_BASE = $E000
+BIOS_BASE = $F000
+
 ; ------------------------------------------------------------
 ; Kernel
 ; ------------------------------------------------------------
 
-KERNEL_BASE = $6000
+KERNEL_BASE = $8000
 
 ; ------------------------------------------------------------
 ; Syscall table location
 ; ------------------------------------------------------------
 
-SYSCALL_BASE = $C000
+SYSCALL_BASE = $F100
 
 ; ------------------------------------------------------------
 ; RP2350 mailbox control registers (MMIO)
 ;
 ; Layout:
-;   Page D is shared I/O space
-;   OS-owned mailbox control starts at $D010
+;   Page E is shared I/O space
+;   OS-owned mailbox doorbell starts at $E010
 ; ------------------------------------------------------------
 
-RP_DOORBELL  = $D010
+RP_DOORBELL  = $E010
 
 ; ------------------------------------------------------------
-; Shared RAM request/result block
+; Shared RAM request/result block (ordinary shared RAM, not I/O)
 ;
 ; mailbox request block.
 ; ------------------------------------------------------------
 
-RP_REQ_BASE  = $E000
+RP_REQ_BASE  = $B000
 
 .endif

@@ -109,7 +109,7 @@
     ; --------------------------------------------------------
 	; set the version of the kernel
     ; --------------------------------------------------------
-	lda #$09				; minor: pipe endpoint flags folded into pipe_state
+	lda #$0A				; shared-state ABI: final 32/32 memory layout
 	sta kernel_version
 	Lda #$02				; major
 	sta kernel_version+1

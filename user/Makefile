@@ -6,7 +6,6 @@ AS          := ca65
 LD          := ld65
 BIN2ROM     := bin2rom
 
-GETADDRSYS  := ./build/getaddress_syscall
 GETADDRKRN  := ./build/getaddress_kernel
 GETADDRUSR  := ./build/getaddress_user
 
@@ -26,20 +25,12 @@ CAT         := cat
 INCDIR      := include -I bios -I user
 OUTDIR      := out
 
-SYS_TARGET  := neox_syscall
 KRN_TARGET  := neox_kernel
 USR_TARGET  := neox_user
 
-SYS_CFG     := ./build/neox_syscall.cfg
 KRN_CFG     := ./build/neox_kernel.cfg
 USR_CFG     := ./build/neox_user.cfg
 
-SYS_BIN     := $(OUTDIR)/$(SYS_TARGET).bin
-SYS_ROM     := $(OUTDIR)/$(SYS_TARGET).rom
-SYS_MAP     := $(OUTDIR)/$(SYS_TARGET).map
-SYS_LBL     := $(OUTDIR)/$(SYS_TARGET).lbl
-SYS_LST     := $(OUTDIR)/$(SYS_TARGET).lst
-SYS_DIS     := $(OUTDIR)/$(SYS_TARGET).dis
 
 KRN_BIN     := $(OUTDIR)/$(KRN_TARGET).bin
 KRN_ROM     := $(OUTDIR)/$(KRN_TARGET).rom
@@ -66,11 +57,6 @@ INSTALL_DIR := $(BASE_DIR)$(PROJECT_DIR)/data/system
 
 NBOX_BASE := user
 include user/nbox.mk
-
-SYSCALL_SRCS := \
-	kernel/zero_page.asm \
-	kernel/shared_state.asm \
-	kernel/syscall_table.asm
 
 KERNEL_SRCS := \
 	kernel/zero_page.asm \
@@ -107,7 +93,6 @@ USER_SRCS := \
 	user/neosh.asm \
 	$(NBOX_SRCS)
 
-
 # Optional user library objects
 USERLIB_SRCS := 
 
@@ -115,12 +100,10 @@ USERLIB_SRCS :=
 # Derived objects / listings
 # -------------------------------------------------
 
-SYS_OBJS      := $(SYSCALL_SRCS:%.asm=$(OUTDIR)/%.o)
 KRN_OBJS      := $(KERNEL_SRCS:%.asm=$(OUTDIR)/%.o)
 USR_OBJS      := $(USER_SRCS:%.asm=$(OUTDIR)/%.o)
 USERLIB_OBJS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.o)
 
-SYS_PART_LSTS := $(SYSCALL_SRCS:%.asm=$(OUTDIR)/%.lst)
 KRN_PART_LSTS := $(KERNEL_SRCS:%.asm=$(OUTDIR)/%.lst)
 USR_PART_LSTS := $(USER_SRCS:%.asm=$(OUTDIR)/%.lst)
 USERLIB_LSTS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.lst)
@@ -130,9 +113,8 @@ USERLIB_LSTS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.lst)
 # -------------------------------------------------
 
 .PHONY: all clean distclean install print dirs listings disasm
-all: $(SYS_ROM) $(KRN_ROM) $(USR_ROM) $(SYS_DIS) $(KRN_DIS) $(USR_DIS)
+all: $(KRN_ROM) $(USR_ROM) $(KRN_DIS) $(USR_DIS)
 
-SYS_DEPS      := $(SYSCALL_SRCS:%.asm=$(OUTDIR)/%.d)
 KRN_DEPS      := $(KERNEL_SRCS:%.asm=$(OUTDIR)/%.d)
 USR_DEPS      := $(USER_SRCS:%.asm=$(OUTDIR)/%.d)
 USERLIB_DEPS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.d)
@@ -140,9 +122,6 @@ USERLIB_DEPS  := $(USERLIB_SRCS:%.asm=$(OUTDIR)/%.d)
 # -------------------------------------------------
 # Cartridge generation
 # -------------------------------------------------
-
-$(SYS_ROM): $(SYS_BIN)
-	$(BIN2ROM) -B $(shell $(GETADDRSYS)) -o $@ $<
 
 $(KRN_ROM): $(KRN_BIN)
 	$(BIN2ROM) -B $(shell $(GETADDRKRN)) -o $@ $<
@@ -154,9 +133,6 @@ $(USR_ROM): $(USR_BIN)
 # Link rules
 # -------------------------------------------------
 
-$(SYS_BIN): $(SYS_OBJS) $(SYS_CFG) | dirs
-	$(LD) -C $(SYS_CFG) -vm -m $(SYS_MAP) -Ln $(SYS_LBL) -o $@ $(SYS_OBJS)
-
 $(KRN_BIN): $(KRN_OBJS) $(KRN_CFG) | dirs
 	$(LD) -C $(KRN_CFG) -vm -m $(KRN_MAP) -Ln $(KRN_LBL) -o $@ $(KRN_OBJS)
 
@@ -167,16 +143,13 @@ $(USR_BIN): $(USR_OBJS) $(USR_CFG) | dirs
 # Python disassembly output
 # -------------------------------------------------
 
-$(SYS_DIS): $(SYS_BIN) $(SYS_MAP) $(SYS_LBL) $(DISASM) | dirs
-	$(PYTHON) $(DISASM) $(SYS_BIN) C000 $(SYS_MAP) $(SYS_LBL) > $@
-
 $(KRN_DIS): $(KRN_BIN) $(KRN_MAP) $(KRN_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(KRN_BIN) 8000 $(KRN_MAP) $(KRN_LBL) > $@
 
 $(USR_DIS): $(USR_BIN) $(USR_MAP) $(USR_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(USR_BIN) 2000 $(USR_MAP) $(USR_LBL) > $@
 
-disasm: $(SYS_DIS) $(KRN_DIS)
+disasm: $(KRN_DIS)
 
 # -------------------------------------------------
 # Assemble rules with listing output
@@ -204,16 +177,13 @@ $(OUTDIR)/user/lib/%.o: user/lib/%.asm | dirs
 # Aggregate assembler listings
 # -------------------------------------------------
 
-$(SYS_LST): $(SYS_PART_LSTS)
-	$(CAT) $^ > $@
-
 $(KRN_LST): $(KRN_PART_LSTS)
 	$(CAT) $^ > $@
 
 $(USR_LST): $(USR_PART_LSTS)
 	$(CAT) $^ > $@
 
-listings: $(SYS_LST) $(KRN_LST) $(USR_LIST)
+listings: $(KRN_LST) $(USR_LST)
 
 # -------------------------------------------------
 # Directories
@@ -230,8 +200,7 @@ dirs:
 # Install
 # -------------------------------------------------
 
-install: $(SYS_ROM) $(KRN_ROM)
-	$(CP) $(SYS_ROM) $(INSTALL_DIR)
+install: $(KRN_ROM) $(USR_ROM)
 	$(CP) $(KRN_ROM) $(INSTALL_DIR)
 	$(CP) $(USR_ROM) $(INSTALL_DIR)
 
@@ -240,13 +209,6 @@ install: $(SYS_ROM) $(KRN_ROM)
 # -------------------------------------------------
 
 print:
-	@echo "Syscall BIN:  $(SYS_BIN)"
-	@echo "Syscall ROM:  $(SYS_ROM)"
-	@echo "Syscall MAP:  $(SYS_MAP)"
-	@echo "Syscall LBL:  $(SYS_LBL)"
-	@echo "Syscall LST:  $(SYS_LST)"
-	@echo "Syscall DIS:  $(SYS_DIS)"
-	@echo
 	@echo "Kernel  BIN:  $(KRN_BIN)"
 	@echo "Kernel  ROM:  $(KRN_ROM)"
 	@echo "Kernel  MAP:  $(KRN_MAP)"
@@ -261,33 +223,18 @@ print:
 	@echo "User    LST:  $(USR_LST)"
 	@echo "User    DIS:  $(USR_DIS)"
 	@echo
-	@echo "Syscall objects:"
-	@printf "  %s\n" $(SYS_OBJS)
 	@echo "Kernel objects:"
 	@printf "  %s\n" $(KRN_OBJS)
-	@echo "Userlib objects:"
-	@printf "  %s\n" $(USERLIB_OBJS)
-	@echo
-	@echo "Syscall listings:"
-	@printf "  %s\n" $(SYS_PART_LSTS)
-	@echo "Kernel listings:"
-	@printf "  %s\n" $(KRN_PART_LSTS)
-	@echo "Userlib listings:"
-	@printf "  %s\n" $(USERLIB_LSTS)
-	@echo
-	@echo "Disassembler:        $(DISASM)"
-	@echo "Get address syscall: $(GETADDRSYS)"
-	@echo "Get address kernel:  $(GETADDRKRN)"
-	@echo "Get address user:    $(GETADDRUSR)"
-	@echo "Dependency files:"
-	@printf "  %s\n" $(SYS_DEPS) $(KRN_DEPS) $(USR_DEPS) $(USERLIB_DEPS)
-	
+	@echo "User objects:"
+	@printf "  %s\n" $(USR_OBJS)
+	@echo "Get address kernel: $(GETADDRKRN)"
+	@echo "Get address user:   $(GETADDRUSR)"
+
 clean:
 	$(RMDIR) $(OUTDIR)
 
 distclean: clean
 
--include $(SYS_DEPS)
 -include $(KRN_DEPS)
 -include $(USR_DEPS)
 -include $(USERLIB_DEPS)
