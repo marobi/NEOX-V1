@@ -226,5 +226,14 @@
     <None Include="include\version.inc">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="user\applets\kill.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="libneox\include\neox\signal.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_signal.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

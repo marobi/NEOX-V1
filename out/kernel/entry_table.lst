@@ -1,0 +1,255 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/entry_table.asm
+Current file: kernel/entry_table.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; entry_table.asm
+000000r 1               ; NEOX - fixed kernel entry table
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Provides stable entry points at the start of the kernel
+000000r 1               ;   image for other images (syscall layer, BIOS, etc.).
+000000r 1               ;
+000000r 1               ; Layout:
+000000r 1               ;   - Located at KERNEL_BASE ($8000)
+000000r 1               ;   - Reserved kernel-entry area is $0100 bytes.
+000000r 1               ;
+000000r 1               ; Notes:
+000000r 1               ;   Padding ensures that KERN_TEXT always starts at $8100.
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "kernel.inc"
+000000r 2               ; ============================================================
+000000r 2               ; kernel_entry.inc
+000000r 2               ; NEOX - fixed kernel entry table
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __KERNEL_ENTRY_INC__
+000000r 2               __KERNEL_ENTRY_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               KERNEL_ENTRY_SIZE           = 3
+000000r 2               
+000000r 2               KERN_ENTRY_MAIN             = KERNEL_BASE + (0 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_MONITOR          = KERNEL_BASE + (1 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_SET_BRK_VECTOR   = KERNEL_BASE + (2 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_LEAVE_MONITOR    = KERNEL_BASE + (3 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_READ        = KERNEL_BASE + (4 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_WRITE       = KERNEL_BASE + (5 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_EXIT        = KERNEL_BASE + (6 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_YIELD       = KERNEL_BASE + (7 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SLEEP       = KERNEL_BASE + (8 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_CLOSE       = KERNEL_BASE + (9 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_DUP  		= KERNEL_BASE + (10 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_DUP2 		= KERNEL_BASE + (11 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_PIPE		= KERNEL_BASE + (12 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_PIPE_CREATE_BETWEEN_FD = KERNEL_BASE + (13 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_TICKS       = KERNEL_BASE + (14 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SIGNAL      = KERNEL_BASE + (15 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_OPEN        = KERNEL_BASE + (16 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_LOAD_FILE_TO_MEMORY = KERNEL_BASE + (17 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SAVE_MEMORY_TO_FILE = KERNEL_BASE + (18 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SEEK       = KERNEL_BASE + (19 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_TELL       = KERNEL_BASE + (20 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_DELETE     = KERNEL_BASE + (21 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_RENAME     = KERNEL_BASE + (22 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_OPENDIR    = KERNEL_BASE + (23 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_READDIR    = KERNEL_BASE + (24 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_CLOSEDIR   = KERNEL_BASE + (25 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_CHDIR      = KERNEL_BASE + (26 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GETCWD     = KERNEL_BASE + (27 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_MKDIR      = KERNEL_BASE + (28 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_RMDIR      = KERNEL_BASE + (29 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GETPROCINFO = KERNEL_BASE + (30 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_WAITPID = KERNEL_BASE + (31 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GET_LAUNCH_ID = KERNEL_BASE + (32 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GET_LAUNCH_LINE = KERNEL_BASE + (33 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SPAWN_RESIDENT = KERNEL_BASE + (34 * KERNEL_ENTRY_SIZE)
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export kernel_entry_table
+000000r 1               
+000000r 1               .import kernel_main
+000000r 1               .import set_brk_vector
+000000r 1               .import enter_monitor
+000000r 1               .import leave_monitor
+000000r 1               .import ksys_read
+000000r 1               .import ksys_write
+000000r 1               .import ksys_exit
+000000r 1               .import ksys_yield
+000000r 1               .import ksys_sleep
+000000r 1               .import ksys_close
+000000r 1               .import ksys_dup
+000000r 1               .import ksys_dup2
+000000r 1               .import ksys_pipe
+000000r 1               .import pipe_create_between_fd
+000000r 1               .import ksys_ticks
+000000r 1               .import ksys_signal
+000000r 1               .import ksys_open
+000000r 1               .import ksys_load_file_to_memory
+000000r 1               .import ksys_save_memory_to_file
+000000r 1               .import ksys_seek
+000000r 1               .import ksys_tell
+000000r 1               .import ksys_delete
+000000r 1               .import ksys_rename
+000000r 1               .import ksys_opendir
+000000r 1               .import ksys_readdir
+000000r 1               .import ksys_closedir
+000000r 1               .import ksys_chdir
+000000r 1               .import ksys_getcwd
+000000r 1               .import ksys_mkdir
+000000r 1               .import ksys_rmdir
+000000r 1               .import ksys_getprocinfo
+000000r 1               .import ksys_waitpid
+000000r 1               .import ksys_get_launch_id
+000000r 1               .import ksys_get_launch_line
+000000r 1               .import ksys_spawn_resident
+000000r 1               
+000000r 1               .segment "KERNEL_ENTRY"
+000000r 1               
+000000r 1               .assert * = KERNEL_BASE, error, "KERNEL_ENTRY must start at KERNEL_BASE"
+000000r 1               
+000000r 1               RESET:
+000000r 1               kernel_entry_table:
+000000r 1  4C rr rr         jmp kernel_main
+000003r 1  4C rr rr         jmp enter_monitor
+000006r 1  4C rr rr     	jmp set_brk_vector
+000009r 1  4C rr rr     	jmp leave_monitor
+00000Cr 1  4C rr rr     	jmp ksys_read
+00000Fr 1  4C rr rr     	jmp ksys_write
+000012r 1  4C rr rr     	jmp ksys_exit
+000015r 1  4C rr rr     	jmp ksys_yield
+000018r 1  4C rr rr     	jmp ksys_sleep
+00001Br 1  4C rr rr     	jmp ksys_close
+00001Er 1  4C rr rr     	jmp ksys_dup
+000021r 1  4C rr rr     	jmp ksys_dup2
+000024r 1  4C rr rr     	jmp ksys_pipe
+000027r 1  4C rr rr     	jmp pipe_create_between_fd
+00002Ar 1  4C rr rr     	jmp ksys_ticks
+00002Dr 1  4C rr rr     	jmp ksys_signal
+000030r 1  4C rr rr         jmp ksys_open
+000033r 1  4C rr rr         jmp ksys_load_file_to_memory
+000036r 1  4C rr rr         jmp ksys_save_memory_to_file
+000039r 1  4C rr rr         jmp ksys_seek
+00003Cr 1  4C rr rr         jmp ksys_tell
+00003Fr 1  4C rr rr         jmp ksys_delete
+000042r 1  4C rr rr         jmp ksys_rename
+000045r 1  4C rr rr         jmp ksys_opendir
+000048r 1  4C rr rr         jmp ksys_readdir
+00004Br 1  4C rr rr         jmp ksys_closedir
+00004Er 1  4C rr rr         jmp ksys_chdir
+000051r 1  4C rr rr         jmp ksys_getcwd
+000054r 1  4C rr rr         jmp ksys_mkdir
+000057r 1  4C rr rr         jmp ksys_rmdir
+00005Ar 1  4C rr rr         jmp ksys_getprocinfo
+00005Dr 1  4C rr rr         jmp ksys_waitpid
+000060r 1  4C rr rr         jmp ksys_get_launch_id
+000063r 1  4C rr rr         jmp ksys_get_launch_line
+000066r 1  4C rr rr         jmp ksys_spawn_resident
+000069r 1               
+000069r 1               ; KERNEL_ENTRY area is $0100 bytes.
+000069r 1               ; Current table: 35 absolute JMP entries * 3 bytes = $69 bytes.
+000069r 1               ; Remaining fixed padding: $0100 - $69 = $97 bytes.
+000069r 1               ; Keep this explicit because ca65 cannot use relocatable PC (*)
+000069r 1               ; in the .res count expression here.
+000069r 1               KERNEL_ENTRY_COUNT         = 35
+000069r 1               KERNEL_ENTRY_RESERVED_SIZE = $0100
+000069r 1               KERNEL_ENTRY_USED_BYTES    = KERNEL_ENTRY_COUNT * KERNEL_ENTRY_SIZE
+000069r 1               
+000069r 1                   .assert KERNEL_ENTRY_USED_BYTES <= KERNEL_ENTRY_RESERVED_SIZE, error, "KERNEL_ENTRY overflows reserved entry area"
+000069r 1  00 00 00 00      .res KERNEL_ENTRY_RESERVED_SIZE - KERNEL_ENTRY_USED_BYTES, $00
+00006Dr 1  00 00 00 00  
+000071r 1  00 00 00 00  
+000069r 1               

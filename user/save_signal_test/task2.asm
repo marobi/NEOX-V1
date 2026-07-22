@@ -4,7 +4,7 @@
 ;
 ; Temporary signal test image:
 ;   PID 2 stays runnable by yielding repeatedly.
-;   PID 1 sends HALT/CONT/KILL signals to this task.
+;   PID 1 sends STOP/CONT/KILL signals to this task.
 ;
 ; Original freeze task saved as:
 ;   user/task2_freeze.asm

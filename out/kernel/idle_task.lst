@@ -1,0 +1,30 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/idle_task.asm
+Current file: kernel/idle_task.asm
+
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; idle_loop
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Fallback execution path when no runnable user process exists.
+000000r 1               ;
+000000r 1               ; Notes:
+000000r 1               ;   Runs in PID 0 / context 0.
+000000r 1               ;   Timer IRQ continues to drive scheduling.
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .export idle_loop
+000000r 1               
+000000r 1               .import proc_reap_zombies
+000000r 1               
+000000r 1               .proc idle_loop
+000000r 1  58           	cli			; assure IRQ enabled
+000001r 1               @idle:
+000001r 1  20 rr rr         jsr proc_reap_zombies
+000004r 1  80 FB        	bra @idle
+000006r 1               .endproc
+000006r 1               

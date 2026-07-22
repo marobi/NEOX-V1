@@ -64,8 +64,8 @@ The common `SYSCALL argblk, entry` macro loads X/Y with the argument block addre
 | $21 | `SYS_WAITPID` | Wait for and reap a child zombie. |
 | $22 | `SYS_SPAWN_SET_LAUNCH_ID` | Set resident child launch id. |
 | $23 | `SYS_GET_LAUNCH_ID` | Child reads its launch id. |
-| $24 | `SYS_SPAWN_SET_ARGS2` | Set child argc/arg0/arg1 launch arguments. |
-| $25 | `SYS_GET_LAUNCH_ARGS2` | Child reads launch argc/arg0/arg1. |
+| $24 | `SYS_SPAWN_SET_ARGS2` | Set child one opaque launch argument line launch arguments. |
+| $25 | `SYS_GET_LAUNCH_LINE` | Child reads launch one opaque launch argument line. |
 
 ## Argument blocks
 
@@ -165,3 +165,18 @@ Process info record:
 +3 wait_reason
 +4 signal_pending
 ```
+
+
+## Process signals
+
+`SYS_SIGNAL` receives the Linux-compatible signal number in `A` and the target
+PID in `X`.
+
+```text
+A=2   SIG_INT
+A=9   SIG_KILL
+A=18  SIG_CONT
+A=19  SIG_STOP
+```
+
+The compiler-neutral C boundary is `neox_signal(pid, signal)`.

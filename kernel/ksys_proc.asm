@@ -33,6 +33,8 @@
 .import proc_gate_acquire
 .import proc_gate_release
 .import active_pid
+.import console_owner_pid
+.import scheduler_wake_console_owner
 .importzp io_ptr
 .import proc_state
 .import proc_parent_pid
@@ -128,7 +130,7 @@ ksys_signal_self_kill:
 ; ksys_signal
 ;
 ; Input:
-;   A = signal number (SIG_HALT, SIG_CONT, SIG_KILL)
+;   A = Linux-compatible signal number (SIG_INT, SIG_KILL, SIG_CONT, SIG_STOP)
 ;   X = target PID
 ;
 ; Return:
@@ -141,19 +143,22 @@ ksys_signal_self_kill:
 ;   proc_send_signal.  Arguments are preserved on the current
 ;   process stack while proc_gate_acquire may block/yield.
 ;
-;   This syscall queues HALT/CONT as pending signals.  SIG_KILL is
+;   This syscall queues STOP/CONT as pending signals.  SIG_KILL is
 ;   converted immediately to PROC_ZOMBIE through proc_send_signal;
 ;   final FD/process-slot cleanup is deferred to the idle reaper.
 ; ------------------------------------------------------------
 
 .proc ksys_signal
-    cmp #SIG_HALT
+    cmp #SIG_STOP
     beq @valid_signal
 
     cmp #SIG_CONT
     beq @valid_signal
 
     cmp #SIG_KILL
+    beq @valid_signal
+
+    cmp #SIG_INT
     beq @valid_signal
 
     ldy #EINVAL
@@ -338,7 +343,18 @@ ksys_signal_self_kill:
     jmp @fail_release
 
 @reaped:
-    pha                         ; exit code above persistent child PID
+    ; Preserve the exit code above the persistent child PID before touching A.
+    pha
+
+    ; X still identifies the reaped child. Restore foreground ownership only
+    ; when this exact child owned the console. Background children therefore
+    ; never affect console_owner_pid.
+    cpx console_owner_pid
+    bne :+
+    lda active_pid
+    sta console_owner_pid
+    jsr scheduler_wake_console_owner
+:
     jsr proc_gate_release
     bcc @release_fail_after_reap
 

@@ -4,7 +4,7 @@
 ;
 ; Temporary signal test image:
 ;   PID 3 blocks in sys_sleep with WAIT_TIMER.
-;   PID 1 sends SIG_HALT while this task is blocked.
+;   PID 1 sends SIG_STOP while this task is blocked.
 ;
 ; Original freeze task saved as:
 ;   user/task3_freeze.asm
@@ -85,7 +85,7 @@ t3_wr_stdout_args:
 
     jsr t3_print_sleep
 
-    ; Long sleep gives PID 1 a stable window to send SIG_HALT while
+    ; Long sleep gives PID 1 a stable window to send SIG_STOP while
     ; this task is blocked on WAIT_TIMER.
     lda #$F0
     jsr sys_sleep

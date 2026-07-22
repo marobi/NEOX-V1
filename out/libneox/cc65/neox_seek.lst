@@ -1,0 +1,856 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : libneox/cc65/neox_seek.asm
+Current file: libneox/cc65/neox_seek.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; neox_seek.asm
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               .include "syscall.inc"
+000000r 2               ; ============================================================
+000000r 2               ; syscall.inc
+000000r 2               ; NEOX - syscall definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Defines syscall numbers, fixed syscall entry addresses,
+000000r 2               ;   error codes, and common syscall argument structures.
+000000r 2               ;
+000000r 2               ; Architecture:
+000000r 2               ;   - Syscall jump table is located in the shared BIOS page at $F100
+000000r 2               ;   - Each syscall entry is a 3-byte JMP stub
+000000r 2               ;   - User code calls fixed syscall entry addresses
+000000r 2               ;
+000000r 2               ; Notes:
+000000r 2               ;   SYS_MONITOR enters supervisor/MICMON context through the
+000000r 2               ;   kernel-defined monitor entry path. It is a controlled
+000000r 2               ;   privileged transfer, not direct user control of MMU/scheduler.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SYSCALL_INC__
+000000r 2               __SYSCALL_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               SYSCALL_ENTRY_SIZE  = 3
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Standard file descriptors
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               STDIN               = 0
+000000r 2               STDOUT              = 1
+000000r 2               STDERR              = 2
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Syscall numbers
+000000r 2               ; ------------------------------------------------------------
+000000r 2               SYS_EXIT			= $00
+000000r 2               SYS_OPEN            = $01
+000000r 2               SYS_CLOSE			= $02
+000000r 2               SYS_READ            = $03
+000000r 2               SYS_WRITE           = $04
+000000r 2               SYS_MONITOR         = $05
+000000r 2               SYS_LOAD_FILE_TO_MEMORY = $06
+000000r 2               SYS_SAVE_MEMORY_TO_FILE = $07
+000000r 2               SYS_SEEK            = $08
+000000r 2               SYS_TELL            = $09
+000000r 2               SYS_PIPE			= $0A
+000000r 2               SYS_DELETE          = $0C
+000000r 2               SYS_RENAME          = $0D
+000000r 2               SYS_YIELD           = $0B
+000000r 2               SYS_SLEEP           = $0E
+000000r 2               SYS_DUP				= $0F
+000000r 2               SYS_DUP2			= $10
+000000r 2               SYS_TICKS           = $11
+000000r 2               SYS_SIGNAL          = $12
+000000r 2               SYS_OPENDIR         = $13
+000000r 2               SYS_READDIR         = $14
+000000r 2               SYS_CLOSEDIR        = $15
+000000r 2               SYS_CHDIR           = $16
+000000r 2               SYS_GETCWD          = $17
+000000r 2               SYS_MKDIR           = $18
+000000r 2               SYS_RMDIR           = $19
+000000r 2               SYS_GETPROCINFO      = $1A
+000000r 2               SYS_WAITPID           = $1B
+000000r 2               SYS_GET_LAUNCH_ID     = $1C
+000000r 2               SYS_GET_LAUNCH_LINE   = $1D
+000000r 2               SYS_SPAWN_RESIDENT    = $1E
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Fixed syscall entry addresses
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_open            = SYSCALL_BASE + (SYS_OPEN    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_close           = SYSCALL_BASE + (SYS_CLOSE   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_load_file_to_memory = SYSCALL_BASE + (SYS_LOAD_FILE_TO_MEMORY * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_save_memory_to_file = SYSCALL_BASE + (SYS_SAVE_MEMORY_TO_FILE * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_seek            = SYSCALL_BASE + (SYS_SEEK    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_tell            = SYSCALL_BASE + (SYS_TELL    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_delete          = SYSCALL_BASE + (SYS_DELETE  * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_rename          = SYSCALL_BASE + (SYS_RENAME  * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_pipe            = SYSCALL_BASE + (SYS_PIPE    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_ticks           = SYSCALL_BASE + (SYS_TICKS   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_signal          = SYSCALL_BASE + (SYS_SIGNAL  * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_opendir         = SYSCALL_BASE + (SYS_OPENDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_readdir         = SYSCALL_BASE + (SYS_READDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_closedir        = SYSCALL_BASE + (SYS_CLOSEDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_chdir           = SYSCALL_BASE + (SYS_CHDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_getcwd          = SYSCALL_BASE + (SYS_GETCWD * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_mkdir           = SYSCALL_BASE + (SYS_MKDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_rmdir           = SYSCALL_BASE + (SYS_RMDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_getprocinfo      = SYSCALL_BASE + (SYS_GETPROCINFO * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_waitpid          = SYSCALL_BASE + (SYS_WAITPID * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_get_launch_id    = SYSCALL_BASE + (SYS_GET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_get_launch_line  = SYSCALL_BASE + (SYS_GET_LAUNCH_LINE * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_spawn_resident   = SYSCALL_BASE + (SYS_SPAWN_RESIDENT * SYSCALL_ENTRY_SIZE)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common errno values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               E_OK                = 0
+000000r 2               EIO                 = 3
+000000r 2               EINVAL              = 6
+000000r 2               EMFILE              = 8        ; too many open file descriptors
+000000r 2               EBADF               = 9
+000000r 2               ENODEV              = 10
+000000r 2               ENOSYS              = 11
+000000r 2               EINTR               = 4        ; interrupted system call
+000000r 2               EAGAIN              = 12       ; operation would block / try again
+000000r 2               ENOMEM              = 13       ; no free kernel memory/object/table slot
+000000r 2               EPIPE               = 14       ; write on pipe with no readers
+000000r 2               
+000000r 2               .include "spawn.inc"
+000000r 3               ; ============================================================
+000000r 3               ; spawn.inc
+000000r 3               ; NEOX - unified resident spawn ABI
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __SPAWN_INC__
+000000r 3               __SPAWN_INC__ = 1
+000000r 3               
+000000r 3               .include "config.inc"
+000000r 4               ; ============================================================
+000000r 4               ; config.inc
+000000r 4               ; NEOX - kernel configuration
+000000r 4               ;
+000000r 4               ; Purpose:
+000000r 4               ; ============================================================
+000000r 4               
+000000r 4               .ifndef __CONFIG_INC__
+000000r 4               __CONFIG_INC__ = 1
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Limits
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               MAX_FDS     = 6          ; per-process descriptor count
+000000r 4               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Maximum simultaneously active processes
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               MAX_PROCS   = 8
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Maximum simultaneously active timer waits
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               MAX_TIMER   = 8
+000000r 4               
+000000r 4               ;
+000000r 4               ;
+000000r 4               ;
+000000r 4               
+000000r 4               MAX_PIPES       = 8
+000000r 4               PIPE_BUF_SIZE   = 64
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Filesystem path limits
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 4               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 4               ; ============================================================
+000000r 4               ;
+000000r 4               ; ============================================================
+000000r 4               
+000000r 4               USER_IMAGE_TABLE = $1000
+000000r 4               
+000000r 4               ; Final 32/32 virtual-memory split.
+000000r 4               USER_SPACE_LIMIT = $8000
+000000r 4               KERNEL_SHARED_BASE = $B020
+000000r 4               KERNEL_OVERFLOW_BASE = $C000
+000000r 4               MICMON_BASE = $D000
+000000r 4               IO_PAGE_BASE = $E000
+000000r 4               BIOS_BASE = $F000
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Kernel
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               KERNEL_BASE = $8000
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Syscall table location
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               SYSCALL_BASE = $F100
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; RP2350 mailbox control registers (MMIO)
+000000r 4               ;
+000000r 4               ; Layout:
+000000r 4               ;   Page E is shared I/O space
+000000r 4               ;   OS-owned mailbox doorbell starts at $E010
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               RP_DOORBELL  = $E010
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 4               ;
+000000r 4               ; mailbox request block.
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               RP_REQ_BASE  = $B000
+000000r 4               
+000000r 4               .endif
+000000r 4               
+000000r 3               .include "process.inc"
+000000r 4               .ifndef __PROCESS_INC__
+000000r 4               __PROCESS_INC__ = 1
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Process states
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               PROC_EMPTY      = $00
+000000r 4               PROC_NEW        = $01
+000000r 4               PROC_READY      = $02
+000000r 4               PROC_RUNNING    = $03
+000000r 4               PROC_BLOCKED    = $04
+000000r 4               PROC_STOPPED    = $05
+000000r 4               PROC_ZOMBIE     = $06
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Flags byte bit definitions
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               PROC_FLAG_NONE              = $00
+000000r 4               PROC_FLAG_IDLE              = $01
+000000r 4               PROC_FLAG_ATTACHED_CON      = $02
+000000r 4               PROC_FLAG_FOREGROUND        = $04
+000000r 4               PROC_FLAG_SIGINT_INTERRUPT  = $08
+000000r 4               
+000000r 4               ; Flags that may be supplied as initial process characteristics by a
+000000r 4               ; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+000000r 4               ; kernel-owned and cannot be requested through these creation interfaces.
+000000r 4               PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Process frame format
+000000r 4               ;
+000000r 4               ; All saved runnable process stacks use the IRQ-compatible
+000000r 4               ; extended RTI frame:
+000000r 4               ;     Y, X, A, P, PCL, PCH
+000000r 4               ; The scheduler has no per-process resume mode; normal task
+000000r 4               ; resume is always RTI.
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Process wait reasons
+000000r 4               ;
+000000r 4               ; WAIT_NONE means the process is not blocked on a known wait object.
+000000r 4               ; Other values describe why a PROC_BLOCKED process is blocked.
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               WAIT_NONE       = $00
+000000r 4               WAIT_CONSOLE    = $01
+000000r 4               WAIT_DEVICE     = $02
+000000r 4               WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+000000r 4               WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
+000000r 4               WAIT_TIMER      = $04
+000000r 4               WAIT_PROC       = $05
+000000r 4               
+000000r 4               ; Generic sleepable gate wait.
+000000r 4               ;
+000000r 4               ; wait_object identifies the gate object:
+000000r 4               ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+000000r 4               ;   LOCK_ID_PROC    = future process-management syscall gate
+000000r 4               WAIT_LOCK       = $06
+000000r 4               
+000000r 4               ; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+000000r 4               ; readers and writers can be woken by the correct readiness event.
+000000r 4               WAIT_PIPE_WRITE = $07
+000000r 4               
+000000r 4               ; Blocked while retaining FILE_IO ownership until the RP2350 completes
+000000r 4               ; the single active generic filesystem request. wait_object contains the
+000000r 4               ; filesystem operation code.
+000000r 4               WAIT_RP         = $08
+000000r 4               
+000000r 4               LOCK_ID_FILE_IO = $00
+000000r 4               LOCK_ID_PROC    = $01
+000000r 4               
+000000r 4               ; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+000000r 4               PROC_HOLD_NONE     = $00
+000000r 4               PROC_HOLD_FILE_IO  = $01
+000000r 4               PROC_HOLD_PROC     = $02
+000000r 4               
+000000r 4               ; Sentinel used for free gate owners and empty gate wait queues.
+000000r 4               GATE_OWNER_NONE = $FF
+000000r 4               
+000000r 4               EXIT_OK         = $00
+000000r 4               
+000000r 4               .endif
+000000r 4               
+000000r 3               
+000000r 3               SPAWN_FLAGS_NONE = PROC_FLAG_NONE
+000000r 3               SPAWN_FLAGS_VALID = PROC_FLAGS_CREATE_MASK
+000000r 3               SPAWN_LAUNCH_NONE = $FF
+000000r 3               SPAWN_FD_CLOSED = $FF
+000000r 3               
+000000r 3               ; Maximum process-private launch-line storage including its terminating NUL.
+000000r 3               ; The public length excludes the NUL and must be less than SPAWN_LINE_MAX.
+000000r 3               SPAWN_LINE_MAX = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; spawn_resident_args
+000000r 3               ;
+000000r 3               ; The parent transfers one opaque argument line to the child. The kernel
+000000r 3               ; does not tokenize, count, quote, or otherwise interpret argument bytes.
+000000r 3               ; arg_line_len excludes the terminating NUL.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               .struct spawn_resident_args
+000000r 3                   entry           .word
+000000r 3                   launch_id       .byte
+000000r 3                   arg_line_ptr    .word
+000000r 3                   arg_line_len    .byte
+000000r 3                   stdin_fd        .byte
+000000r 3                   stdout_fd       .byte
+000000r 3                   stderr_fd       .byte
+000000r 3                   flags           .byte   ; initial child proc_flags
+000000r 3                   result_pid      .byte
+000000r 3               .endstruct
+000000r 3               
+000000r 3               SPAWN_RESIDENT_ARGS_SIZE = .sizeof(spawn_resident_args)
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; spawn_get_line_args
+000000r 3               ;
+000000r 3               ; Child-side retrieval of the opaque launch argument line.
+000000r 3               ; buffer_size includes space for the terminating NUL.
+000000r 3               ; result_len excludes the terminating NUL.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               .struct spawn_get_line_args
+000000r 3                   buffer_ptr      .word
+000000r 3                   buffer_size     .byte
+000000r 3                   result_len      .byte
+000000r 3               .endstruct
+000000r 3               
+000000r 3               SPAWN_GET_LINE_ARGS_SIZE = .sizeof(spawn_get_line_args)
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common open argument block
+000000r 2               ;
+000000r 2               ; path_ptr:
+000000r 2               ;   Pointer to a NUL-terminated 8.3 filename in the current task
+000000r 2               ;   context. The RP-side FS_OPEN command scans at most max_len bytes.
+000000r 2               ;
+000000r 2               ; max_len:
+000000r 2               ;   Maximum filename scan length. Use a small bounded value such as 64.
+000000r 2               ;
+000000r 2               ; flags:
+000000r 2               ;   Open mode. V32 supports read-only, write/truncate, write-existing,
+000000r 2               ;   read/write-existing, and read/write-create.
+000000r 2               ;
+000000r 2               ; device:
+000000r 2               ;   RP filesystem device/FatFs drive number: 0..3.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct open_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   flags           .byte
+000000r 2                   device          .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               OPEN_ARGS_SIZE = .sizeof(open_args)
+000000r 2               
+000000r 2               OPEN_READ           = $00    ; read existing
+000000r 2               OPEN_WRITE_TRUNC    = $01    ; write create/truncate
+000000r 2               OPEN_WRITE_EXISTING = $02    ; write existing, no truncate
+000000r 2               OPEN_RW_EXISTING    = $03    ; read/write existing, no truncate
+000000r 2               OPEN_RW_CREATE      = $04    ; read/write create if missing, no truncate if existing
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Bulk filesystem argument blocks
+000000r 2               ;
+000000r 2               ; Names and paths use NEOX 8.3 path components. The path string is
+000000r 2               ; NUL-terminated and is validated by the RP side.
+000000r 2               ;
+000000r 2               ; max_bytes / byte_count:
+000000r 2               ;   $0000 means 65536 bytes.
+000000r 2               ;
+000000r 2               ; flags:
+000000r 2               ;   Reserved for now. Must be 0.
+000000r 2               ;
+000000r 2               ; Context rule:
+000000r 2               ;   User code never supplies a context. The kernel derives the caller
+000000r 2               ;   context and passes it separately to the RP mailbox in ARG2L.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct fs_load_args
+000000r 2                   path_ptr        .word
+000000r 2                   dest_ptr        .word
+000000r 2                   max_bytes       .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               FS_LOAD_ARGS_SIZE = .sizeof(fs_load_args)
+000000r 2               
+000000r 2               .struct fs_save_args
+000000r 2                   path_ptr        .word
+000000r 2                   src_ptr         .word
+000000r 2                   byte_count      .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               FS_SAVE_ARGS_SIZE = .sizeof(fs_save_args)
+000000r 2               
+000000r 2               FS_BULK_FLAGS_NONE = $00
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Seek/tell filesystem argument blocks
+000000r 2               ;
+000000r 2               ; offset_lo/offset_hi:
+000000r 2               ;   Signed 32-bit offset split into low/high words.  SEEK_SET
+000000r 2               ;   requires a non-negative final target; SEEK_CUR and SEEK_END
+000000r 2               ;   allow negative offsets.
+000000r 2               ;
+000000r 2               ; result_lo/result_hi:
+000000r 2               ;   Kernel writes the resulting unsigned 32-bit file position here.
+000000r 2               ;   A/X also return result_lo for convenience.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               SEEK_SET            = $00
+000000r 2               SEEK_CUR            = $01
+000000r 2               SEEK_END            = $02
+000000r 2               
+000000r 2               .struct seek_args
+000000r 2                   fd              .byte
+000000r 2                   whence          .byte
+000000r 2                   offset_lo       .word
+000000r 2                   offset_hi       .word
+000000r 2                   result_lo       .word
+000000r 2                   result_hi       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               SEEK_ARGS_SIZE = .sizeof(seek_args)
+000000r 2               
+000000r 2               .struct tell_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2                   result_lo       .word
+000000r 2                   result_hi       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               TELL_ARGS_SIZE = .sizeof(tell_args)
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Delete/rename filesystem argument blocks
+000000r 2               ;
+000000r 2               ; V34 path handling uses the same RP-side 8.3 validator as open.
+000000r 2               ; flags is reserved and must be 0.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               FS_PATH_FLAGS_NONE  = $00
+000000r 2               
+000000r 2               .struct delete_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               DELETE_ARGS_SIZE = .sizeof(delete_args)
+000000r 2               
+000000r 2               .struct rename_args
+000000r 2                   old_path_ptr    .word
+000000r 2                   new_path_ptr    .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               RENAME_ARGS_SIZE = .sizeof(rename_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common read/write argument block
+000000r 2               ;
+000000r 2               ; fd:
+000000r 2               ;   STDIN / STDOUT / STDERR
+000000r 2               ;
+000000r 2               ; buf_ptr:
+000000r 2               ;   Pointer to caller buffer in the current task context
+000000r 2               ;
+000000r 2               ; len:
+000000r 2               ;   Requested transfer length
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct rw_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2                   buf_ptr         .word
+000000r 2                   len             .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               RW_ARGS_SIZE = .sizeof(rw_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; SYSCALL helper macro
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Load X/Y with the address of an argument block and call the
+000000r 2               ;   fixed syscall entry.
+000000r 2               ;
+000000r 2               ; Example:
+000000r 2               ;   SYSCALL my_args, sys_write
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro SYSCALL argblk, entry
+000000r 2                   ; Keep the register argument pointer stable across the tiny user-side
+000000r 2                   ; setup window. The kernel snapshots the process-private pointer before
+000000r 2                   ; taking file_io_gate and decodes the block after the owner resumes.
+000000r 2                   sei
+000000r 2                   ldx #<argblk
+000000r 2                   ldy #>argblk
+000000r 2                   jsr entry
+000000r 2               .endmacro
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Directory control argument blocks
+000000r 2               ;
+000000r 2               ; V35 exposes directory handles as normal NEOX fd numbers. The RP
+000000r 2               ; directory handle remains kernel-private in the FD/open-object table.
+000000r 2               ;
+000000r 2               ; dir_entry layout matches the RP serialized directory entry:
+000000r 2               ;   name[13] = NUL-terminated 8.3 name
+000000r 2               ;   attr     = FatFs attribute byte
+000000r 2               ;   size     = unsigned 32-bit byte size
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               DIR_ENTRY_NAME_SIZE = 13
+000000r 2               DIR_ENTRY_SIZE      = 18
+000000r 2               
+000000r 2               .struct dir_entry
+000000r 2                   name            .res 13
+000000r 2                   attr            .byte
+000000r 2                   size_lo         .word
+000000r 2                   size_hi         .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               .struct opendir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               OPENDIR_ARGS_SIZE = .sizeof(opendir_args)
+000000r 2               
+000000r 2               .struct readdir_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2                   entry_ptr       .word
+000000r 2                   entry_size      .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               READDIR_ARGS_SIZE = .sizeof(readdir_args)
+000000r 2               
+000000r 2               .struct closedir_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               CLOSEDIR_ARGS_SIZE = .sizeof(closedir_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Current directory argument blocks
+000000r 2               ;
+000000r 2               ; V36 stores current directory per process as drive + absolute path.
+000000r 2               ; User-visible getcwd form is D:/PATH.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               NEOX_PATH_FLAGS_NONE = $00
+000000r 2               
+000000r 2               .struct chdir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               CHDIR_ARGS_SIZE = .sizeof(chdir_args)
+000000r 2               
+000000r 2               .struct getcwd_args
+000000r 2                   buffer_ptr      .word
+000000r 2                   buffer_size     .word
+000000r 2                   result_len      .word
+000000r 2                   flags           .byte
+000000r 2                   reserved        .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               GETCWD_ARGS_SIZE = .sizeof(getcwd_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Directory create/remove argument blocks
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct mkdir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               MKDIR_ARGS_SIZE = .sizeof(mkdir_args)
+000000r 2               
+000000r 2               .struct rmdir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               RMDIR_ARGS_SIZE = .sizeof(rmdir_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process information argument block
+000000r 2               ;
+000000r 2               ; SYS_GETPROCINFO copies one compact process-table snapshot record
+000000r 2               ; into caller memory.  The record is deliberately binary; user-space
+000000r 2               ; commands such as PS own all text formatting.
+000000r 2               ;
+000000r 2               ; Record layout:
+000000r 2               ;   +0 pid
+000000r 2               ;   +1 ppid
+000000r 2               ;   +2 state
+000000r 2               ;   +3 wait_reason
+000000r 2               ;   +4 signal_pending
+000000r 2               ;   +5 wait_object
+000000r 2               ;   +6 held_gate_mask (PROC_HOLD_*)
+000000r 2               ;
+000000r 2               ; Kernels accepting the extended record remain compatible with callers
+000000r 2               ; that provide the original five-byte buffer.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROCINFO_RECORD_MIN_SIZE = 5
+000000r 2               PROCINFO_RECORD_SIZE     = 7
+000000r 2               
+000000r 2               .struct procinfo_args
+000000r 2                   pid             .byte
+000000r 2                   reserved        .byte
+000000r 2                   buffer_ptr      .word
+000000r 2                   buffer_size     .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROCINFO_ARGS_SIZE = .sizeof(procinfo_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export _neox_seek
+000000r 1               .importzp c_sp
+000000r 1               .importzp ptr1
+000000r 1               .import incsp6
+000000r 1               
+000000r 1               .segment "C_BSS"
+000000r 1  xx xx xx xx  neox_seek_args: .res SEEK_ARGS_SIZE
+000004r 1  xx xx xx xx  
+000008r 1  xx xx        
+00000Ar 1  xx xx        neox_seek_position_ptr: .res 2
+00000Cr 1  xx           neox_seek_status: .res 1
+00000Dr 1               
+00000Dr 1               .segment "C_CODE"
+000000r 1               
+000000r 1               ; Stack: +0 whence, +1..+4 offset, +5 fd.
+000000r 1               .proc _neox_seek
+000000r 1  8D rr rr         sta neox_seek_position_ptr
+000003r 1  8E rr rr         stx neox_seek_position_ptr+1
+000006r 1               
+000006r 1  A0 05            ldy #5
+000008r 1  B1 rr            lda (c_sp),y
+00000Ar 1  8D rr rr         sta neox_seek_args+seek_args::fd
+00000Dr 1               
+00000Dr 1  A0 00            ldy #0
+00000Fr 1  B1 rr            lda (c_sp),y
+000011r 1  8D rr rr         sta neox_seek_args+seek_args::whence
+000014r 1               
+000014r 1  A0 01            ldy #1
+000016r 1  B1 rr            lda (c_sp),y
+000018r 1  8D rr rr         sta neox_seek_args+seek_args::offset_lo
+00001Br 1  C8               iny
+00001Cr 1  B1 rr            lda (c_sp),y
+00001Er 1  8D rr rr         sta neox_seek_args+seek_args::offset_lo+1
+000021r 1  C8               iny
+000022r 1  B1 rr            lda (c_sp),y
+000024r 1  8D rr rr         sta neox_seek_args+seek_args::offset_hi
+000027r 1  C8               iny
+000028r 1  B1 rr            lda (c_sp),y
+00002Ar 1  8D rr rr         sta neox_seek_args+seek_args::offset_hi+1
+00002Dr 1               
+00002Dr 1  9C rr rr         stz neox_seek_args+seek_args::result_lo
+000030r 1  9C rr rr         stz neox_seek_args+seek_args::result_lo+1
+000033r 1  9C rr rr         stz neox_seek_args+seek_args::result_hi
+000036r 1  9C rr rr         stz neox_seek_args+seek_args::result_hi+1
+000039r 1               
+000039r 1  78               sei
+00003Ar 1  A2 rr            ldx #<neox_seek_args
+00003Cr 1  A0 rr            ldy #>neox_seek_args
+00003Er 1  20 18 F1         jsr sys_seek
+000041r 1  B0 05            bcs @failed
+000043r 1               
+000043r 1  9C rr rr         stz neox_seek_status
+000046r 1  80 04            bra @store
+000048r 1               
+000048r 1               @failed:
+000048r 1  98               tya
+000049r 1  8D rr rr         sta neox_seek_status
+00004Cr 1               
+00004Cr 1               @store:
+00004Cr 1  AD rr rr         lda neox_seek_position_ptr
+00004Fr 1  0D rr rr         ora neox_seek_position_ptr+1
+000052r 1  F0 23            beq @return
+000054r 1               
+000054r 1  AD rr rr         lda neox_seek_position_ptr
+000057r 1  85 rr            sta ptr1
+000059r 1  AD rr rr         lda neox_seek_position_ptr+1
+00005Cr 1  85 rr            sta ptr1+1
+00005Er 1               
+00005Er 1  A0 00            ldy #0
+000060r 1  AD rr rr         lda neox_seek_args+seek_args::result_lo
+000063r 1  91 rr            sta (ptr1),y
+000065r 1  C8               iny
+000066r 1  AD rr rr         lda neox_seek_args+seek_args::result_lo+1
+000069r 1  91 rr            sta (ptr1),y
+00006Br 1  C8               iny
+00006Cr 1  AD rr rr         lda neox_seek_args+seek_args::result_hi
+00006Fr 1  91 rr            sta (ptr1),y
+000071r 1  C8               iny
+000072r 1  AD rr rr         lda neox_seek_args+seek_args::result_hi+1
+000075r 1  91 rr            sta (ptr1),y
+000077r 1               
+000077r 1               @return:
+000077r 1  AD rr rr         lda neox_seek_status
+00007Ar 1  A2 00            ldx #0
+00007Cr 1  4C rr rr         jmp incsp6
+00007Fr 1               .endproc
+00007Fr 1               

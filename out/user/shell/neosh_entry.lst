@@ -1,0 +1,23 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : user/shell/neosh_entry.asm
+Current file: user/shell/neosh_entry.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; user/shell/neosh_entry.asm
+000000r 1               ; NEOX - cc65 entry bridge for the C shell
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .export neosh_main
+000000r 1               .import _neosh_main
+000000r 1               
+000000r 1               .segment "USER_TEXT"
+000000r 1               
+000000r 1               ; <summary>
+000000r 1               ; Transfers task-6 control to the cc65 C shell implementation.
+000000r 1               ; </summary>
+000000r 1               .proc neosh_main
+000000r 1  4C rr rr         jmp _neosh_main
+000003r 1               .endproc
+000003r 1               

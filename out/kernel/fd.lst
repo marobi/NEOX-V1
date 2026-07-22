@@ -1,0 +1,3738 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/fd.asm
+Current file: kernel/fd.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; fd.asm
+000000r 1               ; NEOX - file descriptor / open object handling
+000000r 1               ;
+000000r 1               ; Model:
+000000r 1               ;   process fd table -> open object table -> backend device
+000000r 1               ;
+000000r 1               ; This file provides:
+000000r 1               ;   - global open-object initialization
+000000r 1               ;   - per-process fd initialization
+000000r 1               ;   - fd_attach primitive (core building block)
+000000r 1               ;
+000000r 1               ; Design rules:
+000000r 1               ;   - FD table is per-process
+000000r 1               ;   - open objects are system-wide and reference counted
+000000r 1               ;   - fd_attach is the only place that increments refcount
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "fd.inc"
+000000r 2               ; ============================================================
+000000r 2               ; fd.inc
+000000r 2               ; NEOX - file descriptor and open object definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   devices/files.
+000000r 2               ;   This forms the FD/open-object/device layer
+000000r 2               ;   used by read/write/close/dup/dup2.;
+000000r 2               ; Model:
+000000r 2               ;   process fd table → open object table → device/file backend
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __FD_INC__
+000000r 2               __FD_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; FD values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               FD_NONE     = $FF        ; invalid / unused descriptor
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; FD flags (per process)
+000000r 2               ;
+000000r 2               ; These describe how the process uses the descriptor.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               FD_FLAG_READ    = $01
+000000r 2               FD_FLAG_WRITE   = $02
+000000r 2               FD_FLAG_CLOEXEC = $80    ; reserved for later exec() support
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Open object types (system-wide)
+000000r 2               ;
+000000r 2               ; Each open object represents a shared resource. Multiple
+000000r 2               ; processes may reference the same object.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               OBJ_NONE    = $00
+000000r 2               OBJ_DEVICE  = $01        ; console for now
+000000r 2               OBJ_FILE    = $02        ; RP filesystem file handle
+000000r 2               OBJ_PIPE    = $03        ; reserved
+000000r 2               OBJ_DIR     = $04        ; RP filesystem directory handle
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; FD clone argument block
+000000r 2               ;
+000000r 2               ; Used by kernel-internal cross-process descriptor cloning.
+000000r 2               ; The source descriptor is resolved in source_pid/source_fd and
+000000r 2               ; attached to target_pid/target_fd with the same per-FD flags.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct fd_clone_args
+000000r 2                   source_pid      .byte
+000000r 2                   source_fd       .byte
+000000r 2                   target_pid      .byte
+000000r 2                   target_fd       .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               FD_CLONE_ARGS_SIZE = .sizeof(fd_clone_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Device identifiers
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               DEV_NONE        = $00
+000000r 2               DEV_CONSOLE     = $01
+000000r 2               
+000000r 2               DEV_MAX         = $02
+000000r 2               
+000000r 2               ; Each dev_ops entry is one 16-bit operation-table pointer.
+000000r 2               DEV_OPS_ENTRY_SIZE = 2
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Device operation offsets
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               DEVOP_READ      = 0
+000000r 2               DEVOP_WRITE     = 2
+000000r 2               DEVOP_IOCTL     = 4
+000000r 2               DEVOP_CLOSE     = 6
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "lock.inc"
+000000r 2               ; ============================================================
+000000r 2               ; lock.inc
+000000r 2               ; NEOX - generic 65C02 lock primitives
+000000r 2               ; ============================================================
+000000r 2               ;
+000000r 2               ; Locks are byte variables.
+000000r 2               ; Bit 0 is the ownership bit.
+000000r 2               ;
+000000r 2               ; These are macros, not subroutines, because W65C02 TSB/TRB
+000000r 2               ; require a fixed memory operand.
+000000r 2               ;
+000000r 2               ; Rules:
+000000r 2               ;   - Do not hold short subsystem locks across sched_yield.
+000000r 2               ;   - Sleepable gates are implemented as routines, not with these
+000000r 2               ;     spinning macros.
+000000r 2               ;   - Use byte locks only for short, non-sleeping ownership.
+000000r 2               ;   - Use php/sei/plp only for true IRQ-critical sections.
+000000r 2               ;
+000000r 2               ; Lock convention:
+000000r 2               ;   C set   = success / acquired / released
+000000r 2               ;   C clear = busy
+000000r 2               ;
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __LOCK_INC__
+000000r 2               __LOCK_INC__ = 1
+000000r 2               
+000000r 2               LOCK_BIT = $01
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; LOCK_TRY_ACQUIRE lock
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Try to acquire lock bit 0.
+000000r 2               ;
+000000r 2               ; Output:
+000000r 2               ;   C set   = acquired
+000000r 2               ;   C clear = busy
+000000r 2               ;
+000000r 2               ; Clobbers:
+000000r 2               ;   A
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro LOCK_TRY_ACQUIRE lock
+000000r 2                   lda #LOCK_BIT
+000000r 2                   tsb lock
+000000r 2                   beq :+
+000000r 2                   clc
+000000r 2                   bra :++
+000000r 2               :
+000000r 2                   sec
+000000r 2               :
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; LOCK_ACQUIRE lock
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Spin until lock bit 0 is acquired.
+000000r 2               ;
+000000r 2               ; Output:
+000000r 2               ;   C set
+000000r 2               ;
+000000r 2               ; Clobbers:
+000000r 2               ;   A
+000000r 2               ;
+000000r 2               ; Notes:
+000000r 2               ;   This spins with IRQs enabled.
+000000r 2               ;   The lock holder must not block/yield while holding the lock.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro LOCK_ACQUIRE lock
+000000r 2               :
+000000r 2                   lda #LOCK_BIT
+000000r 2                   tsb lock
+000000r 2                   beq :+
+000000r 2                   bra :-
+000000r 2               :
+000000r 2                   sec
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; LOCK_RELEASE lock
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Release lock bit 0.
+000000r 2               ;
+000000r 2               ; Output:
+000000r 2               ;   C set
+000000r 2               ;
+000000r 2               ; Clobbers:
+000000r 2               ;   A
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro LOCK_RELEASE lock
+000000r 2                   lda #LOCK_BIT
+000000r 2                   trb lock
+000000r 2                   sec
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; LOCK_IS_HELD lock
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Test whether lock bit 0 is held.
+000000r 2               ;
+000000r 2               ; Output:
+000000r 2               ;   Z set   = not held
+000000r 2               ;   Z clear = held
+000000r 2               ;
+000000r 2               ; Clobbers:
+000000r 2               ;   A
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro LOCK_IS_HELD lock
+000000r 2                   lda lock
+000000r 2                   and #LOCK_BIT
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; LOCK_ASSERT_FREE lock
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Debug trap if lock is already held.
+000000r 2               ;
+000000r 2               ; Notes:
+000000r 2               ;   This intentionally loops forever on failure.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro LOCK_ASSERT_FREE lock
+000000r 2                   lda lock
+000000r 2                   and #LOCK_BIT
+000000r 2                   beq :+
+000000r 2               :
+000000r 2                   bra :-
+000000r 2               :
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; LOCK_ASSERT_HELD lock
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Debug trap if lock is not held.
+000000r 2               ;
+000000r 2               ; Notes:
+000000r 2               ;   This intentionally loops forever on failure.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro LOCK_ASSERT_HELD lock
+000000r 2                   lda lock
+000000r 2                   and #LOCK_BIT
+000000r 2                   bne :+
+000000r 2               :
+000000r 2                   bra :-
+000000r 2               :
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "mailbox.inc"
+000000r 2               ; ============================================================
+000000r 2               ; mailbox.inc
+000000r 2               ; NEOX - RP2350 mailbox / request block definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Defines the shared ABI v2 request/result block layout used
+000000r 2               ;   for communication between the 6502 kernel/syscall code and
+000000r 2               ;   the RP2350 co-processor.
+000000r 2               ;
+000000r 2               ; Architecture:
+000000r 2               ;   - Logical pages 0..7 are private per context
+000000r 2               ;   - Logical pages 8..F are shared across all contexts; page E is I/O
+000000r 2               ;   - MMIO control registers live in shared I/O page
+000000r 2               ;
+000000r 2               ; ABI v2:
+000000r 2               ;   - RP_REQ_BASE is $B000 in ordinary shared RAM
+000000r 2               ;   - Request block starts with RP_GROUP and RP_CMD
+000000r 2               ;   - RP_DOORBELL is trigger-only; command identity is not
+000000r 2               ;     encoded in the doorbell value anymore.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __MAILBOX_INC__
+000000r 2               __MAILBOX_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Request / result block layout, ABI v2
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_GROUP            = RP_REQ_BASE + 0
+000000r 2               RP_CMD              = RP_REQ_BASE + 1
+000000r 2               RP_STATUS           = RP_REQ_BASE + 2
+000000r 2               RP_ERR              = RP_REQ_BASE + 3
+000000r 2               
+000000r 2               RP_FLAGS            = RP_REQ_BASE + 4
+000000r 2               RP_STATE            = RP_REQ_BASE + 5
+000000r 2               
+000000r 2               RP_ARG0L            = RP_REQ_BASE + 6
+000000r 2               RP_ARG0H            = RP_REQ_BASE + 7
+000000r 2               RP_ARG1L            = RP_REQ_BASE + 8
+000000r 2               RP_ARG1H            = RP_REQ_BASE + 9
+000000r 2               RP_ARG2L            = RP_REQ_BASE + 10
+000000r 2               RP_ARG2H            = RP_REQ_BASE + 11
+000000r 2               
+000000r 2               RP_RES0L            = RP_REQ_BASE + 12
+000000r 2               RP_RES0H            = RP_REQ_BASE + 13
+000000r 2               RP_RES1L            = RP_REQ_BASE + 14
+000000r 2               RP_RES1H            = RP_REQ_BASE + 15
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Other shared RP state bytes
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_IRQ_SOURCE       = RP_REQ_BASE + 16
+000000r 2               RP_CONSOLE_PID      = RP_REQ_BASE + 17
+000000r 2               RP_CONSOLE_RDY      = RP_REQ_BASE + 18
+000000r 2               RP_IRQ_STATE        = RP_REQ_BASE + 19
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_STATUS values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_IDLE             = $00
+000000r 2               RP_BUSY             = $01
+000000r 2               RP_DONE             = $02
+000000r 2               RP_ERROR            = $03
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_GROUP values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_GROUP_NONE       = $00
+000000r 2               RP_GROUP_CONSOLE    = $01
+000000r 2               RP_GROUP_FS         = $02
+000000r 2               RP_GROUP_SYSTEM     = $03
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_CMD values inside RP_GROUP_CONSOLE
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_CON_CMD_NONE     = $00
+000000r 2               RP_CON_CMD_WRITE    = $01
+000000r 2               RP_CON_CMD_READ     = $02
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_CMD values inside RP_GROUP_FS
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_FS_CMD_NONE      = $00
+000000r 2               RP_FS_CMD_EXEC      = $11
+000000r 2               
+000000r 2               ; Generic filesystem operations carried in RP_STATE. Values $01-$10 retain
+000000r 2               ; their established numeric assignments, but are no longer accepted as direct
+000000r 2               ; RP_CMD values.
+000000r 2               RP_FS_OP_STATUS        = $01
+000000r 2               RP_FS_OP_OPEN          = $02
+000000r 2               RP_FS_OP_READ          = $03
+000000r 2               RP_FS_OP_CLOSE         = $04
+000000r 2               RP_FS_OP_WRITE         = $05
+000000r 2               RP_FS_OP_LOAD          = $06
+000000r 2               RP_FS_OP_SAVE          = $07
+000000r 2               RP_FS_OP_SEEK          = $08
+000000r 2               RP_FS_OP_TELL          = $09
+000000r 2               RP_FS_OP_DELETE        = $0A
+000000r 2               RP_FS_OP_RENAME        = $0B
+000000r 2               RP_FS_OP_OPENDIR       = $0C
+000000r 2               RP_FS_OP_READDIR       = $0D
+000000r 2               RP_FS_OP_CLOSEDIR      = $0E
+000000r 2               RP_FS_OP_MKDIR         = $0F
+000000r 2               RP_FS_OP_RMDIR         = $10
+000000r 2               RP_FS_OP_CWD_INIT_ROOT = $12
+000000r 2               RP_FS_OP_CWD_CLONE     = $13
+000000r 2               RP_FS_OP_CHDIR         = $14
+000000r 2               RP_FS_OP_GETCWD        = $15
+000000r 2               
+000000r 2               RP_FS_SEEK_SET      = $00
+000000r 2               RP_FS_SEEK_CUR      = $01
+000000r 2               RP_FS_SEEK_END      = $02
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_DOORBELL trigger value for ABI v2
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_DOORBELL_TRIGGER = $01
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_FLAGS values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_FLAG_NONE        = $00
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_IRQ_SOURCE values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_IRQ_SRC_NONE     = $00
+000000r 2               RP_IRQ_SRC_TIMER    = $01
+000000r 2               RP_IRQ_SRC_MONITOR  = $02
+000000r 2               RP_IRQ_SRC_FS_DONE  = $03
+000000r 2               RP_IRQ_SRC_CONSOLE_BREAK = $04
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "math8.inc"
+000000r 2               ; include/math8.inc
+000000r 2               
+000000r 2               .ifndef __MATH8_INC__
+000000r 2               __MATH8_INC__ = 1
+000000r 2               
+000000r 2               .import mul8u
+000000r 2               
+000000r 2               .importzp factor1
+000000r 2               .importzp factor2
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "scheduler_defs.inc"
+000000r 2               ; ============================================================
+000000r 2               ; scheduler_defs.inc
+000000r 2               ; NEOX - scheduler constants
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SCHEDULER_DEFS_INC__
+000000r 2               __SCHEDULER_DEFS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               IDLE_PID        = 0
+000000r 2               FIRST_TASK_PID  = 1
+000000r 2               
+000000r 2               .struct proc_create_args
+000000r 2                   flags       .byte
+000000r 2                   reserved    .byte
+000000r 2                   entry       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROC_CREATE_ARGS_SIZE = .sizeof(proc_create_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "syscall.inc"
+000000r 2               ; ============================================================
+000000r 2               ; syscall.inc
+000000r 2               ; NEOX - syscall definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Defines syscall numbers, fixed syscall entry addresses,
+000000r 2               ;   error codes, and common syscall argument structures.
+000000r 2               ;
+000000r 2               ; Architecture:
+000000r 2               ;   - Syscall jump table is located in the shared BIOS page at $F100
+000000r 2               ;   - Each syscall entry is a 3-byte JMP stub
+000000r 2               ;   - User code calls fixed syscall entry addresses
+000000r 2               ;
+000000r 2               ; Notes:
+000000r 2               ;   SYS_MONITOR enters supervisor/MICMON context through the
+000000r 2               ;   kernel-defined monitor entry path. It is a controlled
+000000r 2               ;   privileged transfer, not direct user control of MMU/scheduler.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SYSCALL_INC__
+000000r 2               __SYSCALL_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               SYSCALL_ENTRY_SIZE  = 3
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Standard file descriptors
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               STDIN               = 0
+000000r 2               STDOUT              = 1
+000000r 2               STDERR              = 2
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Syscall numbers
+000000r 2               ; ------------------------------------------------------------
+000000r 2               SYS_EXIT			= $00
+000000r 2               SYS_OPEN            = $01
+000000r 2               SYS_CLOSE			= $02
+000000r 2               SYS_READ            = $03
+000000r 2               SYS_WRITE           = $04
+000000r 2               SYS_MONITOR         = $05
+000000r 2               SYS_LOAD_FILE_TO_MEMORY = $06
+000000r 2               SYS_SAVE_MEMORY_TO_FILE = $07
+000000r 2               SYS_SEEK            = $08
+000000r 2               SYS_TELL            = $09
+000000r 2               SYS_PIPE			= $0A
+000000r 2               SYS_DELETE          = $0C
+000000r 2               SYS_RENAME          = $0D
+000000r 2               SYS_YIELD           = $0B
+000000r 2               SYS_SLEEP           = $0E
+000000r 2               SYS_DUP				= $0F
+000000r 2               SYS_DUP2			= $10
+000000r 2               SYS_TICKS           = $11
+000000r 2               SYS_SIGNAL          = $12
+000000r 2               SYS_OPENDIR         = $13
+000000r 2               SYS_READDIR         = $14
+000000r 2               SYS_CLOSEDIR        = $15
+000000r 2               SYS_CHDIR           = $16
+000000r 2               SYS_GETCWD          = $17
+000000r 2               SYS_MKDIR           = $18
+000000r 2               SYS_RMDIR           = $19
+000000r 2               SYS_GETPROCINFO      = $1A
+000000r 2               SYS_WAITPID           = $1B
+000000r 2               SYS_GET_LAUNCH_ID     = $1C
+000000r 2               SYS_GET_LAUNCH_LINE   = $1D
+000000r 2               SYS_SPAWN_RESIDENT    = $1E
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Fixed syscall entry addresses
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               sys_exit            = SYSCALL_BASE + (SYS_EXIT    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_open            = SYSCALL_BASE + (SYS_OPEN    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_close           = SYSCALL_BASE + (SYS_CLOSE   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_read            = SYSCALL_BASE + (SYS_READ    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_write           = SYSCALL_BASE + (SYS_WRITE   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_monitor         = SYSCALL_BASE + (SYS_MONITOR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_load_file_to_memory = SYSCALL_BASE + (SYS_LOAD_FILE_TO_MEMORY * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_save_memory_to_file = SYSCALL_BASE + (SYS_SAVE_MEMORY_TO_FILE * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_seek            = SYSCALL_BASE + (SYS_SEEK    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_tell            = SYSCALL_BASE + (SYS_TELL    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_delete          = SYSCALL_BASE + (SYS_DELETE  * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_rename          = SYSCALL_BASE + (SYS_RENAME  * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_pipe            = SYSCALL_BASE + (SYS_PIPE    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_yield           = SYSCALL_BASE + (SYS_YIELD   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_sleep           = SYSCALL_BASE + (SYS_SLEEP   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_dup				= SYSCALL_BASE + (SYS_DUP     * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_dup2			= SYSCALL_BASE + (SYS_DUP2    * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_ticks           = SYSCALL_BASE + (SYS_TICKS   * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_signal          = SYSCALL_BASE + (SYS_SIGNAL  * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_opendir         = SYSCALL_BASE + (SYS_OPENDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_readdir         = SYSCALL_BASE + (SYS_READDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_closedir        = SYSCALL_BASE + (SYS_CLOSEDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_chdir           = SYSCALL_BASE + (SYS_CHDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_getcwd          = SYSCALL_BASE + (SYS_GETCWD * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_mkdir           = SYSCALL_BASE + (SYS_MKDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_rmdir           = SYSCALL_BASE + (SYS_RMDIR * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_getprocinfo      = SYSCALL_BASE + (SYS_GETPROCINFO * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_waitpid          = SYSCALL_BASE + (SYS_WAITPID * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_get_launch_id    = SYSCALL_BASE + (SYS_GET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_get_launch_line  = SYSCALL_BASE + (SYS_GET_LAUNCH_LINE * SYSCALL_ENTRY_SIZE)
+000000r 2               sys_spawn_resident   = SYSCALL_BASE + (SYS_SPAWN_RESIDENT * SYSCALL_ENTRY_SIZE)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common errno values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               E_OK                = 0
+000000r 2               EIO                 = 3
+000000r 2               EINVAL              = 6
+000000r 2               EMFILE              = 8        ; too many open file descriptors
+000000r 2               EBADF               = 9
+000000r 2               ENODEV              = 10
+000000r 2               ENOSYS              = 11
+000000r 2               EINTR               = 4        ; interrupted system call
+000000r 2               EAGAIN              = 12       ; operation would block / try again
+000000r 2               ENOMEM              = 13       ; no free kernel memory/object/table slot
+000000r 2               EPIPE               = 14       ; write on pipe with no readers
+000000r 2               
+000000r 2               .include "spawn.inc"
+000000r 3               ; ============================================================
+000000r 3               ; spawn.inc
+000000r 3               ; NEOX - unified resident spawn ABI
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __SPAWN_INC__
+000000r 3               __SPAWN_INC__ = 1
+000000r 3               
+000000r 3               .include "config.inc"
+000000r 4               ; ============================================================
+000000r 4               ; config.inc
+000000r 4               ; NEOX - kernel configuration
+000000r 4               ;
+000000r 4               ; Purpose:
+000000r 4               ; ============================================================
+000000r 4               
+000000r 4               .ifndef __CONFIG_INC__
+000000r 4               __CONFIG_INC__ = 1
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Limits
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               MAX_FDS     = 6          ; per-process descriptor count
+000000r 4               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Maximum simultaneously active processes
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               MAX_PROCS   = 8
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Maximum simultaneously active timer waits
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               MAX_TIMER   = 8
+000000r 4               
+000000r 4               ;
+000000r 4               ;
+000000r 4               ;
+000000r 4               
+000000r 4               MAX_PIPES       = 8
+000000r 4               PIPE_BUF_SIZE   = 64
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Filesystem path limits
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 4               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 4               ; ============================================================
+000000r 4               ;
+000000r 4               ; ============================================================
+000000r 4               
+000000r 4               USER_IMAGE_TABLE = $1000
+000000r 4               
+000000r 4               ; Final 32/32 virtual-memory split.
+000000r 4               USER_SPACE_LIMIT = $8000
+000000r 4               KERNEL_SHARED_BASE = $B020
+000000r 4               KERNEL_OVERFLOW_BASE = $C000
+000000r 4               MICMON_BASE = $D000
+000000r 4               IO_PAGE_BASE = $E000
+000000r 4               BIOS_BASE = $F000
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Kernel
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               KERNEL_BASE = $8000
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Syscall table location
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               SYSCALL_BASE = $F100
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; RP2350 mailbox control registers (MMIO)
+000000r 4               ;
+000000r 4               ; Layout:
+000000r 4               ;   Page E is shared I/O space
+000000r 4               ;   OS-owned mailbox doorbell starts at $E010
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               RP_DOORBELL  = $E010
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 4               ;
+000000r 4               ; mailbox request block.
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               RP_REQ_BASE  = $B000
+000000r 4               
+000000r 4               .endif
+000000r 4               
+000000r 3               .include "process.inc"
+000000r 4               .ifndef __PROCESS_INC__
+000000r 4               __PROCESS_INC__ = 1
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Process states
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               PROC_EMPTY      = $00
+000000r 4               PROC_NEW        = $01
+000000r 4               PROC_READY      = $02
+000000r 4               PROC_RUNNING    = $03
+000000r 4               PROC_BLOCKED    = $04
+000000r 4               PROC_STOPPED    = $05
+000000r 4               PROC_ZOMBIE     = $06
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Flags byte bit definitions
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               PROC_FLAG_NONE              = $00
+000000r 4               PROC_FLAG_IDLE              = $01
+000000r 4               PROC_FLAG_ATTACHED_CON      = $02
+000000r 4               PROC_FLAG_FOREGROUND        = $04
+000000r 4               PROC_FLAG_SIGINT_INTERRUPT  = $08
+000000r 4               
+000000r 4               ; Flags that may be supplied as initial process characteristics by a
+000000r 4               ; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+000000r 4               ; kernel-owned and cannot be requested through these creation interfaces.
+000000r 4               PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Process frame format
+000000r 4               ;
+000000r 4               ; All saved runnable process stacks use the IRQ-compatible
+000000r 4               ; extended RTI frame:
+000000r 4               ;     Y, X, A, P, PCL, PCH
+000000r 4               ; The scheduler has no per-process resume mode; normal task
+000000r 4               ; resume is always RTI.
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               ; ------------------------------------------------------------
+000000r 4               ; Process wait reasons
+000000r 4               ;
+000000r 4               ; WAIT_NONE means the process is not blocked on a known wait object.
+000000r 4               ; Other values describe why a PROC_BLOCKED process is blocked.
+000000r 4               ; ------------------------------------------------------------
+000000r 4               
+000000r 4               WAIT_NONE       = $00
+000000r 4               WAIT_CONSOLE    = $01
+000000r 4               WAIT_DEVICE     = $02
+000000r 4               WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+000000r 4               WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
+000000r 4               WAIT_TIMER      = $04
+000000r 4               WAIT_PROC       = $05
+000000r 4               
+000000r 4               ; Generic sleepable gate wait.
+000000r 4               ;
+000000r 4               ; wait_object identifies the gate object:
+000000r 4               ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+000000r 4               ;   LOCK_ID_PROC    = future process-management syscall gate
+000000r 4               WAIT_LOCK       = $06
+000000r 4               
+000000r 4               ; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+000000r 4               ; readers and writers can be woken by the correct readiness event.
+000000r 4               WAIT_PIPE_WRITE = $07
+000000r 4               
+000000r 4               ; Blocked while retaining FILE_IO ownership until the RP2350 completes
+000000r 4               ; the single active generic filesystem request. wait_object contains the
+000000r 4               ; filesystem operation code.
+000000r 4               WAIT_RP         = $08
+000000r 4               
+000000r 4               LOCK_ID_FILE_IO = $00
+000000r 4               LOCK_ID_PROC    = $01
+000000r 4               
+000000r 4               ; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+000000r 4               PROC_HOLD_NONE     = $00
+000000r 4               PROC_HOLD_FILE_IO  = $01
+000000r 4               PROC_HOLD_PROC     = $02
+000000r 4               
+000000r 4               ; Sentinel used for free gate owners and empty gate wait queues.
+000000r 4               GATE_OWNER_NONE = $FF
+000000r 4               
+000000r 4               EXIT_OK         = $00
+000000r 4               
+000000r 4               .endif
+000000r 4               
+000000r 3               
+000000r 3               SPAWN_FLAGS_NONE = PROC_FLAG_NONE
+000000r 3               SPAWN_FLAGS_VALID = PROC_FLAGS_CREATE_MASK
+000000r 3               SPAWN_LAUNCH_NONE = $FF
+000000r 3               SPAWN_FD_CLOSED = $FF
+000000r 3               
+000000r 3               ; Maximum process-private launch-line storage including its terminating NUL.
+000000r 3               ; The public length excludes the NUL and must be less than SPAWN_LINE_MAX.
+000000r 3               SPAWN_LINE_MAX = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; spawn_resident_args
+000000r 3               ;
+000000r 3               ; The parent transfers one opaque argument line to the child. The kernel
+000000r 3               ; does not tokenize, count, quote, or otherwise interpret argument bytes.
+000000r 3               ; arg_line_len excludes the terminating NUL.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               .struct spawn_resident_args
+000000r 3                   entry           .word
+000000r 3                   launch_id       .byte
+000000r 3                   arg_line_ptr    .word
+000000r 3                   arg_line_len    .byte
+000000r 3                   stdin_fd        .byte
+000000r 3                   stdout_fd       .byte
+000000r 3                   stderr_fd       .byte
+000000r 3                   flags           .byte   ; initial child proc_flags
+000000r 3                   result_pid      .byte
+000000r 3               .endstruct
+000000r 3               
+000000r 3               SPAWN_RESIDENT_ARGS_SIZE = .sizeof(spawn_resident_args)
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; spawn_get_line_args
+000000r 3               ;
+000000r 3               ; Child-side retrieval of the opaque launch argument line.
+000000r 3               ; buffer_size includes space for the terminating NUL.
+000000r 3               ; result_len excludes the terminating NUL.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               .struct spawn_get_line_args
+000000r 3                   buffer_ptr      .word
+000000r 3                   buffer_size     .byte
+000000r 3                   result_len      .byte
+000000r 3               .endstruct
+000000r 3               
+000000r 3               SPAWN_GET_LINE_ARGS_SIZE = .sizeof(spawn_get_line_args)
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common open argument block
+000000r 2               ;
+000000r 2               ; path_ptr:
+000000r 2               ;   Pointer to a NUL-terminated 8.3 filename in the current task
+000000r 2               ;   context. The RP-side FS_OPEN command scans at most max_len bytes.
+000000r 2               ;
+000000r 2               ; max_len:
+000000r 2               ;   Maximum filename scan length. Use a small bounded value such as 64.
+000000r 2               ;
+000000r 2               ; flags:
+000000r 2               ;   Open mode. V32 supports read-only, write/truncate, write-existing,
+000000r 2               ;   read/write-existing, and read/write-create.
+000000r 2               ;
+000000r 2               ; device:
+000000r 2               ;   RP filesystem device/FatFs drive number: 0..3.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct open_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   flags           .byte
+000000r 2                   device          .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               OPEN_ARGS_SIZE = .sizeof(open_args)
+000000r 2               
+000000r 2               OPEN_READ           = $00    ; read existing
+000000r 2               OPEN_WRITE_TRUNC    = $01    ; write create/truncate
+000000r 2               OPEN_WRITE_EXISTING = $02    ; write existing, no truncate
+000000r 2               OPEN_RW_EXISTING    = $03    ; read/write existing, no truncate
+000000r 2               OPEN_RW_CREATE      = $04    ; read/write create if missing, no truncate if existing
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Bulk filesystem argument blocks
+000000r 2               ;
+000000r 2               ; Names and paths use NEOX 8.3 path components. The path string is
+000000r 2               ; NUL-terminated and is validated by the RP side.
+000000r 2               ;
+000000r 2               ; max_bytes / byte_count:
+000000r 2               ;   $0000 means 65536 bytes.
+000000r 2               ;
+000000r 2               ; flags:
+000000r 2               ;   Reserved for now. Must be 0.
+000000r 2               ;
+000000r 2               ; Context rule:
+000000r 2               ;   User code never supplies a context. The kernel derives the caller
+000000r 2               ;   context and passes it separately to the RP mailbox in ARG2L.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct fs_load_args
+000000r 2                   path_ptr        .word
+000000r 2                   dest_ptr        .word
+000000r 2                   max_bytes       .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               FS_LOAD_ARGS_SIZE = .sizeof(fs_load_args)
+000000r 2               
+000000r 2               .struct fs_save_args
+000000r 2                   path_ptr        .word
+000000r 2                   src_ptr         .word
+000000r 2                   byte_count      .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               FS_SAVE_ARGS_SIZE = .sizeof(fs_save_args)
+000000r 2               
+000000r 2               FS_BULK_FLAGS_NONE = $00
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Seek/tell filesystem argument blocks
+000000r 2               ;
+000000r 2               ; offset_lo/offset_hi:
+000000r 2               ;   Signed 32-bit offset split into low/high words.  SEEK_SET
+000000r 2               ;   requires a non-negative final target; SEEK_CUR and SEEK_END
+000000r 2               ;   allow negative offsets.
+000000r 2               ;
+000000r 2               ; result_lo/result_hi:
+000000r 2               ;   Kernel writes the resulting unsigned 32-bit file position here.
+000000r 2               ;   A/X also return result_lo for convenience.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               SEEK_SET            = $00
+000000r 2               SEEK_CUR            = $01
+000000r 2               SEEK_END            = $02
+000000r 2               
+000000r 2               .struct seek_args
+000000r 2                   fd              .byte
+000000r 2                   whence          .byte
+000000r 2                   offset_lo       .word
+000000r 2                   offset_hi       .word
+000000r 2                   result_lo       .word
+000000r 2                   result_hi       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               SEEK_ARGS_SIZE = .sizeof(seek_args)
+000000r 2               
+000000r 2               .struct tell_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2                   result_lo       .word
+000000r 2                   result_hi       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               TELL_ARGS_SIZE = .sizeof(tell_args)
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Delete/rename filesystem argument blocks
+000000r 2               ;
+000000r 2               ; V34 path handling uses the same RP-side 8.3 validator as open.
+000000r 2               ; flags is reserved and must be 0.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               FS_PATH_FLAGS_NONE  = $00
+000000r 2               
+000000r 2               .struct delete_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               DELETE_ARGS_SIZE = .sizeof(delete_args)
+000000r 2               
+000000r 2               .struct rename_args
+000000r 2                   old_path_ptr    .word
+000000r 2                   new_path_ptr    .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               RENAME_ARGS_SIZE = .sizeof(rename_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Common read/write argument block
+000000r 2               ;
+000000r 2               ; fd:
+000000r 2               ;   STDIN / STDOUT / STDERR
+000000r 2               ;
+000000r 2               ; buf_ptr:
+000000r 2               ;   Pointer to caller buffer in the current task context
+000000r 2               ;
+000000r 2               ; len:
+000000r 2               ;   Requested transfer length
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct rw_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2                   buf_ptr         .word
+000000r 2                   len             .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               RW_ARGS_SIZE = .sizeof(rw_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; SYSCALL helper macro
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Load X/Y with the address of an argument block and call the
+000000r 2               ;   fixed syscall entry.
+000000r 2               ;
+000000r 2               ; Example:
+000000r 2               ;   SYSCALL my_args, sys_write
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .macro SYSCALL argblk, entry
+000000r 2                   ; Keep the register argument pointer stable across the tiny user-side
+000000r 2                   ; setup window. The kernel snapshots the process-private pointer before
+000000r 2                   ; taking file_io_gate and decodes the block after the owner resumes.
+000000r 2                   sei
+000000r 2                   ldx #<argblk
+000000r 2                   ldy #>argblk
+000000r 2                   jsr entry
+000000r 2               .endmacro
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Directory control argument blocks
+000000r 2               ;
+000000r 2               ; V35 exposes directory handles as normal NEOX fd numbers. The RP
+000000r 2               ; directory handle remains kernel-private in the FD/open-object table.
+000000r 2               ;
+000000r 2               ; dir_entry layout matches the RP serialized directory entry:
+000000r 2               ;   name[13] = NUL-terminated 8.3 name
+000000r 2               ;   attr     = FatFs attribute byte
+000000r 2               ;   size     = unsigned 32-bit byte size
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               DIR_ENTRY_NAME_SIZE = 13
+000000r 2               DIR_ENTRY_SIZE      = 18
+000000r 2               
+000000r 2               .struct dir_entry
+000000r 2                   name            .res 13
+000000r 2                   attr            .byte
+000000r 2                   size_lo         .word
+000000r 2                   size_hi         .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               .struct opendir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               OPENDIR_ARGS_SIZE = .sizeof(opendir_args)
+000000r 2               
+000000r 2               .struct readdir_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2                   entry_ptr       .word
+000000r 2                   entry_size      .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               READDIR_ARGS_SIZE = .sizeof(readdir_args)
+000000r 2               
+000000r 2               .struct closedir_args
+000000r 2                   fd              .byte
+000000r 2                   reserved        .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               CLOSEDIR_ARGS_SIZE = .sizeof(closedir_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Current directory argument blocks
+000000r 2               ;
+000000r 2               ; V36 stores current directory per process as drive + absolute path.
+000000r 2               ; User-visible getcwd form is D:/PATH.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               NEOX_PATH_FLAGS_NONE = $00
+000000r 2               
+000000r 2               .struct chdir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               CHDIR_ARGS_SIZE = .sizeof(chdir_args)
+000000r 2               
+000000r 2               .struct getcwd_args
+000000r 2                   buffer_ptr      .word
+000000r 2                   buffer_size     .word
+000000r 2                   result_len      .word
+000000r 2                   flags           .byte
+000000r 2                   reserved        .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               GETCWD_ARGS_SIZE = .sizeof(getcwd_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Directory create/remove argument blocks
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct mkdir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               MKDIR_ARGS_SIZE = .sizeof(mkdir_args)
+000000r 2               
+000000r 2               .struct rmdir_args
+000000r 2                   path_ptr        .word
+000000r 2                   max_len         .word
+000000r 2                   device          .byte
+000000r 2                   flags           .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               RMDIR_ARGS_SIZE = .sizeof(rmdir_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process information argument block
+000000r 2               ;
+000000r 2               ; SYS_GETPROCINFO copies one compact process-table snapshot record
+000000r 2               ; into caller memory.  The record is deliberately binary; user-space
+000000r 2               ; commands such as PS own all text formatting.
+000000r 2               ;
+000000r 2               ; Record layout:
+000000r 2               ;   +0 pid
+000000r 2               ;   +1 ppid
+000000r 2               ;   +2 state
+000000r 2               ;   +3 wait_reason
+000000r 2               ;   +4 signal_pending
+000000r 2               ;   +5 wait_object
+000000r 2               ;   +6 held_gate_mask (PROC_HOLD_*)
+000000r 2               ;
+000000r 2               ; Kernels accepting the extended record remain compatible with callers
+000000r 2               ; that provide the original five-byte buffer.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROCINFO_RECORD_MIN_SIZE = 5
+000000r 2               PROCINFO_RECORD_SIZE     = 7
+000000r 2               
+000000r 2               .struct procinfo_args
+000000r 2                   pid             .byte
+000000r 2                   reserved        .byte
+000000r 2                   buffer_ptr      .word
+000000r 2                   buffer_size     .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROCINFO_ARGS_SIZE = .sizeof(procinfo_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export fd_resolve_read
+000000r 1               .export fd_resolve_write
+000000r 1               .export fd_resolve_file
+000000r 1               .export fd_resolve_dir
+000000r 1               
+000000r 1               .export fd_init_tables
+000000r 1               .export fd_init_process
+000000r 1               .export fd_close_process
+000000r 1               .export fd_read
+000000r 1               .export fd_write
+000000r 1               .export fd_close
+000000r 1               .export fd_dup
+000000r 1               .export fd_dup2
+000000r 1               .export fd_clone_between
+000000r 1               .export fd_close_pid
+000000r 1               .export fd_clear_process_slots
+000000r 1               
+000000r 1               .export fd_alloc_open
+000000r 1               .export fd_free_open
+000000r 1               .export fd_init_open
+000000r 1               .export fd_alloc_fd_current
+000000r 1               .export fd_attach_current
+000000r 1               .export fd_detach_current
+000000r 1               .export fd_check_free_pid_fd
+000000r 1               .export fd_attach_pid_fd_read
+000000r 1               .export fd_attach_pid_fd_write
+000000r 1               
+000000r 1               ;---------------------------------------------------
+000000r 1               
+000000r 1               .import active_pid
+000000r 1               
+000000r 1               .importzp io_ptr
+000000r 1               
+000000r 1               .import proc_fd_obj
+000000r 1               .import proc_fd_flags
+000000r 1               
+000000r 1               .import open_type
+000000r 1               .import open_refcnt
+000000r 1               .import open_flags
+000000r 1               .import open_dev
+000000r 1               .import open_file_handle
+000000r 1               
+000000r 1               .import dev_resolve_op
+000000r 1               
+000000r 1               .importzp fd_ptr
+000000r 1               .importzp sched_ptr
+000000r 1               
+000000r 1               .importzp dev_ptr
+000000r 1               
+000000r 1               .importzp pipe_ptr
+000000r 1               .import pipe_read
+000000r 1               .import pipe_write
+000000r 1               .import pipe_close_endpoint
+000000r 1               
+000000r 1               .import rp_fs_exec
+000000r 1               
+000000r 1               .segment "KERN_BSS"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; fd_mul_lo / fd_mul_hi
+000000r 1               ;
+000000r 1               ; FD-local cached result of:
+000000r 1               ;
+000000r 1               ;   PID * MAX_FDS
+000000r 1               ;
+000000r 1               ; The public mul8u ABI returns:
+000000r 1               ;   A = product low
+000000r 1               ;   X = product high
+000000r 1               ;
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               fd_mul_lo:
+000000r 1  xx               .res 1
+000001r 1               
+000001r 1               fd_mul_hi:
+000001r 1  xx               .res 1
+000002r 1               
+000002r 1               ; ------------------------------------------------------------
+000002r 1               ; FD-private scratch
+000002r 1               ;
+000002r 1               ; These variables are private to fd.asm.
+000002r 1               ;
+000002r 1               ; Rules:
+000002r 1               ;   - valid only inside FD subsystem routines
+000002r 1               ;   - protected by file_io_gate where FD/open-object tables are modified
+000002r 1               ;   - never ABI-visible
+000002r 1               ;   - never monitor/RP-visible
+000002r 1               ;   - not stored in shared_state.asm
+000002r 1               ;   - not stored in zero page because they are not pointers
+000002r 1               ;
+000002r 1               ; fd_ptr remains in ZEROPAGE because it is used for
+000002r 1               ; indirect-indexed addressing: (fd_ptr),Y.
+000002r 1               ; ------------------------------------------------------------
+000002r 1               
+000002r 1               fd_pid_tmp:
+000002r 1  xx               .res 1              ; PID currently being inspected/modified
+000003r 1               
+000003r 1               fd_index_tmp:
+000003r 1  xx               .res 1              ; per-process fd number
+000004r 1               
+000004r 1               fd_obj_tmp:
+000004r 1  xx               .res 1              ; open-object index
+000005r 1               
+000005r 1               fd_flags_tmp:
+000005r 1  xx               .res 1              ; FD_FLAG_READ / FD_FLAG_WRITE / CLOEXEC mask
+000006r 1               
+000006r 1               fd_closeproc_pid:
+000006r 1  xx               .res 1              ; PID used while closing all FDs for a process
+000007r 1               
+000007r 1               fd_closeproc_fd:
+000007r 1  xx               .res 1              ; fd iterator used by fd_close_process
+000008r 1               
+000008r 1               fd_clone_source_pid:
+000008r 1  xx               .res 1              ; source PID for cross-process fd clone
+000009r 1               
+000009r 1               fd_clone_source_fd:
+000009r 1  xx               .res 1              ; source fd for cross-process fd clone
+00000Ar 1               
+00000Ar 1               fd_clone_target_pid:
+00000Ar 1  xx               .res 1              ; target PID for cross-process fd clone
+00000Br 1               
+00000Br 1               fd_clone_target_fd:
+00000Br 1  xx               .res 1              ; target fd for cross-process fd clone
+00000Cr 1               
+00000Cr 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; fd_calc_pid_offset
+000000r 1               ;
+000000r 1               ; Input:
+000000r 1               ;   A = PID
+000000r 1               ;
+000000r 1               ; Output:
+000000r 1               ;   fd_mul_lo = low byte of PID * MAX_FDS
+000000r 1               ;   fd_mul_hi = high byte of PID * MAX_FDS
+000000r 1               ;
+000000r 1               ; Clobbers:
+000000r 1               ;   A, X, Y
+000000r 1               ;
+000000r 1               ; Notes:
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc fd_calc_pid_offset
+000000r 1  A2 06            ldx #MAX_FDS
+000002r 1  20 rr rr         jsr mul8u
+000005r 1               
+000005r 1  8D rr rr         sta fd_mul_lo
+000008r 1  8E rr rr         stx fd_mul_hi
+00000Br 1               
+00000Br 1  60               rts
+00000Cr 1               .endproc
+00000Cr 1               
+00000Cr 1               ; ------------------------------------------------------------
+00000Cr 1               ; fd_alloc_open
+00000Cr 1               ;
+00000Cr 1               ; Caller:
+00000Cr 1               ;   file_io_gate held by caller
+00000Cr 1               ;
+00000Cr 1               ; Output:
+00000Cr 1               ;   C clear = success, X = open object index
+00000Cr 1               ;   C set   = failure, Y = ENOMEM
+00000Cr 1               ; ------------------------------------------------------------
+00000Cr 1               
+00000Cr 1               .proc fd_alloc_open
+00000Cr 1  A2 00            ldx #0
+00000Er 1               
+00000Er 1               @scan:
+00000Er 1  E0 10            cpx #OPEN_MAX
+000010r 1  F0 0F            beq @full
+000012r 1               
+000012r 1  BD rr rr         lda open_type,x
+000015r 1  D0 07            bne @next
+000017r 1               
+000017r 1  BD rr rr         lda open_refcnt,x
+00001Ar 1  D0 02            bne @next
+00001Cr 1               
+00001Cr 1  18               clc
+00001Dr 1  60               rts
+00001Er 1               
+00001Er 1               @next:
+00001Er 1  E8               inx
+00001Fr 1  80 ED            bra @scan
+000021r 1               
+000021r 1               @full:
+000021r 1  A0 0D            ldy #ENOMEM
+000023r 1  38               sec
+000024r 1  60               rts
+000025r 1               .endproc
+000025r 1               
+000025r 1               ; ------------------------------------------------------------
+000025r 1               ; fd_free_open
+000025r 1               ;
+000025r 1               ; Caller:
+000025r 1               ;   file_io_gate held by caller
+000025r 1               ;
+000025r 1               ; Input:
+000025r 1               ;   X = open object index
+000025r 1               ;
+000025r 1               ; Output:
+000025r 1               ;   C clear
+000025r 1               ; ------------------------------------------------------------
+000025r 1               
+000025r 1               .proc fd_free_open
+000025r 1  9E rr rr         stz open_type,x
+000028r 1  9E rr rr         stz open_refcnt,x
+00002Br 1  9E rr rr         stz open_flags,x
+00002Er 1  9E rr rr         stz open_dev,x
+000031r 1  9E rr rr         stz open_file_handle,x
+000034r 1  18               clc
+000035r 1  60               rts
+000036r 1               .endproc
+000036r 1               
+000036r 1               ; ------------------------------------------------------------
+000036r 1               ; fd_init_open
+000036r 1               ;
+000036r 1               ; Caller:
+000036r 1               ;   file_io_gate held by caller
+000036r 1               ;
+000036r 1               ; Input:
+000036r 1               ;   X = open object index
+000036r 1               ;   A = open object type
+000036r 1               ;   Y = open object flags
+000036r 1               ;
+000036r 1               ; Output:
+000036r 1               ;   C clear
+000036r 1               ;
+000036r 1               ; Notes:
+000036r 1               ;   Refcount remains 0 until an FD is attached.
+000036r 1               ; ------------------------------------------------------------
+000036r 1               
+000036r 1               .proc fd_init_open
+000036r 1  9D rr rr         sta open_type,x
+000039r 1  98               tya
+00003Ar 1  9D rr rr         sta open_flags,x
+00003Dr 1  9E rr rr         stz open_refcnt,x
+000040r 1  9E rr rr         stz open_dev,x
+000043r 1  9E rr rr         stz open_file_handle,x
+000046r 1  18               clc
+000047r 1  60               rts
+000048r 1               .endproc
+000048r 1               
+000048r 1               ; ------------------------------------------------------------
+000048r 1               ; fd_attach_current
+000048r 1               ;
+000048r 1               ; Caller:
+000048r 1               ;   file_io_gate held by caller
+000048r 1               ;
+000048r 1               ; Input:
+000048r 1               ;   X = open object index
+000048r 1               ;   Y = fd
+000048r 1               ;   A = fd flags
+000048r 1               ;
+000048r 1               ; Output:
+000048r 1               ;   C clear
+000048r 1               ;
+000048r 1               ; Notes:
+000048r 1               ;   Uses fd_attach, which increments open_refcnt.
+000048r 1               ; ------------------------------------------------------------
+000048r 1               
+000048r 1               .proc fd_attach_current
+000048r 1  8D rr rr         sta fd_flags_tmp
+00004Br 1  8A               txa
+00004Cr 1  AE rr rr         ldx active_pid
+00004Fr 1  4C rr rr         jmp fd_attach
+000052r 1               .endproc
+000052r 1               
+000052r 1               ; ------------------------------------------------------------
+000052r 1               ; fd_check_free_pid_fd
+000052r 1               ;
+000052r 1               ; Input:
+000052r 1               ;   X = PID
+000052r 1               ;   Y = fd
+000052r 1               ;
+000052r 1               ; Output:
+000052r 1               ;   C clear = fd slot is free
+000052r 1               ;             X = PID
+000052r 1               ;             Y = fd
+000052r 1               ;
+000052r 1               ;   C set   = failure
+000052r 1               ;             Y = errno
+000052r 1               ;
+000052r 1               ; Requirements:
+000052r 1               ;   Caller holds file_io_gate.
+000052r 1               ;
+000052r 1               ; mul8u rule:
+000052r 1               ;   Uses fd_calc_pid_offset.
+000052r 1               ; ------------------------------------------------------------
+000052r 1               
+000052r 1               .proc fd_check_free_pid_fd
+000052r 1  E0 08            cpx #MAX_PROCS
+000054r 1  90 04            bcc @pid_ok
+000056r 1               
+000056r 1  A0 06            ldy #EINVAL
+000058r 1  38               sec
+000059r 1  60               rts
+00005Ar 1               
+00005Ar 1               @pid_ok:
+00005Ar 1  C0 06            cpy #MAX_FDS
+00005Cr 1  90 04            bcc @fd_ok
+00005Er 1               
+00005Er 1  A0 09            ldy #EBADF
+000060r 1  38               sec
+000061r 1  60               rts
+000062r 1               
+000062r 1               @fd_ok:
+000062r 1  8E rr rr         stx fd_pid_tmp
+000065r 1  8C rr rr         sty fd_index_tmp
+000068r 1               
+000068r 1                   ; offset = PID * MAX_FDS
+000068r 1  8A               txa
+000069r 1  20 rr rr         jsr fd_calc_pid_offset
+00006Cr 1               
+00006Cr 1                   ; fd_ptr = proc_fd_obj + offset
+00006Cr 1  18               clc
+00006Dr 1  A9 rr            lda #<proc_fd_obj
+00006Fr 1  6D rr rr         adc fd_mul_lo
+000072r 1  85 rr            sta fd_ptr
+000074r 1               
+000074r 1  A9 rr            lda #>proc_fd_obj
+000076r 1  6D rr rr         adc fd_mul_hi
+000079r 1  85 rr            sta fd_ptr+1
+00007Br 1               
+00007Br 1  AC rr rr         ldy fd_index_tmp
+00007Er 1  B1 rr            lda (fd_ptr),y
+000080r 1  C9 FF            cmp #FD_NONE
+000082r 1  F0 04            beq @free
+000084r 1               
+000084r 1  A0 08            ldy #EMFILE
+000086r 1  38               sec
+000087r 1  60               rts
+000088r 1               
+000088r 1               @free:
+000088r 1  AE rr rr         ldx fd_pid_tmp
+00008Br 1  AC rr rr         ldy fd_index_tmp
+00008Er 1  18               clc
+00008Fr 1  60               rts
+000090r 1               .endproc
+000090r 1               
+000090r 1               ; ------------------------------------------------------------
+000090r 1               ; fd_attach_pid_fd_read
+000090r 1               ;
+000090r 1               ; Input:
+000090r 1               ;   A = PID
+000090r 1               ;   X = open object
+000090r 1               ;   Y = fd
+000090r 1               ;
+000090r 1               ; Output:
+000090r 1               ;   C clear = success
+000090r 1               ;   C set   = failure, Y = errno
+000090r 1               ;
+000090r 1               ; Requirements:
+000090r 1               ;   Caller holds file_io_gate.
+000090r 1               ; ------------------------------------------------------------
+000090r 1               
+000090r 1               .proc fd_attach_pid_fd_read
+000090r 1  48               pha
+000091r 1  A9 01            lda #FD_FLAG_READ
+000093r 1  8D rr rr         sta fd_flags_tmp
+000096r 1  68               pla
+000097r 1  4C rr rr         jmp fd_attach_pid_fd_mode
+00009Ar 1               .endproc
+00009Ar 1               
+00009Ar 1               ; ------------------------------------------------------------
+00009Ar 1               ; fd_attach_pid_fd_write
+00009Ar 1               ;
+00009Ar 1               ; Input:
+00009Ar 1               ;   A = PID
+00009Ar 1               ;   X = open object
+00009Ar 1               ;   Y = fd
+00009Ar 1               ;
+00009Ar 1               ; Output:
+00009Ar 1               ;   C clear = success
+00009Ar 1               ;   C set   = failure, Y = errno
+00009Ar 1               ;
+00009Ar 1               ; Requirements:
+00009Ar 1               ;   Caller holds file_io_gate.
+00009Ar 1               ; ------------------------------------------------------------
+00009Ar 1               
+00009Ar 1               .proc fd_attach_pid_fd_write
+00009Ar 1  48               pha
+00009Br 1  A9 02            lda #FD_FLAG_WRITE
+00009Dr 1  8D rr rr         sta fd_flags_tmp
+0000A0r 1  68               pla
+0000A1r 1  4C rr rr         jmp fd_attach_pid_fd_mode
+0000A4r 1               .endproc
+0000A4r 1               
+0000A4r 1               ; ------------------------------------------------------------
+0000A4r 1               ; fd_attach_pid_fd_mode
+0000A4r 1               ;
+0000A4r 1               ; Internal helper.
+0000A4r 1               ;
+0000A4r 1               ; Input:
+0000A4r 1               ;   A            = PID
+0000A4r 1               ;   X            = open object
+0000A4r 1               ;   Y            = fd
+0000A4r 1               ;   fd_flags_tmp = FD_FLAG_READ or FD_FLAG_WRITE
+0000A4r 1               ;
+0000A4r 1               ; Requirements:
+0000A4r 1               ;   Caller holds file_io_gate.
+0000A4r 1               ; ------------------------------------------------------------
+0000A4r 1               
+0000A4r 1               .proc fd_attach_pid_fd_mode
+0000A4r 1  8D rr rr         sta fd_pid_tmp
+0000A7r 1  8E rr rr         stx fd_obj_tmp
+0000AAr 1  8C rr rr         sty fd_index_tmp
+0000ADr 1               
+0000ADr 1  AE rr rr         ldx fd_pid_tmp
+0000B0r 1  AC rr rr         ldy fd_index_tmp
+0000B3r 1  20 rr rr         jsr fd_check_free_pid_fd
+0000B6r 1  90 02            bcc @free
+0000B8r 1               
+0000B8r 1  38               sec
+0000B9r 1  60               rts
+0000BAr 1               
+0000BAr 1               @free:
+0000BAr 1  AE rr rr         ldx fd_pid_tmp
+0000BDr 1  AC rr rr         ldy fd_index_tmp
+0000C0r 1  AD rr rr         lda fd_obj_tmp
+0000C3r 1  4C rr rr         jmp fd_attach
+0000C6r 1               .endproc
+0000C6r 1               
+0000C6r 1               .proc fd_check_perm
+0000C6r 1  8D rr rr         sta fd_flags_tmp
+0000C9r 1               
+0000C9r 1  AD rr rr         lda active_pid
+0000CCr 1  20 rr rr         jsr fd_calc_pid_offset
+0000CFr 1               
+0000CFr 1  18               clc
+0000D0r 1  A9 rr            lda #<proc_fd_flags
+0000D2r 1  6D rr rr         adc fd_mul_lo
+0000D5r 1  85 rr            sta fd_ptr
+0000D7r 1               
+0000D7r 1  A9 rr            lda #>proc_fd_flags
+0000D9r 1  6D rr rr         adc fd_mul_hi
+0000DCr 1  85 rr            sta fd_ptr+1
+0000DEr 1               
+0000DEr 1  AC rr rr         ldy fd_index_tmp
+0000E1r 1  B1 rr            lda (fd_ptr),y
+0000E3r 1  2D rr rr         and fd_flags_tmp
+0000E6r 1  D0 04            bne @allowed
+0000E8r 1               
+0000E8r 1  A0 09            ldy #EBADF
+0000EAr 1  38               sec
+0000EBr 1  60               rts
+0000ECr 1               
+0000ECr 1               @allowed:
+0000ECr 1  18               clc
+0000EDr 1  60               rts
+0000EEr 1               .endproc
+0000EEr 1               
+0000EEr 1               ; ------------------------------------------------------------
+0000EEr 1               ; fd_close_current
+0000EEr 1               ;
+0000EEr 1               ; Internal helper.
+0000EEr 1               ;
+0000EEr 1               ; Purpose:
+0000EEr 1               ;   Close fd for active_pid while file_io_gate is already held.
+0000EEr 1               ;
+0000EEr 1               ; Input:
+0000EEr 1               ;   A = fd
+0000EEr 1               ;
+0000EEr 1               ; Output:
+0000EEr 1               ;   C clear = success
+0000EEr 1               ;   C set   = failure, Y = errno
+0000EEr 1               ;
+0000EEr 1               ; Notes:
+0000EEr 1               ;   Does not acquire/release file_io_gate.
+0000EEr 1               ;   Does not call backend close.
+0000EEr 1               ; ------------------------------------------------------------
+0000EEr 1               
+0000EEr 1               .proc fd_close_current
+0000EEr 1  C9 06            cmp #MAX_FDS
+0000F0r 1  90 04            bcc @fd_ok
+0000F2r 1               
+0000F2r 1  A0 09            ldy #EBADF
+0000F4r 1  38               sec
+0000F5r 1  60               rts
+0000F6r 1               
+0000F6r 1               @fd_ok:
+0000F6r 1  8D rr rr         sta fd_index_tmp
+0000F9r 1               
+0000F9r 1  AD rr rr         lda active_pid
+0000FCr 1  20 rr rr         jsr fd_calc_pid_offset
+0000FFr 1               
+0000FFr 1  18               clc
+000100r 1  A9 rr            lda #<proc_fd_obj
+000102r 1  6D rr rr         adc fd_mul_lo
+000105r 1  85 rr            sta fd_ptr
+000107r 1               
+000107r 1  A9 rr            lda #>proc_fd_obj
+000109r 1  6D rr rr         adc fd_mul_hi
+00010Cr 1  85 rr            sta fd_ptr+1
+00010Er 1               
+00010Er 1  AC rr rr         ldy fd_index_tmp
+000111r 1  B1 rr            lda (fd_ptr),y
+000113r 1  C9 FF            cmp #FD_NONE
+000115r 1  D0 04            bne @is_open
+000117r 1               
+000117r 1  A0 09            ldy #EBADF
+000119r 1  38               sec
+00011Ar 1  60               rts
+00011Br 1               
+00011Br 1               @is_open:
+00011Br 1  AA               tax
+00011Cr 1               
+00011Cr 1  A9 FF            lda #FD_NONE
+00011Er 1  91 rr            sta (fd_ptr),y
+000120r 1               
+000120r 1  18               clc
+000121r 1  A9 rr            lda #<proc_fd_flags
+000123r 1  6D rr rr         adc fd_mul_lo
+000126r 1  85 rr            sta fd_ptr
+000128r 1               
+000128r 1  A9 rr            lda #>proc_fd_flags
+00012Ar 1  6D rr rr         adc fd_mul_hi
+00012Dr 1  85 rr            sta fd_ptr+1
+00012Fr 1               
+00012Fr 1  AC rr rr         ldy fd_index_tmp
+000132r 1  A9 00            lda #0
+000134r 1  91 rr            sta (fd_ptr),y
+000136r 1               
+000136r 1  BD rr rr         lda open_refcnt,x
+000139r 1  F0 03            beq @ok
+00013Br 1               
+00013Br 1  DE rr rr         dec open_refcnt,x
+00013Er 1               
+00013Er 1               @ok:
+00013Er 1  18               clc
+00013Fr 1  60               rts
+000140r 1               .endproc
+000140r 1               
+000140r 1               ; ------------------------------------------------------------
+000140r 1               ; fd_detach_current
+000140r 1               ;
+000140r 1               ; Caller:
+000140r 1               ;   file_io_gate held by caller
+000140r 1               ;
+000140r 1               ; Input:
+000140r 1               ;   A = fd
+000140r 1               ;
+000140r 1               ; Output:
+000140r 1               ;   C clear = success
+000140r 1               ;   C set   = failure, Y = errno
+000140r 1               ;
+000140r 1               ; Notes:
+000140r 1               ;   Rollback helper only.
+000140r 1               ;   It clears active_pid's fd slot and decrements open_refcnt.
+000140r 1               ;   It does not run backend close effects.
+000140r 1               ; ------------------------------------------------------------
+000140r 1               
+000140r 1               .proc fd_detach_current
+000140r 1  4C rr rr         jmp fd_close_current
+000143r 1               .endproc
+000143r 1               
+000143r 1               ; ------------------------------------------------------------
+000143r 1               ; fd_init_tables
+000143r 1               ;
+000143r 1               ; Purpose:
+000143r 1               ;   Initialize the FD subsystem at boot.
+000143r 1               ;
+000143r 1               ; Behavior:
+000143r 1               ;   - clears file_io_gate state through ksys_io init
+000143r 1               ;   - clears every per-process FD slot for every PID
+000143r 1               ;   - clears every per-process FD flag slot for every PID
+000143r 1               ;   - clears all global open-object slots
+000143r 1               ;   - installs three global console open objects:
+000143r 1               ;       0 = stdin
+000143r 1               ;       1 = stdout
+000143r 1               ;       2 = stderr
+000143r 1               ;
+000143r 1               ; Notes:
+000143r 1               ;   Per-process FD tables are cleared here even for PROC_EMPTY
+000143r 1               ;   slots. This keeps monitor/ps output deterministic when a PID
+000143r 1               ;   was not created, for example when task 3 is disabled.
+000143r 1               ;
+000143r 1               ;   Refcounts start at 0. They are incremented later by
+000143r 1               ;   fd_init_process / fd_attach when processes attach their
+000143r 1               ;   local descriptors to these open objects.
+000143r 1               ; ------------------------------------------------------------
+000143r 1               
+000143r 1               .proc fd_init_tables
+000143r 1                   ; FD subsystem starts unlocked.
+000143r 1               
+000143r 1                   ; --------------------------------------------------------
+000143r 1                   ; Clear all per-process FD object slots.
+000143r 1                   ;
+000143r 1                   ; proc_fd_obj[pid * MAX_FDS + fd] = FD_NONE
+000143r 1                   ; for every PID and every FD.
+000143r 1                   ; --------------------------------------------------------
+000143r 1               
+000143r 1  A2 00            ldx #$00
+000145r 1  A9 FF            lda #FD_NONE
+000147r 1               
+000147r 1               @clear_proc_fd_obj:
+000147r 1  9D rr rr         sta proc_fd_obj,x
+00014Ar 1  E8               inx
+00014Br 1  E0 30            cpx #(MAX_PROCS * MAX_FDS)
+00014Dr 1  D0 F8            bne @clear_proc_fd_obj
+00014Fr 1               
+00014Fr 1                   ; --------------------------------------------------------
+00014Fr 1                   ; Clear all per-process FD flags.
+00014Fr 1                   ;
+00014Fr 1                   ; proc_fd_flags[pid * MAX_FDS + fd] = 0
+00014Fr 1                   ; for every PID and every FD.
+00014Fr 1                   ; --------------------------------------------------------
+00014Fr 1               
+00014Fr 1  A2 00            ldx #$00
+000151r 1  A9 00            lda #$00
+000153r 1               
+000153r 1               @clear_proc_fd_flags:
+000153r 1  9D rr rr         sta proc_fd_flags,x
+000156r 1  E8               inx
+000157r 1  E0 30            cpx #(MAX_PROCS * MAX_FDS)
+000159r 1  D0 F8            bne @clear_proc_fd_flags
+00015Br 1               
+00015Br 1                   ; --------------------------------------------------------
+00015Br 1                   ; Clear global open-object table.
+00015Br 1                   ; --------------------------------------------------------
+00015Br 1               
+00015Br 1  A2 00            ldx #$00
+00015Dr 1               
+00015Dr 1               @clear_open:
+00015Dr 1  9E rr rr         stz open_type,x
+000160r 1  9E rr rr         stz open_refcnt,x
+000163r 1  9E rr rr         stz open_flags,x
+000166r 1  9E rr rr         stz open_dev,x
+000169r 1  9E rr rr         stz open_file_handle,x
+00016Cr 1               
+00016Cr 1  E8               inx
+00016Dr 1  E0 10            cpx #OPEN_MAX
+00016Fr 1  D0 EC            bne @clear_open
+000171r 1               
+000171r 1                   ; --------------------------------------------------------
+000171r 1                   ; Install standard global console open objects.
+000171r 1                   ;
+000171r 1                   ; Refcounts remain 0 here. Per-process fd_attach calls will
+000171r 1                   ; increment them.
+000171r 1                   ; --------------------------------------------------------
+000171r 1               
+000171r 1                   ; stdin object
+000171r 1  A9 01            lda #OBJ_DEVICE
+000173r 1  8D rr rr         sta open_type+STDIN
+000176r 1  A9 01            lda #DEV_CONSOLE
+000178r 1  8D rr rr         sta open_dev+STDIN
+00017Br 1               
+00017Br 1                   ; stdout object
+00017Br 1  A9 01            lda #OBJ_DEVICE
+00017Dr 1  8D rr rr         sta open_type+STDOUT
+000180r 1  A9 01            lda #DEV_CONSOLE
+000182r 1  8D rr rr         sta open_dev+STDOUT
+000185r 1               
+000185r 1                   ; stderr object
+000185r 1  A9 01            lda #OBJ_DEVICE
+000187r 1  8D rr rr         sta open_type+STDERR
+00018Ar 1  A9 01            lda #DEV_CONSOLE
+00018Cr 1  8D rr rr         sta open_dev+STDERR
+00018Fr 1               
+00018Fr 1  18               clc
+000190r 1  60               rts
+000191r 1               .endproc
+000191r 1               
+000191r 1               ; ------------------------------------------------------------
+000191r 1               ; fd_attach
+000191r 1               ;
+000191r 1               ; Purpose:
+000191r 1               ;   Attach an open object to one process-local file descriptor.
+000191r 1               ;
+000191r 1               ; Input:
+000191r 1               ;   X            = PID
+000191r 1               ;   Y            = fd index
+000191r 1               ;   A            = open object index
+000191r 1               ;   fd_flags_tmp = per-fd flags to install
+000191r 1               ;
+000191r 1               ; Output:
+000191r 1               ;   C clear = success
+000191r 1               ;
+000191r 1               ; Clobbers:
+000191r 1               ;   A, X, Y, fd_ptr
+000191r 1               ;   fd_pid_tmp, fd_index_tmp, fd_obj_tmp
+000191r 1               ;
+000191r 1               ; Requirements:
+000191r 1               ;   Caller must hold the FD critical section.
+000191r 1               ;
+000191r 1               ; Effects:
+000191r 1               ;   proc_fd_obj[pid][fd]   = open object
+000191r 1               ;   proc_fd_flags[pid][fd] = fd_flags_tmp
+000191r 1               ;   open_refcnt[object]++
+000191r 1               ; ------------------------------------------------------------
+000191r 1               
+000191r 1               .proc fd_attach
+000191r 1                   ; Save inputs in local scratch.
+000191r 1  8E rr rr         stx fd_pid_tmp
+000194r 1  8C rr rr         sty fd_index_tmp
+000197r 1  8D rr rr         sta fd_obj_tmp
+00019Ar 1               
+00019Ar 1                   ; offset = pid * MAX_FDS
+00019Ar 1  AD rr rr         lda fd_pid_tmp
+00019Dr 1  20 rr rr         jsr fd_calc_pid_offset
+0001A0r 1               
+0001A0r 1                   ; proc_fd_obj[pid][fd] = object
+0001A0r 1  18               clc
+0001A1r 1  A9 rr            lda #<proc_fd_obj
+0001A3r 1  6D rr rr         adc fd_mul_lo
+0001A6r 1  85 rr            sta fd_ptr
+0001A8r 1               
+0001A8r 1  A9 rr            lda #>proc_fd_obj
+0001AAr 1  6D rr rr         adc fd_mul_hi
+0001ADr 1  85 rr            sta fd_ptr+1
+0001AFr 1               
+0001AFr 1  AC rr rr         ldy fd_index_tmp
+0001B2r 1  AD rr rr         lda fd_obj_tmp
+0001B5r 1  91 rr            sta (fd_ptr),y
+0001B7r 1               
+0001B7r 1                   ; proc_fd_flags[pid][fd] = fd_flags_tmp
+0001B7r 1  18               clc
+0001B8r 1  A9 rr            lda #<proc_fd_flags
+0001BAr 1  6D rr rr         adc fd_mul_lo
+0001BDr 1  85 rr            sta fd_ptr
+0001BFr 1               
+0001BFr 1  A9 rr            lda #>proc_fd_flags
+0001C1r 1  6D rr rr         adc fd_mul_hi
+0001C4r 1  85 rr            sta fd_ptr+1
+0001C6r 1               
+0001C6r 1  AC rr rr         ldy fd_index_tmp
+0001C9r 1  AD rr rr         lda fd_flags_tmp
+0001CCr 1  91 rr            sta (fd_ptr),y
+0001CEr 1               
+0001CEr 1                   ; open_refcnt[object]++
+0001CEr 1  AE rr rr         ldx fd_obj_tmp
+0001D1r 1  FE rr rr         inc open_refcnt,x
+0001D4r 1               
+0001D4r 1                   ; Restore useful values for caller/debugging.
+0001D4r 1  AE rr rr         ldx fd_pid_tmp
+0001D7r 1  AC rr rr         ldy fd_index_tmp
+0001DAr 1  AD rr rr         lda fd_obj_tmp
+0001DDr 1               
+0001DDr 1  18               clc
+0001DEr 1  60               rts
+0001DFr 1               .endproc
+0001DFr 1               
+0001DFr 1               ; ------------------------------------------------------------
+0001DFr 1               ; fd_lookup
+0001DFr 1               ;
+0001DFr 1               ; Input:
+0001DFr 1               ;   A = fd
+0001DFr 1               ;
+0001DFr 1               ; Output:
+0001DFr 1               ;   C clear = success
+0001DFr 1               ;   X = open object index
+0001DFr 1               ;
+0001DFr 1               ;   C set = failure
+0001DFr 1               ;   Y = errno
+0001DFr 1               ;
+0001DFr 1               ; Clobbers:
+0001DFr 1               ;   A, X, Y, fd_ptr, fd_index_tmp
+0001DFr 1               ; ------------------------------------------------------------
+0001DFr 1               
+0001DFr 1               .proc fd_lookup
+0001DFr 1  C9 06            cmp #MAX_FDS
+0001E1r 1  90 04            bcc @fd_ok
+0001E3r 1               
+0001E3r 1  A0 09            ldy #EBADF
+0001E5r 1  38               sec
+0001E6r 1  60               rts
+0001E7r 1               
+0001E7r 1               @fd_ok:
+0001E7r 1  8D rr rr         sta fd_index_tmp
+0001EAr 1               
+0001EAr 1  AD rr rr         lda active_pid
+0001EDr 1  20 rr rr         jsr fd_calc_pid_offset
+0001F0r 1               
+0001F0r 1  18               clc
+0001F1r 1  A9 rr            lda #<proc_fd_obj
+0001F3r 1  6D rr rr         adc fd_mul_lo
+0001F6r 1  85 rr            sta fd_ptr
+0001F8r 1               
+0001F8r 1  A9 rr            lda #>proc_fd_obj
+0001FAr 1  6D rr rr         adc fd_mul_hi
+0001FDr 1  85 rr            sta fd_ptr+1
+0001FFr 1               
+0001FFr 1  AC rr rr         ldy fd_index_tmp
+000202r 1  B1 rr            lda (fd_ptr),y
+000204r 1  C9 FF            cmp #FD_NONE
+000206r 1  D0 04            bne @obj_ok
+000208r 1               
+000208r 1  A0 09            ldy #EBADF
+00020Ar 1  38               sec
+00020Br 1  60               rts
+00020Cr 1               
+00020Cr 1               @obj_ok:
+00020Cr 1  AA               tax
+00020Dr 1  18               clc
+00020Er 1  60               rts
+00020Fr 1               .endproc
+00020Fr 1               
+00020Fr 1               ; ------------------------------------------------------------
+00020Fr 1               ; fd_clone_between
+00020Fr 1               ;
+00020Fr 1               ; Purpose:
+00020Fr 1               ;   Clone one descriptor from one PID/fd slot to another PID/fd slot.
+00020Fr 1               ;
+00020Fr 1               ; Input:
+00020Fr 1               ;   X/Y -> fd_clone_args
+00020Fr 1               ;
+00020Fr 1               ; Output:
+00020Fr 1               ;   C clear = success
+00020Fr 1               ;   C set   = failure, Y = errno
+00020Fr 1               ;
+00020Fr 1               ; Requirements:
+00020Fr 1               ;   Caller owns file_io_gate.
+00020Fr 1               ;
+00020Fr 1               ; Notes:
+00020Fr 1               ;   - This is the cross-process equivalent of dup2.
+00020Fr 1               ;   - Source and target may be different PIDs and different fd numbers.
+00020Fr 1               ;   - If target fd is already open, it is closed first.
+00020Fr 1               ;   - The source descriptor's open object and per-FD flags are reused.
+00020Fr 1               ;   - fd_attach increments the shared open object's refcount.
+00020Fr 1               ;   - clone(source_pid/source_fd -> same pid/same fd) is a no-op success.
+00020Fr 1               ; ------------------------------------------------------------
+00020Fr 1               
+00020Fr 1               .proc fd_clone_between
+00020Fr 1  86 rr            stx sched_ptr
+000211r 1  84 rr            sty sched_ptr+1
+000213r 1               
+000213r 1                   ; Copy the argument block before touching FD tables.  The FD
+000213r 1                   ; subsystem uses fd_ptr for table access, so the caller's argument
+000213r 1                   ; pointer must not remain live only in an indirect pointer.
+000213r 1  A0 00            ldy #fd_clone_args::source_pid
+000215r 1  B1 rr            lda (sched_ptr),y
+000217r 1  8D rr rr         sta fd_clone_source_pid
+00021Ar 1               
+00021Ar 1  A0 01            ldy #fd_clone_args::source_fd
+00021Cr 1  B1 rr            lda (sched_ptr),y
+00021Er 1  8D rr rr         sta fd_clone_source_fd
+000221r 1               
+000221r 1  A0 02            ldy #fd_clone_args::target_pid
+000223r 1  B1 rr            lda (sched_ptr),y
+000225r 1  8D rr rr         sta fd_clone_target_pid
+000228r 1               
+000228r 1  A0 03            ldy #fd_clone_args::target_fd
+00022Ar 1  B1 rr            lda (sched_ptr),y
+00022Cr 1  8D rr rr         sta fd_clone_target_fd
+00022Fr 1               
+00022Fr 1                   ; Validate PIDs.
+00022Fr 1  AD rr rr         lda fd_clone_source_pid
+000232r 1  C9 08            cmp #MAX_PROCS
+000234r 1  90 04            bcc @source_pid_ok
+000236r 1               
+000236r 1  A0 06            ldy #EINVAL
+000238r 1  38               sec
+000239r 1  60               rts
+00023Ar 1               
+00023Ar 1               @source_pid_ok:
+00023Ar 1  AD rr rr         lda fd_clone_target_pid
+00023Dr 1  C9 08            cmp #MAX_PROCS
+00023Fr 1  90 04            bcc @target_pid_ok
+000241r 1               
+000241r 1  A0 06            ldy #EINVAL
+000243r 1  38               sec
+000244r 1  60               rts
+000245r 1               
+000245r 1               @target_pid_ok:
+000245r 1                   ; Validate fd numbers.
+000245r 1  AD rr rr         lda fd_clone_source_fd
+000248r 1  C9 06            cmp #MAX_FDS
+00024Ar 1  90 04            bcc @source_fd_ok
+00024Cr 1               
+00024Cr 1  A0 09            ldy #EBADF
+00024Er 1  38               sec
+00024Fr 1  60               rts
+000250r 1               
+000250r 1               @source_fd_ok:
+000250r 1  AD rr rr         lda fd_clone_target_fd
+000253r 1  C9 06            cmp #MAX_FDS
+000255r 1  90 04            bcc @target_fd_ok
+000257r 1               
+000257r 1  A0 09            ldy #EBADF
+000259r 1  38               sec
+00025Ar 1  60               rts
+00025Br 1               
+00025Br 1               @target_fd_ok:
+00025Br 1                   ; dup2-style no-op for identical source and target.
+00025Br 1  AD rr rr         lda fd_clone_source_pid
+00025Er 1  CD rr rr         cmp fd_clone_target_pid
+000261r 1  D0 0A            bne @resolve_source
+000263r 1               
+000263r 1  AD rr rr         lda fd_clone_source_fd
+000266r 1  CD rr rr         cmp fd_clone_target_fd
+000269r 1  D0 02            bne @resolve_source
+00026Br 1               
+00026Br 1  18               clc
+00026Cr 1  60               rts
+00026Dr 1               
+00026Dr 1               @resolve_source:
+00026Dr 1                   ; Resolve source PID/fd -> open object.
+00026Dr 1  AD rr rr         lda fd_clone_source_pid
+000270r 1  20 rr rr         jsr fd_calc_pid_offset
+000273r 1               
+000273r 1  18               clc
+000274r 1  A9 rr            lda #<proc_fd_obj
+000276r 1  6D rr rr         adc fd_mul_lo
+000279r 1  85 rr            sta fd_ptr
+00027Br 1               
+00027Br 1  A9 rr            lda #>proc_fd_obj
+00027Dr 1  6D rr rr         adc fd_mul_hi
+000280r 1  85 rr            sta fd_ptr+1
+000282r 1               
+000282r 1  AC rr rr         ldy fd_clone_source_fd
+000285r 1  B1 rr            lda (fd_ptr),y
+000287r 1  C9 FF            cmp #FD_NONE
+000289r 1  D0 04            bne @source_open
+00028Br 1               
+00028Br 1  A0 09            ldy #EBADF
+00028Dr 1  38               sec
+00028Er 1  60               rts
+00028Fr 1               
+00028Fr 1               @source_open:
+00028Fr 1  8D rr rr         sta fd_obj_tmp
+000292r 1               
+000292r 1                   ; Copy source descriptor flags.
+000292r 1  18               clc
+000293r 1  A9 rr            lda #<proc_fd_flags
+000295r 1  6D rr rr         adc fd_mul_lo
+000298r 1  85 rr            sta fd_ptr
+00029Ar 1               
+00029Ar 1  A9 rr            lda #>proc_fd_flags
+00029Cr 1  6D rr rr         adc fd_mul_hi
+00029Fr 1  85 rr            sta fd_ptr+1
+0002A1r 1               
+0002A1r 1  AC rr rr         ldy fd_clone_source_fd
+0002A4r 1  B1 rr            lda (fd_ptr),y
+0002A6r 1  8D rr rr         sta fd_flags_tmp
+0002A9r 1               
+0002A9r 1                   ; Close target descriptor if it is already open.  EBADF is OK:
+0002A9r 1                   ; it means the target slot was already empty.
+0002A9r 1  AE rr rr         ldx fd_clone_target_pid
+0002ACr 1  AD rr rr         lda fd_clone_target_fd
+0002AFr 1  20 rr rr         jsr fd_close_pid
+0002B2r 1  90 06            bcc @target_closed_ok
+0002B4r 1               
+0002B4r 1  C0 09            cpy #EBADF
+0002B6r 1  F0 02            beq @target_closed_ok
+0002B8r 1               
+0002B8r 1  38               sec
+0002B9r 1  60               rts
+0002BAr 1               
+0002BAr 1               @target_closed_ok:
+0002BAr 1                   ; Attach target PID/fd to the source open object with copied flags.
+0002BAr 1  AE rr rr         ldx fd_clone_target_pid
+0002BDr 1  AC rr rr         ldy fd_clone_target_fd
+0002C0r 1  AD rr rr         lda fd_obj_tmp
+0002C3r 1  20 rr rr         jsr fd_attach
+0002C6r 1  60               rts
+0002C7r 1               .endproc
+0002C7r 1               
+0002C7r 1               
+0002C7r 1               
+0002C7r 1               ; ------------------------------------------------------------
+0002C7r 1               ; fd_close_pid
+0002C7r 1               ;
+0002C7r 1               ; Internal helper.
+0002C7r 1               ;
+0002C7r 1               ; Purpose:
+0002C7r 1               ;   Close one fd for a specific PID.
+0002C7r 1               ;
+0002C7r 1               ; Input:
+0002C7r 1               ;   X = PID
+0002C7r 1               ;   A = fd number
+0002C7r 1               ;
+0002C7r 1               ; Output:
+0002C7r 1               ;   C clear = success
+0002C7r 1               ;             A = 0
+0002C7r 1               ;             X = 0
+0002C7r 1               ;
+0002C7r 1               ;   C set   = failure
+0002C7r 1               ;             Y = errno
+0002C7r 1               ;
+0002C7r 1               ; Notes:
+0002C7r 1               ;   Caller owns file_io_gate.
+0002C7r 1               ;   Backend close, if any, runs while file_io_gate is held unless it is explicitly made sleepable later.
+0002C7r 1               ; ------------------------------------------------------------
+0002C7r 1               
+0002C7r 1               .proc fd_close_pid
+0002C7r 1  E0 08            cpx #MAX_PROCS
+0002C9r 1  90 04            bcc @pid_ok
+0002CBr 1               
+0002CBr 1  A0 06            ldy #EINVAL
+0002CDr 1  38               sec
+0002CEr 1  60               rts
+0002CFr 1               
+0002CFr 1               @pid_ok:
+0002CFr 1  C9 06            cmp #MAX_FDS
+0002D1r 1  90 04            bcc @fd_ok
+0002D3r 1               
+0002D3r 1  A0 09            ldy #EBADF
+0002D5r 1  38               sec
+0002D6r 1  60               rts
+0002D7r 1               
+0002D7r 1               @fd_ok:
+0002D7r 1  48               pha                         ; preserve fd across table setup
+0002D8r 1               
+0002D8r 1               
+0002D8r 1  68               pla
+0002D9r 1               
+0002D9r 1                   ; Save PID/fd while table work is active.
+0002D9r 1  8E rr rr         stx fd_pid_tmp
+0002DCr 1  8D rr rr         sta fd_index_tmp
+0002DFr 1               
+0002DFr 1                   ; offset = PID * MAX_FDS
+0002DFr 1  AD rr rr         lda fd_pid_tmp
+0002E2r 1  20 rr rr         jsr fd_calc_pid_offset
+0002E5r 1               
+0002E5r 1                   ; fd_ptr = proc_fd_obj + offset
+0002E5r 1  18               clc
+0002E6r 1  A9 rr            lda #<proc_fd_obj
+0002E8r 1  6D rr rr         adc fd_mul_lo
+0002EBr 1  85 rr            sta fd_ptr
+0002EDr 1               
+0002EDr 1  A9 rr            lda #>proc_fd_obj
+0002EFr 1  6D rr rr         adc fd_mul_hi
+0002F2r 1  85 rr            sta fd_ptr+1
+0002F4r 1               
+0002F4r 1                   ; Get object.
+0002F4r 1  AC rr rr         ldy fd_index_tmp
+0002F7r 1  B1 rr            lda (fd_ptr),y
+0002F9r 1  C9 FF            cmp #FD_NONE
+0002FBr 1  D0 04            bne @is_open
+0002FDr 1               
+0002FDr 1               
+0002FDr 1  A0 09            ldy #EBADF
+0002FFr 1  38               sec
+000300r 1  60               rts
+000301r 1               
+000301r 1               @is_open:
+000301r 1  AA               tax                         ; X = open object
+000302r 1               
+000302r 1                   ; Clear proc_fd_obj[PID][fd].
+000302r 1  A9 FF            lda #FD_NONE
+000304r 1  91 rr            sta (fd_ptr),y
+000306r 1               
+000306r 1                   ; Clear proc_fd_flags[PID][fd].
+000306r 1  18               clc
+000307r 1  A9 rr            lda #<proc_fd_flags
+000309r 1  6D rr rr         adc fd_mul_lo
+00030Cr 1  85 rr            sta fd_ptr
+00030Er 1               
+00030Er 1  A9 rr            lda #>proc_fd_flags
+000310r 1  6D rr rr         adc fd_mul_hi
+000313r 1  85 rr            sta fd_ptr+1
+000315r 1               
+000315r 1  AC rr rr         ldy fd_index_tmp
+000318r 1  A9 00            lda #0
+00031Ar 1  91 rr            sta (fd_ptr),y
+00031Cr 1               
+00031Cr 1                   ; Decrement refcount.
+00031Cr 1  BD rr rr         lda open_refcnt,x
+00031Fr 1  F0 47            beq @done
+000321r 1               
+000321r 1  DE rr rr         dec open_refcnt,x
+000324r 1  BD rr rr         lda open_refcnt,x
+000327r 1  D0 3F            bne @done
+000329r 1               
+000329r 1                   ; Last reference. Check whether backend close is needed.
+000329r 1  BD rr rr         lda open_type,x
+00032Cr 1  C9 03            cmp #OBJ_PIPE
+00032Er 1  F0 11            beq @close_pipe
+000330r 1               
+000330r 1  C9 01            cmp #OBJ_DEVICE
+000332r 1  F0 39            beq @close_device
+000334r 1               
+000334r 1  C9 02            cmp #OBJ_FILE
+000336r 1  F0 14            beq @close_file
+000338r 1               
+000338r 1  C9 04            cmp #OBJ_DIR
+00033Ar 1  F0 14            beq @close_dir
+00033Cr 1               
+00033Cr 1                   ; Unknown/simple object type: free generic open slot.
+00033Cr 1  20 rr rr         jsr fd_free_open
+00033Fr 1  80 27            bra @done
+000341r 1               
+000341r 1               @close_pipe:
+000341r 1                   ; X = open object.
+000341r 1                   ; pipe_close_endpoint expects file_io_gate to be held.
+000341r 1                   ; file_io_gate serializes this nonblocking path.
+000341r 1  DA               phx
+000342r 1               
+000342r 1  8A               txa
+000343r 1  20 rr rr         jsr pipe_close_endpoint
+000346r 1               
+000346r 1  FA               plx
+000347r 1  20 rr rr         jsr fd_free_open
+00034Ar 1               
+00034Ar 1  80 1C            bra @done
+00034Cr 1               
+00034Cr 1               @close_file:
+00034Cr 1  A9 04            lda #RP_FS_OP_CLOSE
+00034Er 1  80 02            bra @close_rp_object
+000350r 1               
+000350r 1               @close_dir:
+000350r 1  A9 0E            lda #RP_FS_OP_CLOSEDIR
+000352r 1               
+000352r 1               @close_rp_object:
+000352r 1                   ; X = open object, A = generic RP close operation. file_io_gate remains
+000352r 1                   ; owned while rp_fs_exec blocks or PID 0 polls.
+000352r 1  DA               phx
+000353r 1  48               pha
+000354r 1  BD rr rr         lda open_file_handle,x
+000357r 1  AA               tax
+000358r 1  64 rr            stz io_ptr
+00035Ar 1  64 rr            stz io_ptr+1
+00035Cr 1  68               pla
+00035Dr 1  A0 00            ldy #$00
+00035Fr 1  20 rr rr         jsr rp_fs_exec
+000362r 1  FA               plx
+000363r 1  20 rr rr         jsr fd_free_open
+000366r 1  80 00            bra @done
+000368r 1               
+000368r 1               @done:
+000368r 1  A9 00            lda #0
+00036Ar 1  AA               tax
+00036Br 1  18               clc
+00036Cr 1  60               rts
+00036Dr 1               
+00036Dr 1               @close_device:
+00036Dr 1                   ; Resolve close op while file_io_gate is still held, then snapshot
+00036Dr 1                   ; dev_ptr as an RTS target before the backend tail-call.
+00036Dr 1  A9 06            lda #DEVOP_CLOSE
+00036Fr 1  20 rr rr         jsr dev_resolve_op
+000372r 1  90 05            bcc @close_op_ok
+000374r 1               
+000374r 1               
+000374r 1  A9 00            lda #0
+000376r 1  AA               tax
+000377r 1  18               clc
+000378r 1  60               rts
+000379r 1               
+000379r 1               @close_op_ok:
+000379r 1                   ; Push dev_ptr - 1 as RTS target.
+000379r 1  A5 rr            lda dev_ptr
+00037Br 1  F0 0B            beq @target_low_zero
+00037Dr 1               
+00037Dr 1  A5 rr            lda dev_ptr+1
+00037Fr 1  48               pha
+000380r 1               
+000380r 1  A5 rr            lda dev_ptr
+000382r 1  38               sec
+000383r 1  E9 01            sbc #1
+000385r 1  48               pha
+000386r 1               
+000386r 1  80 09            bra @target_ready
+000388r 1               
+000388r 1               @target_low_zero:
+000388r 1  A5 rr            lda dev_ptr+1
+00038Ar 1  38               sec
+00038Br 1  E9 01            sbc #1
+00038Dr 1  48               pha
+00038Er 1               
+00038Er 1  A9 FF            lda #$ff
+000390r 1  48               pha
+000391r 1               
+000391r 1               @target_ready:
+000391r 1               
+000391r 1  60               rts                         ; tail-call device close backend
+000392r 1               .endproc
+000392r 1               
+000392r 1               ; ------------------------------------------------------------
+000392r 1               ; fd_close
+000392r 1               ;
+000392r 1               ; Purpose:
+000392r 1               ;   Close one file descriptor for active_pid.
+000392r 1               ;
+000392r 1               ; Input:
+000392r 1               ;   A = fd number
+000392r 1               ;
+000392r 1               ; Output:
+000392r 1               ;   C clear = success
+000392r 1               ;             A = 0
+000392r 1               ;             X = 0
+000392r 1               ;
+000392r 1               ;   C set   = failure
+000392r 1               ;             Y = errno
+000392r 1               ; ------------------------------------------------------------
+000392r 1               
+000392r 1               .proc fd_close
+000392r 1  AE rr rr         ldx active_pid
+000395r 1  4C rr rr         jmp fd_close_pid
+000398r 1               .endproc
+000398r 1               
+000398r 1               ; ------------------------------------------------------------
+000398r 1               ; fd_clear_process_slots
+000398r 1               ;
+000398r 1               ; Purpose:
+000398r 1               ;   Clear one process-local FD table without touching shared open-object
+000398r 1               ;   reference counts.
+000398r 1               ;
+000398r 1               ; Input:
+000398r 1               ;   X = PID
+000398r 1               ;
+000398r 1               ; Output:
+000398r 1               ;   C clear = success
+000398r 1               ;   C set   = failure, Y = errno
+000398r 1               ;
+000398r 1               ; Notes:
+000398r 1               ;   This is only valid for a PID that is not runnable and whose
+000398r 1               ;   previous descriptors have already been closed/reaped.  It is used
+000398r 1               ;   by unified spawn for a newly allocated, unpublished child so the
+000398r 1               ;   parent can explicitly configure fd 0/1/2 before publication.
+000398r 1               ;
+000398r 1               ; Locking:
+000398r 1               ;   Caller owns file_io_gate while clearing descriptor slots.
+000398r 1               ; ------------------------------------------------------------
+000398r 1               
+000398r 1               .proc fd_clear_process_slots
+000398r 1  E0 08            cpx #MAX_PROCS
+00039Ar 1  90 04            bcc @pid_ok
+00039Cr 1               
+00039Cr 1  A0 06            ldy #EINVAL
+00039Er 1  38               sec
+00039Fr 1  60               rts
+0003A0r 1               
+0003A0r 1               @pid_ok:
+0003A0r 1  8E rr rr         stx fd_pid_tmp
+0003A3r 1               
+0003A3r 1                   ; offset = PID * MAX_FDS
+0003A3r 1  AD rr rr         lda fd_pid_tmp
+0003A6r 1  20 rr rr         jsr fd_calc_pid_offset
+0003A9r 1               
+0003A9r 1                   ; Clear proc_fd_obj[pid][*].
+0003A9r 1  18               clc
+0003AAr 1  A9 rr            lda #<proc_fd_obj
+0003ACr 1  6D rr rr         adc fd_mul_lo
+0003AFr 1  85 rr            sta fd_ptr
+0003B1r 1               
+0003B1r 1  A9 rr            lda #>proc_fd_obj
+0003B3r 1  6D rr rr         adc fd_mul_hi
+0003B6r 1  85 rr            sta fd_ptr+1
+0003B8r 1               
+0003B8r 1  A0 00            ldy #0
+0003BAr 1  A9 FF            lda #FD_NONE
+0003BCr 1               
+0003BCr 1               @clear_obj:
+0003BCr 1  91 rr            sta (fd_ptr),y
+0003BEr 1  C8               iny
+0003BFr 1  C0 06            cpy #MAX_FDS
+0003C1r 1  D0 F9            bne @clear_obj
+0003C3r 1               
+0003C3r 1                   ; Clear proc_fd_flags[pid][*].
+0003C3r 1  18               clc
+0003C4r 1  A9 rr            lda #<proc_fd_flags
+0003C6r 1  6D rr rr         adc fd_mul_lo
+0003C9r 1  85 rr            sta fd_ptr
+0003CBr 1               
+0003CBr 1  A9 rr            lda #>proc_fd_flags
+0003CDr 1  6D rr rr         adc fd_mul_hi
+0003D0r 1  85 rr            sta fd_ptr+1
+0003D2r 1               
+0003D2r 1  A0 00            ldy #0
+0003D4r 1  A9 00            lda #0
+0003D6r 1               
+0003D6r 1               @clear_flags:
+0003D6r 1  91 rr            sta (fd_ptr),y
+0003D8r 1  C8               iny
+0003D9r 1  C0 06            cpy #MAX_FDS
+0003DBr 1  D0 F9            bne @clear_flags
+0003DDr 1               
+0003DDr 1  AE rr rr         ldx fd_pid_tmp
+0003E0r 1  18               clc
+0003E1r 1  60               rts
+0003E2r 1               .endproc
+0003E2r 1               
+0003E2r 1               ; ------------------------------------------------------------
+0003E2r 1               ; fd_init_process
+0003E2r 1               ;
+0003E2r 1               ; Purpose:
+0003E2r 1               ;   Initialize standard descriptors for a newly created process.
+0003E2r 1               ;
+0003E2r 1               ; Input:
+0003E2r 1               ;   X = PID
+0003E2r 1               ;
+0003E2r 1               ; Output:
+0003E2r 1               ;   C clear = success
+0003E2r 1               ;   C set   = failure
+0003E2r 1               ;             Y = errno
+0003E2r 1               ;
+0003E2r 1               ; Notes:
+0003E2r 1               ;   May run while scheduler is active.
+0003E2r 1               ;   Target PID must not be runnable yet.
+0003E2r 1               ;
+0003E2r 1               ; Locking:
+0003E2r 1               ;   Caller owns file_io_gate while clearing/attaching descriptors.
+0003E2r 1               ;   The only exception is early boot before timer IRQ scheduling starts.
+0003E2r 1               ;
+0003E2r 1               ; mul8u rule:
+0003E2r 1               ;   Uses fd_calc_pid_offset.
+0003E2r 1               ; ------------------------------------------------------------
+0003E2r 1               
+0003E2r 1               .proc fd_init_process
+0003E2r 1  E0 08            cpx #MAX_PROCS
+0003E4r 1  90 04            bcc @pid_ok
+0003E6r 1               
+0003E6r 1  A0 06            ldy #EINVAL
+0003E8r 1  38               sec
+0003E9r 1  60               rts
+0003EAr 1               
+0003EAr 1               @pid_ok:
+0003EAr 1               
+0003EAr 1                   ; Save PID because fd_attach uses FD-local scratch internally.
+0003EAr 1  8E rr rr         stx fd_pid_tmp
+0003EDr 1               
+0003EDr 1                   ; offset = PID * MAX_FDS
+0003EDr 1  AD rr rr         lda fd_pid_tmp
+0003F0r 1  20 rr rr         jsr fd_calc_pid_offset
+0003F3r 1               
+0003F3r 1                   ; Clear proc_fd_obj[pid][*].
+0003F3r 1  18               clc
+0003F4r 1  A9 rr            lda #<proc_fd_obj
+0003F6r 1  6D rr rr         adc fd_mul_lo
+0003F9r 1  85 rr            sta fd_ptr
+0003FBr 1               
+0003FBr 1  A9 rr            lda #>proc_fd_obj
+0003FDr 1  6D rr rr         adc fd_mul_hi
+000400r 1  85 rr            sta fd_ptr+1
+000402r 1               
+000402r 1  A0 00            ldy #0
+000404r 1  A9 FF            lda #FD_NONE
+000406r 1               
+000406r 1               @clear_obj:
+000406r 1  91 rr            sta (fd_ptr),y
+000408r 1  C8               iny
+000409r 1  C0 06            cpy #MAX_FDS
+00040Br 1  D0 F9            bne @clear_obj
+00040Dr 1               
+00040Dr 1                   ; Clear proc_fd_flags[pid][*].
+00040Dr 1  18               clc
+00040Er 1  A9 rr            lda #<proc_fd_flags
+000410r 1  6D rr rr         adc fd_mul_lo
+000413r 1  85 rr            sta fd_ptr
+000415r 1               
+000415r 1  A9 rr            lda #>proc_fd_flags
+000417r 1  6D rr rr         adc fd_mul_hi
+00041Ar 1  85 rr            sta fd_ptr+1
+00041Cr 1               
+00041Cr 1  A0 00            ldy #0
+00041Er 1  A9 00            lda #0
+000420r 1               
+000420r 1               @clear_flags:
+000420r 1  91 rr            sta (fd_ptr),y
+000422r 1  C8               iny
+000423r 1  C0 06            cpy #MAX_FDS
+000425r 1  D0 F9            bne @clear_flags
+000427r 1               
+000427r 1                   ; Attach standard descriptors.
+000427r 1                   ;
+000427r 1                   ; fd_attach requires file_io_gate to be held.
+000427r 1                   ; It recalculates its own PID/fd table offset internally.
+000427r 1               
+000427r 1  AE rr rr         ldx fd_pid_tmp
+00042Ar 1  A9 01            lda #FD_FLAG_READ
+00042Cr 1  8D rr rr         sta fd_flags_tmp
+00042Fr 1  A0 00            ldy #STDIN
+000431r 1  A9 00            lda #STDIN
+000433r 1  20 rr rr         jsr fd_attach
+000436r 1               
+000436r 1  AE rr rr         ldx fd_pid_tmp
+000439r 1  A9 02            lda #FD_FLAG_WRITE
+00043Br 1  8D rr rr         sta fd_flags_tmp
+00043Er 1  A0 01            ldy #STDOUT
+000440r 1  A9 01            lda #STDOUT
+000442r 1  20 rr rr         jsr fd_attach
+000445r 1               
+000445r 1  AE rr rr         ldx fd_pid_tmp
+000448r 1  A9 02            lda #FD_FLAG_WRITE
+00044Ar 1  8D rr rr         sta fd_flags_tmp
+00044Dr 1  A0 02            ldy #STDERR
+00044Fr 1  A9 02            lda #STDERR
+000451r 1  20 rr rr         jsr fd_attach
+000454r 1               
+000454r 1               
+000454r 1  18               clc
+000455r 1  60               rts
+000456r 1               .endproc
+000456r 1               
+000456r 1               ; ------------------------------------------------------------
+000456r 1               ; fd_close_process
+000456r 1               ;
+000456r 1               ; Purpose:
+000456r 1               ;   Close all FDs belonging to PID X.
+000456r 1               ;
+000456r 1               ; Input:
+000456r 1               ;   X = PID
+000456r 1               ;
+000456r 1               ; Notes:
+000456r 1               ;   Uses fd_close_pid so all close/refcount behavior is shared.
+000456r 1               ;   EBADF is ignored because closed slots are expected.
+000456r 1               ; ------------------------------------------------------------
+000456r 1               
+000456r 1               .proc fd_close_process
+000456r 1  E0 08            cpx #MAX_PROCS
+000458r 1  90 04            bcc @pid_ok
+00045Ar 1               
+00045Ar 1  A0 06            ldy #EINVAL
+00045Cr 1  38               sec
+00045Dr 1  60               rts
+00045Er 1               
+00045Er 1               @pid_ok:
+00045Er 1  8E rr rr         stx fd_closeproc_pid
+000461r 1  9C rr rr         stz fd_closeproc_fd
+000464r 1               
+000464r 1               @loop:
+000464r 1  AD rr rr         lda fd_closeproc_fd
+000467r 1  C9 06            cmp #MAX_FDS
+000469r 1  F0 16            beq @done
+00046Br 1               
+00046Br 1  AE rr rr         ldx fd_closeproc_pid
+00046Er 1  AD rr rr         lda fd_closeproc_fd
+000471r 1  20 rr rr         jsr fd_close_pid
+000474r 1  90 06            bcc @next
+000476r 1               
+000476r 1  C0 09            cpy #EBADF
+000478r 1  F0 02            beq @next
+00047Ar 1               
+00047Ar 1  38               sec
+00047Br 1  60               rts
+00047Cr 1               
+00047Cr 1               @next:
+00047Cr 1  EE rr rr         inc fd_closeproc_fd
+00047Fr 1  80 E3            bra @loop
+000481r 1               
+000481r 1               @done:
+000481r 1  18               clc
+000482r 1  60               rts
+000483r 1               .endproc
+000483r 1               
+000483r 1               ; ------------------------------------------------------------
+000483r 1               ; fd_tail_call_device
+000483r 1               ;
+000483r 1               ; Internal helper.
+000483r 1               ;
+000483r 1               ; Purpose:
+000483r 1               ;   Tail-call the device routine currently stored in dev_ptr.
+000483r 1               ;
+000483r 1               ; Input:
+000483r 1               ;   file_io_gate is held
+000483r 1               ;   dev_ptr = target device routine
+000483r 1               ;   stack contains:
+000483r 1               ;       saved X length
+000483r 1               ;       saved A length
+000483r 1               ;       caller return address
+000483r 1               ;
+000483r 1               ; Output:
+000483r 1               ;   Does not return to fd_read/fd_write.
+000483r 1               ;   Device routine RTS returns to fd_read/fd_write caller.
+000483r 1               ;
+000483r 1               ; Notes:
+000483r 1               ;   A is preserved in Y while the RTS target is built.
+000483r 1               ;   dev_ptr is snapshotted onto the stack before the backend tail-call.
+000483r 1               ;   Uses RTS tail-call, not RTI.
+000483r 1               ; ------------------------------------------------------------
+000483r 1               
+000483r 1               .proc fd_tail_call_device
+000483r 1                   ; Restore requested length for backend.
+000483r 1  FA               plx                         ; X = length high
+000484r 1  68               pla                         ; A = length low
+000485r 1  A8               tay                         ; preserve length low while building RTS target
+000486r 1               
+000486r 1                   ; Push dev_ptr - 1 as RTS target while file_io_gate is still held.
+000486r 1  A5 rr            lda dev_ptr
+000488r 1  F0 0B            beq @target_low_zero
+00048Ar 1               
+00048Ar 1               @target_low_nonzero:
+00048Ar 1  A5 rr            lda dev_ptr+1
+00048Cr 1  48               pha
+00048Dr 1               
+00048Dr 1  A5 rr            lda dev_ptr
+00048Fr 1  38               sec
+000490r 1  E9 01            sbc #1
+000492r 1  48               pha
+000493r 1               
+000493r 1  80 09            bra @target_ready
+000495r 1               
+000495r 1               @target_low_zero:
+000495r 1  A5 rr            lda dev_ptr+1
+000497r 1  38               sec
+000498r 1  E9 01            sbc #1
+00049Ar 1  48               pha
+00049Br 1               
+00049Br 1  A9 FF            lda #$ff
+00049Dr 1  48               pha
+00049Er 1               
+00049Er 1               @target_ready:
+00049Er 1               
+00049Er 1  98               tya                         ; restore A = length low
+00049Fr 1               
+00049Fr 1  60               rts                         ; tail-call device backend
+0004A0r 1               .endproc
+0004A0r 1               
+0004A0r 1               ; ------------------------------------------------------------
+0004A0r 1               ; fd_resolve_read
+0004A0r 1               ;
+0004A0r 1               ; Input:
+0004A0r 1               ;   Y = fd number
+0004A0r 1               ;
+0004A0r 1               ; Output:
+0004A0r 1               ;   C clear = success
+0004A0r 1               ;       X = open object index
+0004A0r 1               ;       A = open object type
+0004A0r 1               ;       Y = device id, if object is OBJ_DEVICE
+0004A0r 1               ;
+0004A0r 1               ;   C set = failure
+0004A0r 1               ;       Y = errno
+0004A0r 1               ;
+0004A0r 1               ; Purpose:
+0004A0r 1               ;   Validate fd for read and return the open-object metadata.
+0004A0r 1               ;
+0004A0r 1               ; Notes:
+0004A0r 1               ;   Does not call a backend.
+0004A0r 1               ;   Does not keep file_io_gate held by caller on return.
+0004A0r 1               ; ------------------------------------------------------------
+0004A0r 1               
+0004A0r 1               .proc fd_resolve_read
+0004A0r 1  A9 01            lda #FD_FLAG_READ
+0004A2r 1  80 02            bra fd_resolve_rw
+0004A4r 1               .endproc
+0004A4r 1               
+0004A4r 1               ; ------------------------------------------------------------
+0004A4r 1               ; fd_resolve_write
+0004A4r 1               ;
+0004A4r 1               ; Input:
+0004A4r 1               ;   Y = fd number
+0004A4r 1               ;
+0004A4r 1               ; Output:
+0004A4r 1               ;   C clear = success
+0004A4r 1               ;       X = open object index
+0004A4r 1               ;       A = open object type
+0004A4r 1               ;       Y = device id, if object is OBJ_DEVICE
+0004A4r 1               ;
+0004A4r 1               ;   C set = failure
+0004A4r 1               ;       Y = errno
+0004A4r 1               ;
+0004A4r 1               ; Purpose:
+0004A4r 1               ;   Validate fd for write and return the open-object metadata.
+0004A4r 1               ;
+0004A4r 1               ; Notes:
+0004A4r 1               ;   Does not call a backend.
+0004A4r 1               ;   Does not keep file_io_gate held by caller on return.
+0004A4r 1               ; ------------------------------------------------------------
+0004A4r 1               
+0004A4r 1               .proc fd_resolve_write
+0004A4r 1  A9 02            lda #FD_FLAG_WRITE
+0004A6r 1                   ; fall through
+0004A6r 1               .endproc
+0004A6r 1               
+0004A6r 1               ; ------------------------------------------------------------
+0004A6r 1               ; fd_resolve_rw
+0004A6r 1               ;
+0004A6r 1               ; Input:
+0004A6r 1               ;   A = required FD flag
+0004A6r 1               ;   Y = fd number
+0004A6r 1               ;
+0004A6r 1               ; Output:
+0004A6r 1               ;   C clear = success
+0004A6r 1               ;       X = open object index
+0004A6r 1               ;       A = open object type
+0004A6r 1               ;       Y = device id, if object is OBJ_DEVICE
+0004A6r 1               ;
+0004A6r 1               ;   C set = failure
+0004A6r 1               ;       Y = errno
+0004A6r 1               ;
+0004A6r 1               ; Locking:
+0004A6r 1               ;   Requires file_io_gate for fd/open-object lookup.
+0004A6r 1               ; ------------------------------------------------------------
+0004A6r 1               
+0004A6r 1               .proc fd_resolve_rw
+0004A6r 1  8D rr rr         sta fd_flags_tmp
+0004A9r 1               
+0004A9r 1               
+0004A9r 1                   ; Resolve fd -> open object.
+0004A9r 1  98               tya
+0004AAr 1  20 rr rr         jsr fd_lookup
+0004ADr 1  90 02            bcc @fd_ok
+0004AFr 1               
+0004AFr 1                   ; fd_lookup returns errno in Y.
+0004AFr 1  38               sec
+0004B0r 1  60               rts
+0004B1r 1               
+0004B1r 1               @fd_ok:
+0004B1r 1                   ; Save open object across permission check.
+0004B1r 1  DA               phx
+0004B2r 1               
+0004B2r 1  AD rr rr         lda fd_flags_tmp
+0004B5r 1  20 rr rr         jsr fd_check_perm
+0004B8r 1  90 03            bcc @perm_ok
+0004BAr 1               
+0004BAr 1                   ; fd_check_perm returns errno in Y.
+0004BAr 1  FA               plx                         ; discard saved open object
+0004BBr 1  38               sec
+0004BCr 1  60               rts
+0004BDr 1               
+0004BDr 1               @perm_ok:
+0004BDr 1  FA               plx                         ; X = open object
+0004BEr 1               
+0004BEr 1                   ; Return object metadata.
+0004BEr 1                   ;
+0004BEr 1                   ; Preserve X across lock release by saving it. Preserve
+0004BEr 1                   ; returned A/Y across helper scratch use.
+0004BEr 1  BD rr rr         lda open_type,x
+0004C1r 1  48               pha
+0004C2r 1               
+0004C2r 1  BD rr rr         lda open_dev,x
+0004C5r 1  A8               tay
+0004C6r 1               
+0004C6r 1  68               pla                         ; A = object type
+0004C7r 1  18               clc
+0004C8r 1  60               rts
+0004C9r 1               .endproc
+0004C9r 1               
+0004C9r 1               
+0004C9r 1               ; ------------------------------------------------------------
+0004C9r 1               ; fd_resolve_file
+0004C9r 1               ;
+0004C9r 1               ; Input:
+0004C9r 1               ;   Y = fd number
+0004C9r 1               ;
+0004C9r 1               ; Output:
+0004C9r 1               ;   C clear = success
+0004C9r 1               ;       X = open object index
+0004C9r 1               ;       A = RP filesystem handle
+0004C9r 1               ;
+0004C9r 1               ;   C set = failure
+0004C9r 1               ;       Y = errno
+0004C9r 1               ;
+0004C9r 1               ; Purpose:
+0004C9r 1               ;   Validate that fd is an open filesystem object.  No read/write
+0004C9r 1               ;   permission bit is required because seek/tell are file-position
+0004C9r 1               ;   operations valid for read-only, write-only, and read/write files.
+0004C9r 1               ;
+0004C9r 1               ; Locking:
+0004C9r 1               ;   Requires file_io_gate for fd/open-object lookup.
+0004C9r 1               ; ------------------------------------------------------------
+0004C9r 1               
+0004C9r 1               .proc fd_resolve_file
+0004C9r 1  98               tya
+0004CAr 1  20 rr rr         jsr fd_lookup
+0004CDr 1  90 02            bcc @fd_ok
+0004CFr 1               
+0004CFr 1  38               sec
+0004D0r 1  60               rts
+0004D1r 1               
+0004D1r 1               @fd_ok:
+0004D1r 1  BD rr rr         lda open_type,x
+0004D4r 1  C9 02            cmp #OBJ_FILE
+0004D6r 1  F0 04            beq @file_ok
+0004D8r 1               
+0004D8r 1  A0 0A            ldy #ENODEV
+0004DAr 1  38               sec
+0004DBr 1  60               rts
+0004DCr 1               
+0004DCr 1               @file_ok:
+0004DCr 1  BD rr rr         lda open_file_handle,x
+0004DFr 1  18               clc
+0004E0r 1  60               rts
+0004E1r 1               .endproc
+0004E1r 1               
+0004E1r 1               ; ------------------------------------------------------------
+0004E1r 1               ; fd_resolve_dir
+0004E1r 1               ;
+0004E1r 1               ; Input:
+0004E1r 1               ;   Y = fd number
+0004E1r 1               ;
+0004E1r 1               ; Output:
+0004E1r 1               ;   C clear = success
+0004E1r 1               ;       X = open object index
+0004E1r 1               ;       A = RP filesystem directory handle
+0004E1r 1               ;
+0004E1r 1               ;   C set = failure
+0004E1r 1               ;       Y = errno
+0004E1r 1               ;
+0004E1r 1               ; Purpose:
+0004E1r 1               ;   Validate that fd is an open directory object.
+0004E1r 1               ;
+0004E1r 1               ; Locking:
+0004E1r 1               ;   Requires file_io_gate for fd/open-object lookup.
+0004E1r 1               ; ------------------------------------------------------------
+0004E1r 1               
+0004E1r 1               .proc fd_resolve_dir
+0004E1r 1  98               tya
+0004E2r 1  20 rr rr         jsr fd_lookup
+0004E5r 1  90 02            bcc @fd_ok
+0004E7r 1               
+0004E7r 1  38               sec
+0004E8r 1  60               rts
+0004E9r 1               
+0004E9r 1               @fd_ok:
+0004E9r 1  BD rr rr         lda open_type,x
+0004ECr 1  C9 04            cmp #OBJ_DIR
+0004EEr 1  F0 04            beq @dir_ok
+0004F0r 1               
+0004F0r 1  A0 0A            ldy #ENODEV
+0004F2r 1  38               sec
+0004F3r 1  60               rts
+0004F4r 1               
+0004F4r 1               @dir_ok:
+0004F4r 1  BD rr rr         lda open_file_handle,x
+0004F7r 1  18               clc
+0004F8r 1  60               rts
+0004F9r 1               .endproc
+0004F9r 1               
+0004F9r 1               ; ------------------------------------------------------------
+0004F9r 1               ; fd_read
+0004F9r 1               ;
+0004F9r 1               ; Purpose:
+0004F9r 1               ;   FD-layer implementation of read dispatch.
+0004F9r 1               ;
+0004F9r 1               ; Input:
+0004F9r 1               ;   Y      = fd number
+0004F9r 1               ;   io_ptr = destination buffer
+0004F9r 1               ;   A/X    = requested length, low/high
+0004F9r 1               ;
+0004F9r 1               ; Output:
+0004F9r 1               ;   C clear = success
+0004F9r 1               ;             A/X = bytes read
+0004F9r 1               ;
+0004F9r 1               ;   C set   = failure
+0004F9r 1               ;             Y = errno
+0004F9r 1               ;
+0004F9r 1               ; Flow:
+0004F9r 1               ;   fd -> open object -> permission -> object type -> backend
+0004F9r 1               ;
+0004F9r 1               ; Notes:
+0004F9r 1               ;   - FD lookup and permission check are protected by file_io_gate.
+0004F9r 1               ;   - Device backend is tail-called through dev_ptr.
+0004F9r 1               ;   - Pipe backend is called while file_io_gate is held.
+0004F9r 1               ;   - pipe_ptr is a dedicated ZP pointer for pipe byte transfer.
+0004F9r 1               ; ------------------------------------------------------------
+0004F9r 1               
+0004F9r 1               .proc fd_read
+0004F9r 1                   ; Preserve requested length before touching debug state.
+0004F9r 1  48               pha
+0004FAr 1  DA               phx
+0004FBr 1               
+0004FBr 1               
+0004FBr 1                   ; Resolve fd -> open object.
+0004FBr 1               
+0004FBr 1  98               tya
+0004FCr 1  20 rr rr         jsr fd_lookup
+0004FFr 1  90 04            bcc @fd_ok
+000501r 1               
+000501r 1  FA               plx
+000502r 1  68               pla
+000503r 1  38               sec
+000504r 1  60               rts
+000505r 1               
+000505r 1               @fd_ok:
+000505r 1               
+000505r 1                   ; Save open object across permission check.
+000505r 1  DA               phx
+000506r 1               
+000506r 1               
+000506r 1  A9 01            lda #FD_FLAG_READ
+000508r 1  20 rr rr         jsr fd_check_perm
+00050Br 1  90 05            bcc @perm_ok
+00050Dr 1               
+00050Dr 1  FA               plx                         ; discard open object
+00050Er 1               
+00050Er 1  FA               plx
+00050Fr 1  68               pla
+000510r 1  38               sec
+000511r 1  60               rts
+000512r 1               
+000512r 1               @perm_ok:
+000512r 1               
+000512r 1  FA               plx                         ; X = open object
+000513r 1               
+000513r 1               
+000513r 1  BD rr rr         lda open_type,x
+000516r 1  C9 03            cmp #OBJ_PIPE
+000518r 1  F0 0A            beq @pipe_ok
+00051Ar 1               
+00051Ar 1  C9 01            cmp #OBJ_DEVICE
+00051Cr 1  F0 17            beq @device_ok
+00051Er 1               
+00051Er 1                   ; Files are handled directly by ksys_read through rp_fs_exec.
+00051Er 1  FA               plx
+00051Fr 1  68               pla
+000520r 1  A0 0A            ldy #ENODEV
+000522r 1  38               sec
+000523r 1  60               rts
+000524r 1               
+000524r 1               @pipe_ok:
+000524r 1                   ; Save open object above saved length.
+000524r 1  8A               txa
+000525r 1  48               pha
+000526r 1               
+000526r 1               
+000526r 1                   ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
+000526r 1  A5 rr            lda io_ptr
+000528r 1  85 rr            sta pipe_ptr
+00052Ar 1  A5 rr            lda io_ptr+1
+00052Cr 1  85 rr            sta pipe_ptr+1
+00052Er 1               
+00052Er 1                   ; Restore pipe backend arguments.
+00052Er 1  68               pla
+00052Fr 1  A8               tay                         ; Y = open object
+000530r 1               
+000530r 1  FA               plx                         ; X = length high
+000531r 1  68               pla                         ; A = length low
+000532r 1               
+000532r 1  4C rr rr         jmp pipe_read
+000535r 1               
+000535r 1               @device_ok:
+000535r 1               
+000535r 1  A9 00            lda #DEVOP_READ
+000537r 1  20 rr rr         jsr dev_resolve_op
+00053Ar 1  90 04            bcc @op_ok
+00053Cr 1               
+00053Cr 1               
+00053Cr 1  FA               plx
+00053Dr 1  68               pla
+00053Er 1  38               sec
+00053Fr 1  60               rts
+000540r 1               
+000540r 1               @op_ok:
+000540r 1  4C rr rr         jmp fd_tail_call_device
+000543r 1               .endproc
+000543r 1               
+000543r 1               ; ------------------------------------------------------------
+000543r 1               ; fd_write
+000543r 1               ;
+000543r 1               ; Purpose:
+000543r 1               ;   FD-layer implementation of write dispatch.
+000543r 1               ;
+000543r 1               ; Input:
+000543r 1               ;   Y      = fd number
+000543r 1               ;   io_ptr = source buffer
+000543r 1               ;   A/X    = requested length, low/high
+000543r 1               ;
+000543r 1               ; Output:
+000543r 1               ;   C clear = success
+000543r 1               ;             A/X = bytes written
+000543r 1               ;
+000543r 1               ;   C set   = failure
+000543r 1               ;             Y = errno
+000543r 1               ;
+000543r 1               ; Flow:
+000543r 1               ;   fd -> open object -> permission -> object type -> backend
+000543r 1               ;
+000543r 1               ; Notes:
+000543r 1               ;   - FD lookup and permission check are protected by file_io_gate.
+000543r 1               ;   - Device backend is tail-called through dev_ptr.
+000543r 1               ;   - Pipe backend is called while file_io_gate is held.
+000543r 1               ;   - pipe_ptr is a dedicated ZP pointer for pipe byte transfer.
+000543r 1               ; ------------------------------------------------------------
+000543r 1               
+000543r 1               .proc fd_write
+000543r 1                   ; Preserve requested length.
+000543r 1  48               pha
+000544r 1  DA               phx
+000545r 1               
+000545r 1               
+000545r 1               
+000545r 1                   ; Resolve fd -> open object.
+000545r 1  98               tya
+000546r 1  20 rr rr         jsr fd_lookup
+000549r 1  90 04            bcc @fd_ok
+00054Br 1               
+00054Br 1               
+00054Br 1  FA               plx
+00054Cr 1  68               pla
+00054Dr 1  38               sec
+00054Er 1  60               rts
+00054Fr 1               
+00054Fr 1               @fd_ok:
+00054Fr 1                   ; Save open object across permission check.
+00054Fr 1  DA               phx
+000550r 1               
+000550r 1  A9 02            lda #FD_FLAG_WRITE
+000552r 1  20 rr rr         jsr fd_check_perm
+000555r 1  90 05            bcc @perm_ok
+000557r 1               
+000557r 1  FA               plx                         ; discard open object
+000558r 1               
+000558r 1               
+000558r 1  FA               plx
+000559r 1  68               pla
+00055Ar 1  38               sec
+00055Br 1  60               rts
+00055Cr 1               
+00055Cr 1               @perm_ok:
+00055Cr 1  FA               plx                         ; X = open object
+00055Dr 1               
+00055Dr 1  BD rr rr         lda open_type,x
+000560r 1  C9 03            cmp #OBJ_PIPE
+000562r 1  F0 0A            beq @pipe_ok
+000564r 1               
+000564r 1  C9 01            cmp #OBJ_DEVICE
+000566r 1  F0 17            beq @device_ok
+000568r 1               
+000568r 1                   ; Files are handled directly by ksys_write through rp_fs_exec.
+000568r 1  FA               plx
+000569r 1  68               pla
+00056Ar 1  A0 0A            ldy #ENODEV
+00056Cr 1  38               sec
+00056Dr 1  60               rts
+00056Er 1               
+00056Er 1               @pipe_ok:
+00056Er 1                   ; Save open object above saved length.
+00056Er 1  8A               txa
+00056Fr 1  48               pha
+000570r 1               
+000570r 1               
+000570r 1                   ; Snapshot caller buffer pointer into the pipe-specific ZP ptr.
+000570r 1  A5 rr            lda io_ptr
+000572r 1  85 rr            sta pipe_ptr
+000574r 1  A5 rr            lda io_ptr+1
+000576r 1  85 rr            sta pipe_ptr+1
+000578r 1               
+000578r 1                   ; Restore pipe backend arguments.
+000578r 1  68               pla
+000579r 1  A8               tay                         ; Y = open object
+00057Ar 1               
+00057Ar 1  FA               plx                         ; X = length high
+00057Br 1  68               pla                         ; A = length low
+00057Cr 1               
+00057Cr 1  4C rr rr         jmp pipe_write
+00057Fr 1               
+00057Fr 1               @device_ok:
+00057Fr 1  A9 02            lda #DEVOP_WRITE
+000581r 1  20 rr rr         jsr dev_resolve_op
+000584r 1  90 04            bcc @op_ok
+000586r 1               
+000586r 1               
+000586r 1  FA               plx
+000587r 1  68               pla
+000588r 1  38               sec
+000589r 1  60               rts
+00058Ar 1               
+00058Ar 1               @op_ok:
+00058Ar 1  4C rr rr         jmp fd_tail_call_device
+00058Dr 1               .endproc
+00058Dr 1               
+00058Dr 1               ; ------------------------------------------------------------
+00058Dr 1               ; fd_get_flags_current
+00058Dr 1               ;
+00058Dr 1               ; Purpose:
+00058Dr 1               ;   Fetch proc_fd_flags[active_pid][fd_index_tmp].
+00058Dr 1               ;
+00058Dr 1               ; Input:
+00058Dr 1               ;   fd_index_tmp = fd index
+00058Dr 1               ;
+00058Dr 1               ; Output:
+00058Dr 1               ;   A = fd flags
+00058Dr 1               ;
+00058Dr 1               ; Clobbers:
+00058Dr 1               ;   A, Y, fd_ptr
+00058Dr 1               ; ------------------------------------------------------------
+00058Dr 1               
+00058Dr 1               .proc fd_get_flags_current
+00058Dr 1  AD rr rr         lda active_pid
+000590r 1  20 rr rr         jsr fd_calc_pid_offset
+000593r 1               
+000593r 1  18               clc
+000594r 1  A9 rr            lda #<proc_fd_flags
+000596r 1  6D rr rr         adc fd_mul_lo
+000599r 1  85 rr            sta fd_ptr
+00059Br 1               
+00059Br 1  A9 rr            lda #>proc_fd_flags
+00059Dr 1  6D rr rr         adc fd_mul_hi
+0005A0r 1  85 rr            sta fd_ptr+1
+0005A2r 1               
+0005A2r 1  AC rr rr         ldy fd_index_tmp
+0005A5r 1  B1 rr            lda (fd_ptr),y
+0005A7r 1               
+0005A7r 1  60               rts
+0005A8r 1               .endproc
+0005A8r 1               
+0005A8r 1               ; ------------------------------------------------------------
+0005A8r 1               ; fd_find_free_current
+0005A8r 1               ;
+0005A8r 1               ; Purpose:
+0005A8r 1               ;   Find the lowest free fd slot for active_pid.
+0005A8r 1               ;
+0005A8r 1               ; Output:
+0005A8r 1               ;   C clear = found
+0005A8r 1               ;             Y = free fd index
+0005A8r 1               ;
+0005A8r 1               ;   C set   = no free descriptor
+0005A8r 1               ;             Y = EMFILE
+0005A8r 1               ;
+0005A8r 1               ; Clobbers:
+0005A8r 1               ;   A, Y, fd_ptr
+0005A8r 1               ; ------------------------------------------------------------
+0005A8r 1               
+0005A8r 1               .proc fd_find_free_current
+0005A8r 1  AD rr rr         lda active_pid
+0005ABr 1  20 rr rr         jsr fd_calc_pid_offset
+0005AEr 1               
+0005AEr 1  18               clc
+0005AFr 1  A9 rr            lda #<proc_fd_obj
+0005B1r 1  6D rr rr         adc fd_mul_lo
+0005B4r 1  85 rr            sta fd_ptr
+0005B6r 1               
+0005B6r 1  A9 rr            lda #>proc_fd_obj
+0005B8r 1  6D rr rr         adc fd_mul_hi
+0005BBr 1  85 rr            sta fd_ptr+1
+0005BDr 1               
+0005BDr 1  A0 00            ldy #0
+0005BFr 1               
+0005BFr 1               @scan:
+0005BFr 1  C0 06            cpy #MAX_FDS
+0005C1r 1  F0 0B            beq @full
+0005C3r 1               
+0005C3r 1  B1 rr            lda (fd_ptr),y
+0005C5r 1  C9 FF            cmp #FD_NONE
+0005C7r 1  F0 03            beq @found
+0005C9r 1               
+0005C9r 1  C8               iny
+0005CAr 1  80 F3            bra @scan
+0005CCr 1               
+0005CCr 1               @found:
+0005CCr 1  18               clc
+0005CDr 1  60               rts
+0005CEr 1               
+0005CEr 1               @full:
+0005CEr 1  A0 08            ldy #EMFILE
+0005D0r 1  38               sec
+0005D1r 1  60               rts
+0005D2r 1               .endproc
+0005D2r 1               
+0005D2r 1               ; ------------------------------------------------------------
+0005D2r 1               ; fd_alloc_fd_current
+0005D2r 1               ;
+0005D2r 1               ; Caller:
+0005D2r 1               ;   file_io_gate held by caller
+0005D2r 1               ;
+0005D2r 1               ; Output:
+0005D2r 1               ;   C clear = success, Y = fd
+0005D2r 1               ;   C set   = failure, Y = EMFILE
+0005D2r 1               ; ------------------------------------------------------------
+0005D2r 1               
+0005D2r 1               .proc fd_alloc_fd_current
+0005D2r 1  4C rr rr         jmp fd_find_free_current
+0005D5r 1               .endproc
+0005D5r 1               
+0005D5r 1               ; ------------------------------------------------------------
+0005D5r 1               ; fd_dup
+0005D5r 1               ;
+0005D5r 1               ; Input:
+0005D5r 1               ;   A = old fd
+0005D5r 1               ;
+0005D5r 1               ; Output:
+0005D5r 1               ;   C clear = success
+0005D5r 1               ;             A = new fd
+0005D5r 1               ;             X = 0
+0005D5r 1               ;
+0005D5r 1               ;   C set   = failure
+0005D5r 1               ;             Y = errno
+0005D5r 1               ;
+0005D5r 1               ; Notes:
+0005D5r 1               ;
+0005D5r 1               ; ------------------------------------------------------------
+0005D5r 1               
+0005D5r 1               .proc fd_dup
+0005D5r 1  48               pha                         ; preserve oldfd across table setup
+0005D6r 1               
+0005D6r 1               
+0005D6r 1  68               pla                         ; A = oldfd
+0005D7r 1               
+0005D7r 1                   ; Resolve old fd -> open object.
+0005D7r 1  20 rr rr         jsr fd_lookup
+0005DAr 1  90 02            bcc @old_ok
+0005DCr 1               
+0005DCr 1               
+0005DCr 1  38               sec
+0005DDr 1  60               rts
+0005DEr 1               
+0005DEr 1               @old_ok:
+0005DEr 1                   ; X = old open object.
+0005DEr 1  DA               phx                         ; stack: old object
+0005DFr 1               
+0005DFr 1                   ; Copy flags from old fd.
+0005DFr 1  20 rr rr         jsr fd_get_flags_current
+0005E2r 1  8D rr rr         sta fd_flags_tmp
+0005E5r 1               
+0005E5r 1                   ; Find lowest free fd.
+0005E5r 1  20 rr rr         jsr fd_find_free_current
+0005E8r 1  90 03            bcc @slot_ok
+0005EAr 1               
+0005EAr 1  FA               plx                         ; discard old object
+0005EBr 1               
+0005EBr 1               
+0005EBr 1  38               sec
+0005ECr 1  60               rts
+0005EDr 1               
+0005EDr 1               @slot_ok:
+0005EDr 1                   ; Y = new fd.
+0005EDr 1                   ;
+0005EDr 1                   ; Preserve new fd on stack. Do not use fd_pid_tmp:
+0005EDr 1                   ; fd_attach overwrites it.
+0005EDr 1  5A               phy                         ; stack: old object, new fd
+0005EEr 1               
+0005EEr 1                   ; Restore old object into A.
+0005EEr 1  7A               ply                         ; Y = new fd
+0005EFr 1  FA               plx                         ; X = old object
+0005F0r 1               
+0005F0r 1  8A               txa                         ; A = old object
+0005F1r 1  AE rr rr         ldx active_pid             ; X = PID
+0005F4r 1               
+0005F4r 1                   ; Preserve new fd for return.
+0005F4r 1  5A               phy                         ; stack: new fd
+0005F5r 1               
+0005F5r 1                   ; Attach:
+0005F5r 1                   ;   X = active_pid
+0005F5r 1                   ;   Y = new fd
+0005F5r 1                   ;   A = old object
+0005F5r 1  20 rr rr         jsr fd_attach
+0005F8r 1               
+0005F8r 1                   ; Recover new fd return value.
+0005F8r 1  7A               ply                         ; Y = new fd
+0005F9r 1               
+0005F9r 1               
+0005F9r 1  98               tya                         ; A = new fd
+0005FAr 1  A2 00            ldx #0
+0005FCr 1  18               clc
+0005FDr 1  60               rts
+0005FEr 1               .endproc
+0005FEr 1               
+0005FEr 1               ; ------------------------------------------------------------
+0005FEr 1               ; fd_dup2
+0005FEr 1               ;
+0005FEr 1               ; Input:
+0005FEr 1               ;   A = old fd
+0005FEr 1               ;   Y = new fd
+0005FEr 1               ;
+0005FEr 1               ; Output:
+0005FEr 1               ;   C clear = success, A = new fd, X = 0
+0005FEr 1               ;   C set   = failure, Y = errno
+0005FEr 1               ; ------------------------------------------------------------
+0005FEr 1               
+0005FEr 1               ; ------------------------------------------------------------
+0005FEr 1               ; fd_dup2
+0005FEr 1               ;
+0005FEr 1               ; Input:
+0005FEr 1               ;   A = old fd
+0005FEr 1               ;   Y = new fd
+0005FEr 1               ;
+0005FEr 1               ; Output:
+0005FEr 1               ;   C clear = success
+0005FEr 1               ;             A = new fd
+0005FEr 1               ;             X = 0
+0005FEr 1               ;
+0005FEr 1               ;   C set   = failure
+0005FEr 1               ;             Y = errno
+0005FEr 1               ;
+0005FEr 1               ; Notes:
+0005FEr 1               ;   - Validates newfd before table work.
+0005FEr 1               ;   - Validates oldfd before closing/replacing newfd.
+0005FEr 1               ;   - dup2(oldfd, oldfd) returns oldfd without changing refcounts.
+0005FEr 1               ;   - fd_close_current is used because file_io_gate is already held.
+0005FEr 1               ; ------------------------------------------------------------
+0005FEr 1               
+0005FEr 1               .proc fd_dup2
+0005FEr 1  C0 06            cpy #MAX_FDS
+000600r 1  90 04            bcc @newfd_ok
+000602r 1               
+000602r 1  A0 09            ldy #EBADF
+000604r 1  38               sec
+000605r 1  60               rts
+000606r 1               
+000606r 1               @newfd_ok:
+000606r 1  48               pha                         ; preserve oldfd
+000607r 1  5A               phy                         ; preserve newfd
+000608r 1               
+000608r 1               
+000608r 1  7A               ply                         ; Y = newfd
+000609r 1  68               pla                         ; A = oldfd
+00060Ar 1               
+00060Ar 1                   ; Preserve newfd across fd_lookup.
+00060Ar 1                   ; fd_lookup returns errno in Y on failure, so this saved byte
+00060Ar 1                   ; must be discarded with PLA, not PLY, on the failure path.
+00060Ar 1  5A               phy
+00060Br 1               
+00060Br 1                   ; Resolve old fd -> open object.
+00060Br 1  20 rr rr         jsr fd_lookup
+00060Er 1  90 03            bcc @old_ok
+000610r 1               
+000610r 1  68               pla                         ; discard saved newfd
+000611r 1                                               ; preserve Y = errno from fd_lookup
+000611r 1               
+000611r 1               
+000611r 1  38               sec
+000612r 1  60               rts
+000613r 1               
+000613r 1               @old_ok:
+000613r 1                   ; X = old object
+000613r 1                   ; fd_index_tmp = old fd
+000613r 1                   ; stack top = saved newfd
+000613r 1               
+000613r 1  7A               ply                         ; Y = newfd
+000614r 1               
+000614r 1                   ; dup2(fd, fd) succeeds and changes nothing.
+000614r 1  CC rr rr         cpy fd_index_tmp
+000617r 1  D0 05            bne @different
+000619r 1               
+000619r 1               
+000619r 1  98               tya
+00061Ar 1  A2 00            ldx #0
+00061Cr 1  18               clc
+00061Dr 1  60               rts
+00061Er 1               
+00061Er 1               @different:
+00061Er 1                   ; Preserve old object and newfd.
+00061Er 1  DA               phx                         ; old object
+00061Fr 1  5A               phy                         ; newfd
+000620r 1               
+000620r 1                   ; Copy descriptor flags from old fd.
+000620r 1                   ; fd_index_tmp still contains old fd here.
+000620r 1  20 rr rr         jsr fd_get_flags_current
+000623r 1  8D rr rr         sta fd_flags_tmp
+000626r 1               
+000626r 1                   ; Close target newfd if it is open.
+000626r 1                   ; EBADF from closing target means it was already closed, which is OK.
+000626r 1  7A               ply                         ; Y = newfd
+000627r 1  5A               phy                         ; keep newfd for attach/return
+000628r 1               
+000628r 1  98               tya                         ; A = newfd
+000629r 1  20 rr rr         jsr fd_close_current
+00062Cr 1  90 08            bcc @target_closed_ok
+00062Er 1               
+00062Er 1  C0 09            cpy #EBADF
+000630r 1  F0 04            beq @target_closed_ok
+000632r 1               
+000632r 1                   ; Real close failure.
+000632r 1  7A               ply                         ; discard newfd
+000633r 1  FA               plx                         ; discard old object
+000634r 1               
+000634r 1               
+000634r 1  38               sec
+000635r 1  60               rts
+000636r 1               
+000636r 1               @target_closed_ok:
+000636r 1  7A               ply                         ; Y = newfd
+000637r 1  FA               plx                         ; X = old object
+000638r 1               
+000638r 1                   ; Attach newfd to the old object.
+000638r 1  8A               txa                         ; A = old object
+000639r 1  AE rr rr         ldx active_pid             ; X = PID
+00063Cr 1               
+00063Cr 1  5A               phy                         ; preserve newfd across fd_attach
+00063Dr 1               
+00063Dr 1  20 rr rr         jsr fd_attach
+000640r 1               
+000640r 1  7A               ply                         ; Y = newfd
+000641r 1               
+000641r 1               
+000641r 1  98               tya                         ; A = newfd
+000642r 1  A2 00            ldx #0
+000644r 1  18               clc
+000645r 1  60               rts
+000646r 1               .endproc
+000646r 1               
+000646r 1               

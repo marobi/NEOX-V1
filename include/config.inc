@@ -44,7 +44,7 @@ NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
 ;
 ; ============================================================
 
-USER_IMAGE_TABLE = $2000
+USER_IMAGE_TABLE = $1000
 
 ; Final 32/32 virtual-memory split.
 USER_SPACE_LIMIT = $8000

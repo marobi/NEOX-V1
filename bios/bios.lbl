@@ -1,8 +1,0 @@
-al 00F04C .@wait_ack
-al 00F03D .@busy
-al 00F030 .@retry
-al 00F053 .EMPTY
-al 00F048 .ACK_IRQ
-al 00F03C ._PUTCHAR
-al 00F030 ._GETCHAR
-al 00F000 .BIOS

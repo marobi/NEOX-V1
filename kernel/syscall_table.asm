@@ -54,7 +54,7 @@
 .export k_getprocinfo
 .export k_waitpid
 .export k_get_launch_id
-.export k_get_launch_args2
+.export k_get_launch_line
 .export k_spawn_resident
 
 .segment "SYSCALL_STUBS"
@@ -94,7 +94,7 @@
 ;   26 -> k_getprocinfo
 ;   27 -> k_waitpid
 ;   28 -> k_get_launch_id
-;   29 -> k_get_launch_args2
+;   29 -> k_get_launch_line
 ;   30 -> k_spawn_resident
 ; ------------------------------------------------------------
 
@@ -128,7 +128,7 @@ syscall_table:
     jmp k_getprocinfo
     jmp k_waitpid
     jmp k_get_launch_id
-    jmp k_get_launch_args2
+    jmp k_get_launch_line
     jmp k_spawn_resident
 
 .segment "KERN_TEXT"
@@ -269,8 +269,8 @@ syscall_table:
 .endproc
 
 
-.proc k_get_launch_args2
-    jmp KERN_ENTRY_KSYS_GET_LAUNCH_ARGS2
+.proc k_get_launch_line
+    jmp KERN_ENTRY_KSYS_GET_LAUNCH_LINE
 .endproc
 
 .proc k_spawn_resident

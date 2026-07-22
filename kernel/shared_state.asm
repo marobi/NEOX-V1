@@ -354,40 +354,28 @@ proc_exit_code:
 ; Per-process resident launch state
 ;
 ; proc_launch_id[pid]:
-;   Userland-defined resident launch selector. For nbox children this
-;   is one of the NBOX_APPLET_* ids. SPAWN_LAUNCH_NONE means unset.
+;   Userland-defined resident launch selector.
 ;
-; proc_launch_argc / arg0 / arg1:
-;   Minimal resident launch argument storage. This deliberately supports
-;   only two fixed path-style argument slots for now. It is enough for
-;   current resident nbox applets and avoids a full environment block.
+; proc_launch_line_len[pid]:
+;   Byte length of the opaque argument line, excluding NUL.
 ;
+; proc_launch_line:
+;   One fixed bounded line slot per process. The kernel copies bytes
+;   without interpreting them.
 ; ------------------------------------------------------------
 
 .export proc_launch_id
-.export proc_launch_argc
-.export proc_launch_arg0_len
-.export proc_launch_arg1_len
-.export proc_launch_arg0
-.export proc_launch_arg1
+.export proc_launch_line_len
+.export proc_launch_line
 
 proc_launch_id:
     .res MAX_PROCS
 
-proc_launch_argc:
+proc_launch_line_len:
     .res MAX_PROCS
 
-proc_launch_arg0_len:
-    .res MAX_PROCS
-
-proc_launch_arg1_len:
-    .res MAX_PROCS
-
-proc_launch_arg0:
-    .res MAX_PROCS * SPAWN_ARG_MAX
-
-proc_launch_arg1:
-    .res MAX_PROCS * SPAWN_ARG_MAX
+proc_launch_line:
+    .res MAX_PROCS * SPAWN_LINE_MAX
 
 ; ------------------------------------------------------------
 ; Global scheduler tick counter
@@ -527,3 +515,20 @@ open_pipe:
 
 open_pipe_mode:
     .res OPEN_MAX
+
+; ------------------------------------------------------------
+; RP console route/focus state
+;
+; console_focus_pid:
+;   Last validated RP_CONSOLE_PID route.
+;   $FF = no normal process route / monitor route.
+;
+; This field is deliberately appended after the established shared layout so
+; existing shared-state offsets remain unchanged.
+; ------------------------------------------------------------
+
+.export console_focus_pid
+
+console_focus_pid:
+    .res 1
+

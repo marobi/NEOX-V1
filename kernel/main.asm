@@ -109,7 +109,7 @@
     ; --------------------------------------------------------
 	; set the version of the kernel
     ; --------------------------------------------------------
-	lda #$0A				; shared-state ABI: final 32/32 memory layout
+	lda #$0B				; shared-state ABI 0x020B: Linux-compatible signal numbers
 	sta kernel_version
 	Lda #$02				; major
 	sta kernel_version+1

@@ -112,8 +112,7 @@ Commands are line-oriented and CR-terminated. Command dispatch is table-driven.
 The command character table in the uploaded source is:
 
 ```text
-H  help
-M  memory dump
+H  M  memory dump
 >  memory edit / poke bytes
 R  show saved registers
 ;  edit saved registers
@@ -128,8 +127,7 @@ The command dispatcher uppercases the first command character before dispatch.
 
 ## Command summary
 
-### `H` — help
-
+### `H` — 
 Prints the compact command syntax overview.
 
 ### `M [start [end]]` — memory dump

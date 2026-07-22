@@ -1,0 +1,5956 @@
+
+kernel_entry_table:
+8000  4C 7B 83 JMP kernel_main
+8003  4C 9B 8A JMP enter_monitor
+8006  4C 05 85 JMP set_brk_vector
+8009  4C D7 8A JMP leave_monitor
+800C  4C 70 9C JMP ksys_read
+800F  4C 2C 9D JMP ksys_write
+8012  4C 7F A0 JMP ksys_exit
+8015  4C 85 A0 JMP ksys_yield
+8018  4C 88 A0 JMP ksys_sleep
+801B  4C DD 9D JMP ksys_close
+801E  4C F8 9D JMP ksys_dup
+8021  4C 13 9E JMP ksys_dup2
+8024  4C 31 9E JMP ksys_pipe
+8027  4C 02 99 JMP pipe_create_between_fd
+802A  4C F9 A1 JMP ksys_ticks
+802D  4C 9C A0 JMP ksys_signal
+8030  4C F3 9E JMP ksys_open
+8033  4C 9A 9F JMP ksys_load_file_to_memory
+8036  4C 9F 9F JMP ksys_save_memory_to_file
+8039  4C A4 9F JMP ksys_seek
+803C  4C A9 9F JMP ksys_tell
+803F  4C AE 9F JMP ksys_delete
+8042  4C B3 9F JMP ksys_rename
+8045  4C B8 9F JMP ksys_opendir
+8048  4C 34 A0 JMP ksys_readdir
+804B  4C 50 A0 JMP ksys_closedir
+804E  4C 6B A0 JMP ksys_chdir
+8051  4C 7A A0 JMP ksys_getcwd
+8054  4C 70 A0 JMP ksys_mkdir
+8057  4C 75 A0 JMP ksys_rmdir
+805A  4C 7A A1 JMP ksys_getprocinfo
+805D  4C F4 A0 JMP ksys_waitpid
+8060  4C 1E 97 JMP ksys_get_launch_id
+8063  4C 36 97 JMP ksys_get_launch_line
+8066  4C C0 95 JMP ksys_spawn_resident
+8069  00       BRK
+806A  00       BRK
+806B  00       BRK
+806C  00       BRK
+806D  00       BRK
+806E  00       BRK
+806F  00       BRK
+8070  00       BRK
+8071  00       BRK
+8072  00       BRK
+8073  00       BRK
+8074  00       BRK
+8075  00       BRK
+8076  00       BRK
+8077  00       BRK
+8078  00       BRK
+8079  00       BRK
+807A  00       BRK
+807B  00       BRK
+807C  00       BRK
+807D  00       BRK
+807E  00       BRK
+807F  00       BRK
+8080  00       BRK
+8081  00       BRK
+8082  00       BRK
+8083  00       BRK
+8084  00       BRK
+8085  00       BRK
+8086  00       BRK
+8087  00       BRK
+8088  00       BRK
+8089  00       BRK
+808A  00       BRK
+808B  00       BRK
+808C  00       BRK
+808D  00       BRK
+808E  00       BRK
+808F  00       BRK
+8090  00       BRK
+8091  00       BRK
+8092  00       BRK
+8093  00       BRK
+8094  00       BRK
+8095  00       BRK
+8096  00       BRK
+8097  00       BRK
+8098  00       BRK
+8099  00       BRK
+809A  00       BRK
+809B  00       BRK
+809C  00       BRK
+809D  00       BRK
+809E  00       BRK
+809F  00       BRK
+80A0  00       BRK
+80A1  00       BRK
+80A2  00       BRK
+80A3  00       BRK
+80A4  00       BRK
+80A5  00       BRK
+80A6  00       BRK
+80A7  00       BRK
+80A8  00       BRK
+80A9  00       BRK
+80AA  00       BRK
+80AB  00       BRK
+80AC  00       BRK
+80AD  00       BRK
+80AE  00       BRK
+80AF  00       BRK
+80B0  00       BRK
+80B1  00       BRK
+80B2  00       BRK
+80B3  00       BRK
+80B4  00       BRK
+80B5  00       BRK
+80B6  00       BRK
+80B7  00       BRK
+80B8  00       BRK
+80B9  00       BRK
+80BA  00       BRK
+80BB  00       BRK
+80BC  00       BRK
+80BD  00       BRK
+80BE  00       BRK
+80BF  00       BRK
+80C0  00       BRK
+80C1  00       BRK
+80C2  00       BRK
+80C3  00       BRK
+80C4  00       BRK
+80C5  00       BRK
+80C6  00       BRK
+80C7  00       BRK
+80C8  00       BRK
+80C9  00       BRK
+80CA  00       BRK
+80CB  00       BRK
+80CC  00       BRK
+80CD  00       BRK
+80CE  00       BRK
+80CF  00       BRK
+80D0  00       BRK
+80D1  00       BRK
+80D2  00       BRK
+80D3  00       BRK
+80D4  00       BRK
+80D5  00       BRK
+80D6  00       BRK
+80D7  00       BRK
+80D8  00       BRK
+80D9  00       BRK
+80DA  00       BRK
+80DB  00       BRK
+80DC  00       BRK
+80DD  00       BRK
+80DE  00       BRK
+80DF  00       BRK
+80E0  00       BRK
+80E1  00       BRK
+80E2  00       BRK
+80E3  00       BRK
+80E4  00       BRK
+80E5  00       BRK
+80E6  00       BRK
+80E7  00       BRK
+80E8  00       BRK
+80E9  00       BRK
+80EA  00       BRK
+80EB  00       BRK
+80EC  00       BRK
+80ED  00       BRK
+80EE  00       BRK
+80EF  00       BRK
+80F0  00       BRK
+80F1  00       BRK
+80F2  00       BRK
+80F3  00       BRK
+80F4  00       BRK
+80F5  00       BRK
+80F6  00       BRK
+80F7  00       BRK
+80F8  00       BRK
+80F9  00       BRK
+80FA  00       BRK
+80FB  00       BRK
+80FC  00       BRK
+80FD  00       BRK
+80FE  00       BRK
+80FF  00       BRK
+
+ctx_init_table:
+8100  A2 00    LDX #$00
+
+@clear_all:
+8102  A9 00    LDA #$00
+8104  9D 4F B0 STA context_state,X
+8107  A9 FF    LDA #$FF
+8109  9D 59 B0 STA context_owner_pid,X
+810C  E8       INX
+810D  E0 0A    CPX #$0A
+810F  D0 F1    BNE @clear_all
+8111  A9 01    LDA #$01
+8113  8D 4F B0 STA context_state
+8116  A9 FF    LDA #$FF
+8118  8D 59 B0 STA context_owner_pid
+811B  A2 01    LDX #$01
+
+@mark_preloaded:
+811D  E0 0A    CPX #$0A
+811F  F0 0D    BEQ @done
+8121  A9 02    LDA #$02
+8123  9D 4F B0 STA context_state,X
+8126  A9 FF    LDA #$FF
+8128  9D 59 B0 STA context_owner_pid,X
+812B  E8       INX
+812C  80 EF    BRA @mark_preloaded
+
+@done:
+812E  18       CLC
+812F  60       RTS
+
+ctx_alloc_preloaded_for_pid:
+8130  8E DF B5 STX ctx_tmp_pid
+8133  A2 01    LDX #$01
+
+@scan:
+8135  E0 0A    CPX #$0A
+8137  F0 1B    BEQ @fail
+8139  BD 4F B0 LDA context_state,X
+813C  C9 02    CMP #$02
+813E  F0 03    BEQ @found
+8140  E8       INX
+8141  80 F2    BRA @scan
+
+@found:
+8143  A9 04    LDA #$04
+8145  9D 4F B0 STA context_state,X
+8148  AD DF B5 LDA ctx_tmp_pid
+814B  9D 59 B0 STA context_owner_pid,X
+814E  8A       TXA
+814F  AE DF B5 LDX ctx_tmp_pid
+8152  18       CLC
+8153  60       RTS
+
+@fail:
+8154  AE DF B5 LDX ctx_tmp_pid
+8157  38       SEC
+8158  60       RTS
+
+ctx_free_for_pid:
+8159  8E DF B5 STX ctx_tmp_pid
+815C  A2 01    LDX #$01
+
+@scan:
+815E  E0 0A    CPX #$0A
+8160  F0 21    BEQ @not_found
+8162  BD 59 B0 LDA context_owner_pid,X
+8165  CD DF B5 CMP ctx_tmp_pid
+8168  D0 16    BNE @next
+816A  BD 4F B0 LDA context_state,X
+816D  C9 04    CMP #$04
+816F  D0 0F    BNE @next
+8171  A9 02    LDA #$02
+8173  9D 4F B0 STA context_state,X
+8176  A9 FF    LDA #$FF
+8178  9D 59 B0 STA context_owner_pid,X
+817B  AE DF B5 LDX ctx_tmp_pid
+817E  18       CLC
+817F  60       RTS
+
+@next:
+8180  E8       INX
+8181  80 DB    BRA @scan
+
+@not_found:
+8183  AE DF B5 LDX ctx_tmp_pid
+8186  38       SEC
+8187  60       RTS
+
+gate_signal_checkpoint:
+8188  AE 3D B0 LDX active_pid
+818B  E0 00    CPX #$00
+818D  F0 25    BEQ @done
+818F  E0 08    CPX #$08
+8191  B0 21    BCS @done
+8193  BD 8B B0 LDA proc_signal_pending,X
+8196  C9 02    CMP #$02
+8198  D0 1A    BNE @done
+819A  BD 7B B0 LDA proc_flags,X
+819D  29 08    AND #$08
+819F  D0 13    BNE @done
+81A1  AD 26 B0 LDA file_io_gate_owner
+81A4  CD 3D B0 CMP active_pid
+81A7  F0 0B    BEQ @done
+81A9  AD 32 B0 LDA proc_gate_owner
+81AC  CD 3D B0 CMP active_pid
+81AF  F0 03    BEQ @done
+81B1  20 8E 89 JSR sched_yield
+
+@done:
+81B4  60       RTS
+
+file_io_gate_init:
+81B5  9C 25 B0 STZ file_io_gate
+81B8  A9 FF    LDA #$FF
+81BA  8D 26 B0 STA file_io_gate_owner
+81BD  8D 27 B0 STA file_io_gate_wait_head
+81C0  8D 28 B0 STA file_io_gate_wait_tail
+81C3  A2 07    LDX #$07
+
+@clear_next:
+81C5  9D 29 B0 STA file_io_gate_next,X
+81C8  CA       DEX
+81C9  10 FA    BPL @clear_next
+81CB  60       RTS
+
+file_io_gate_enqueue_current:
+81CC  A9 FF    LDA #$FF
+81CE  9D 29 B0 STA file_io_gate_next,X
+81D1  AD 28 B0 LDA file_io_gate_wait_tail
+81D4  C9 FF    CMP #$FF
+81D6  F0 09    BEQ @empty
+81D8  A8       TAY
+81D9  8A       TXA
+81DA  99 29 B0 STA file_io_gate_next,Y
+81DD  8E 28 B0 STX file_io_gate_wait_tail
+81E0  60       RTS
+
+@empty:
+81E1  8E 27 B0 STX file_io_gate_wait_head
+81E4  8E 28 B0 STX file_io_gate_wait_tail
+81E7  60       RTS
+
+file_io_gate_dequeue_one:
+81E8  AE 27 B0 LDX file_io_gate_wait_head
+81EB  E0 FF    CPX #$FF
+81ED  D0 02    BNE @have_pid
+81EF  38       SEC
+81F0  60       RTS
+
+@have_pid:
+81F1  BD 29 B0 LDA file_io_gate_next,X
+81F4  8D 27 B0 STA file_io_gate_wait_head
+81F7  C9 FF    CMP #$FF
+81F9  D0 03    BNE @clear_link
+81FB  8D 28 B0 STA file_io_gate_wait_tail
+
+@clear_link:
+81FE  A9 FF    LDA #$FF
+8200  9D 29 B0 STA file_io_gate_next,X
+8203  18       CLC
+8204  60       RTS
+
+file_io_gate_acquire:
+8205  08       PHP
+8206  78       SEI
+8207  A9 01    LDA #$01
+8209  0C 25 B0 TSB file_io_gate
+820C  F0 1E    BEQ @acquired
+820E  AD 26 B0 LDA file_io_gate_owner
+8211  CD 3D B0 CMP active_pid
+8214  D0 03    BNE @wait_for_owner
+8216  28       PLP
+8217  18       CLC
+8218  60       RTS
+
+@wait_for_owner:
+8219  AE 3D B0 LDX active_pid
+821C  20 CC 81 JSR file_io_gate_enqueue_current
+821F  A9 06    LDA #$06
+8221  A0 00    LDY #$00
+8223  20 1C 87 JSR proc_set_wait
+8226  28       PLP
+8227  20 8E 89 JSR sched_yield
+822A  80 D9    BRA file_io_gate_acquire
+
+@acquired:
+822C  AE 3D B0 LDX active_pid
+822F  8E 26 B0 STX file_io_gate_owner
+8232  28       PLP
+8233  38       SEC
+8234  60       RTS
+
+file_io_gate_release:
+8235  08       PHP
+8236  78       SEI
+8237  AD 26 B0 LDA file_io_gate_owner
+823A  CD 3D B0 CMP active_pid
+823D  F0 03    BEQ @owner_ok
+823F  28       PLP
+8240  18       CLC
+8241  60       RTS
+
+@owner_ok:
+8242  A9 FF    LDA #$FF
+8244  8D 26 B0 STA file_io_gate_owner
+8247  A9 01    LDA #$01
+8249  1C 25 B0 TRB file_io_gate
+824C  20 E8 81 JSR file_io_gate_dequeue_one
+824F  B0 03    BCS @done
+8251  20 C9 86 JSR proc_wake
+
+@done:
+8254  28       PLP
+8255  20 88 81 JSR gate_signal_checkpoint
+8258  38       SEC
+8259  60       RTS
+
+file_io_gate_cancel_wait:
+825A  08       PHP
+825B  78       SEI
+825C  EC 27 B0 CPX file_io_gate_wait_head
+825F  D0 0F    BNE @scan
+8261  BD 29 B0 LDA file_io_gate_next,X
+8264  8D 27 B0 STA file_io_gate_wait_head
+8267  C9 FF    CMP #$FF
+8269  D0 26    BNE @clear_link
+826B  8D 28 B0 STA file_io_gate_wait_tail
+826E  80 21    BRA @clear_link
+
+@scan:
+8270  AC 27 B0 LDY file_io_gate_wait_head
+
+@scan_next:
+8273  C0 FF    CPY #$FF
+8275  F0 1F    BEQ @done
+8277  8A       TXA
+8278  D9 29 B0 CMP file_io_gate_next,Y
+827B  F0 06    BEQ @found
+827D  B9 29 B0 LDA file_io_gate_next,Y
+8280  A8       TAY
+8281  80 F0    BRA @scan_next
+
+@found:
+8283  BD 29 B0 LDA file_io_gate_next,X
+8286  99 29 B0 STA file_io_gate_next,Y
+8289  EC 28 B0 CPX file_io_gate_wait_tail
+828C  D0 03    BNE @clear_link
+828E  8C 28 B0 STY file_io_gate_wait_tail
+
+@clear_link:
+8291  A9 FF    LDA #$FF
+8293  9D 29 B0 STA file_io_gate_next,X
+
+@done:
+8296  28       PLP
+8297  60       RTS
+
+proc_gate_init:
+8298  9C 31 B0 STZ proc_gate
+829B  A9 FF    LDA #$FF
+829D  8D 32 B0 STA proc_gate_owner
+82A0  8D 33 B0 STA proc_gate_wait_head
+82A3  8D 34 B0 STA proc_gate_wait_tail
+82A6  A2 07    LDX #$07
+
+@clear_next:
+82A8  9D 35 B0 STA proc_gate_next,X
+82AB  CA       DEX
+82AC  10 FA    BPL @clear_next
+82AE  60       RTS
+
+proc_gate_enqueue_current:
+82AF  A9 FF    LDA #$FF
+82B1  9D 35 B0 STA proc_gate_next,X
+82B4  AD 34 B0 LDA proc_gate_wait_tail
+82B7  C9 FF    CMP #$FF
+82B9  F0 09    BEQ @empty
+82BB  A8       TAY
+82BC  8A       TXA
+82BD  99 35 B0 STA proc_gate_next,Y
+82C0  8E 34 B0 STX proc_gate_wait_tail
+82C3  60       RTS
+
+@empty:
+82C4  8E 33 B0 STX proc_gate_wait_head
+82C7  8E 34 B0 STX proc_gate_wait_tail
+82CA  60       RTS
+
+proc_gate_dequeue_one:
+82CB  AE 33 B0 LDX proc_gate_wait_head
+82CE  E0 FF    CPX #$FF
+82D0  D0 02    BNE @have_pid
+82D2  38       SEC
+82D3  60       RTS
+
+@have_pid:
+82D4  BD 35 B0 LDA proc_gate_next,X
+82D7  8D 33 B0 STA proc_gate_wait_head
+82DA  C9 FF    CMP #$FF
+82DC  D0 03    BNE @clear_link
+82DE  8D 34 B0 STA proc_gate_wait_tail
+
+@clear_link:
+82E1  A9 FF    LDA #$FF
+82E3  9D 35 B0 STA proc_gate_next,X
+82E6  18       CLC
+82E7  60       RTS
+
+proc_gate_acquire:
+82E8  08       PHP
+82E9  78       SEI
+82EA  A9 01    LDA #$01
+82EC  0C 31 B0 TSB proc_gate
+82EF  F0 1E    BEQ @acquired
+82F1  AD 32 B0 LDA proc_gate_owner
+82F4  CD 3D B0 CMP active_pid
+82F7  D0 03    BNE @wait_for_owner
+82F9  28       PLP
+82FA  18       CLC
+82FB  60       RTS
+
+@wait_for_owner:
+82FC  AE 3D B0 LDX active_pid
+82FF  20 AF 82 JSR proc_gate_enqueue_current
+8302  A9 06    LDA #$06
+8304  A0 01    LDY #$01
+8306  20 1C 87 JSR proc_set_wait
+8309  28       PLP
+830A  20 8E 89 JSR sched_yield
+830D  80 D9    BRA proc_gate_acquire
+
+@acquired:
+830F  AE 3D B0 LDX active_pid
+8312  8E 32 B0 STX proc_gate_owner
+8315  28       PLP
+8316  38       SEC
+8317  60       RTS
+
+proc_gate_release:
+8318  08       PHP
+8319  78       SEI
+831A  AD 32 B0 LDA proc_gate_owner
+831D  CD 3D B0 CMP active_pid
+8320  F0 03    BEQ @owner_ok
+8322  28       PLP
+8323  18       CLC
+8324  60       RTS
+
+@owner_ok:
+8325  A9 FF    LDA #$FF
+8327  8D 32 B0 STA proc_gate_owner
+832A  A9 01    LDA #$01
+832C  1C 31 B0 TRB proc_gate
+832F  20 CB 82 JSR proc_gate_dequeue_one
+8332  B0 03    BCS @done
+8334  20 C9 86 JSR proc_wake
+
+@done:
+8337  28       PLP
+8338  20 88 81 JSR gate_signal_checkpoint
+833B  38       SEC
+833C  60       RTS
+
+proc_gate_cancel_wait:
+833D  08       PHP
+833E  78       SEI
+833F  EC 33 B0 CPX proc_gate_wait_head
+8342  D0 0F    BNE @scan
+8344  BD 35 B0 LDA proc_gate_next,X
+8347  8D 33 B0 STA proc_gate_wait_head
+834A  C9 FF    CMP #$FF
+834C  D0 26    BNE @clear_link
+834E  8D 34 B0 STA proc_gate_wait_tail
+8351  80 21    BRA @clear_link
+
+@scan:
+8353  AC 33 B0 LDY proc_gate_wait_head
+
+@scan_next:
+8356  C0 FF    CPY #$FF
+8358  F0 1F    BEQ @done
+835A  8A       TXA
+835B  D9 35 B0 CMP proc_gate_next,Y
+835E  F0 06    BEQ @found
+8360  B9 35 B0 LDA proc_gate_next,Y
+8363  A8       TAY
+8364  80 F0    BRA @scan_next
+
+@found:
+8366  BD 35 B0 LDA proc_gate_next,X
+8369  99 35 B0 STA proc_gate_next,Y
+836C  EC 34 B0 CPX proc_gate_wait_tail
+836F  D0 03    BNE @clear_link
+8371  8C 34 B0 STY proc_gate_wait_tail
+
+@clear_link:
+8374  A9 FF    LDA #$FF
+8376  9D 35 B0 STA proc_gate_next,X
+
+@done:
+8379  28       PLP
+837A  60       RTS
+
+kernel_main:
+837B  78       SEI
+837C  D8       CLD
+837D  A2 FF    LDX #$FF
+837F  9A       TXS
+8380  20 C4 85 JSR klog_clear
+8383  A9 45    LDA #$45
+8385  85 AE    STA $AE
+8387  A9 84    LDA #$84
+8389  85 AF    STA $AF
+838B  20 DA 85 JSR klog_boot
+838E  A9 B4    LDA #$B4
+8390  8D 22 B0 STA brk_vector
+8393  A9 85    LDA #$85
+8395  8D 23 B0 STA $B023
+8398  20 F4 84 JSR rp_init
+839B  A9 60    LDA #$60
+839D  85 AE    STA $AE
+839F  A9 84    LDA #$84
+83A1  85 AF    STA $AF
+83A3  20 F7 85 JSR klog_ok
+83A6  A9 0B    LDA #$0B
+83A8  8D 20 B0 STA __KERN_BSS_LOAD__
+83AB  A9 02    LDA #$02
+83AD  8D 21 B0 STA $B021
+83B0  A9 68    LDA #$68
+83B2  85 AE    STA $AE
+83B4  A9 84    LDA #$84
+83B6  85 AF    STA $AF
+83B8  20 F7 85 JSR klog_ok
+83BB  20 E1 87 JSR scheduler_init
+83BE  A9 85    LDA #$85
+83C0  85 AE    STA $AE
+83C2  A9 84    LDA #$84
+83C4  85 AF    STA $AF
+83C6  20 F7 85 JSR klog_ok
+83C9  20 00 81 JSR ctx_init_table
+83CC  A9 94    LDA #$94
+83CE  85 AE    STA $AE
+83D0  A9 84    LDA #$84
+83D2  85 AF    STA $AF
+83D4  20 F7 85 JSR klog_ok
+83D7  20 60 9C JSR ksys_io_init
+83DA  A9 A7    LDA #$A7
+83DC  85 AE    STA $AE
+83DE  A9 84    LDA #$84
+83E0  85 AF    STA $AF
+83E2  20 F7 85 JSR klog_ok
+83E5  20 D2 8F JSR fd_init_tables
+83E8  A9 B4    LDA #$B4
+83EA  85 AE    STA $AE
+83EC  A9 84    LDA #$84
+83EE  85 AF    STA $AF
+83F0  20 F7 85 JSR klog_ok
+83F3  20 C0 97 JSR pipe_init_tables
+83F6  A9 BC    LDA #$BC
+83F8  85 AE    STA $AE
+83FA  A9 84    LDA #$84
+83FC  85 AF    STA $AF
+83FE  20 F7 85 JSR klog_ok
+8401  A2 00    LDX #$00
+8403  20 71 92 JSR fd_init_process
+8406  A9 C6    LDA #$C6
+8408  85 AE    STA $AE
+840A  A9 84    LDA #$84
+840C  85 AF    STA $AF
+840E  20 F7 85 JSR klog_ok
+8411  20 4A A4 JSR tasks_init
+8414  A9 D8    LDA #$D8
+8416  85 AE    STA $AE
+8418  A9 84    LDA #$84
+841A  85 AF    STA $AF
+841C  20 F7 85 JSR klog_ok
+841F  A2 00    LDX #$00
+8421  8E 3D B0 STX active_pid
+8424  8E 3E B0 STX sched_cursor_pid
+8427  A9 03    LDA #$03
+8429  9D 3F B0 STA proc_state,X
+842C  A9 FF    LDA #$FF
+842E  8D 94 B0 STA console_owner_pid
+8431  A9 00    LDA #$00
+8433  20 42 88 JSR scheduler_set_current_context
+8436  A9 E3    LDA #$E3
+8438  85 AE    STA $AE
+843A  A9 84    LDA #$84
+843C  85 AF    STA $AF
+843E  20 F7 85 JSR klog_ok
+8441  58       CLI
+8442  4C 36 8B JMP idle_loop
+
+msg_klog_start:
+8445  4E 45 4F LSR $4F45
+8448  58       CLI
+8449  20 6B 65 JSR L656B
+844C  72 6E    ADC ($6E)
+844E  65 6C    ADC $6C
+8450  20 30 2E JSR L2E30
+8453  39 38 2E AND $2E38,Y
+8456  31 35    AND ($35),Y
+8458  36 20    ROL $20,X
+845A  73       .byte $73
+845B  74 61    STZ $61,X
+845D  72 74    ADC ($74)
+845F  00       BRK
+
+msg_klog_rp_init:
+8460  72 70    ADC ($70)
+8462  20 69 6E JSR L6E69
+8465  69 74    ADC #$74
+8467  00       BRK
+
+msg_klog_version:
+8468  6B       .byte $6B
+8469  65 72    ADC $72
+846B  6E 65 6C ROR $6C65
+846E  20 69 6E JSR L6E69
+8471  74 65    STZ $65,X
+8473  72 66    ADC ($66)
+8475  61 63    ADC ($63,X)
+8477  65 20    ADC $20
+8479  76 65    ROR $65,X
+847B  72 73    ADC ($73)
+847D  69 6F    ADC #$6F
+847F  6E 20 73 ROR $7320
+8482  65 74    ADC $74
+8484  00       BRK
+
+msg_klog_scheduler_init:
+8485  73       .byte $73
+8486  63       .byte $63
+8487  68       PLA
+8488  65 64    ADC $64
+848A  75 6C    ADC $6C,X
+848C  65 72    ADC $72
+848E  20 69 6E JSR L6E69
+8491  69 74    ADC #$74
+8493  00       BRK
+
+msg_klog_ctx_init:
+8494  63       .byte $63
+8495  6F 6E 74 BBR6 $6E,irq_entry
+8498  65 78    ADC $78
+849A  74 20    STZ $20,X
+849C  74 61    STZ $61,X
+849E  62       .byte $62
+849F  6C 65 20 JMP ($2065)
+84A2  69 6E    ADC #$6E
+84A4  69 74    ADC #$74
+84A6  00       BRK
+
+msg_klog_ksys_io_init:
+84A7  6B       .byte $6B
+84A8  73       .byte $73
+84A9  79 73 20 ADC $2073,Y
+84AC  69 6F    ADC #$6F
+84AE  20 69 6E JSR L6E69
+84B1  69 74    ADC #$74
+84B3  00       BRK
+
+msg_klog_fd_init:
+84B4  66 64    ROR $64
+84B6  20 69 6E JSR L6E69
+84B9  69 74    ADC #$74
+84BB  00       BRK
+
+msg_klog_pipe_init:
+84BC  70 69    BVS L8527
+84BE  70 65    BVS L8525
+84C0  20 69 6E JSR L6E69
+84C3  69 74    ADC #$74
+84C5  00       BRK
+
+msg_klog_idle_process_init:
+84C6  69 64    ADC #$64
+84C8  6C 65 20 JMP ($2065)
+84CB  70 72    BVS L853F
+84CD  6F 63 65 BBR6 $63,L8535
+84D0  73       .byte $73
+84D1  73       .byte $73
+84D2  20 69 6E JSR L6E69
+84D5  69 74    ADC #$74
+84D7  00       BRK
+
+msg_klog_tasks_init:
+84D8  74 61    STZ $61,X
+84DA  73       .byte $73
+84DB  6B       .byte $6B
+84DC  73       .byte $73
+84DD  20 69 6E JSR L6E69
+84E0  69 74    ADC #$74
+84E2  00       BRK
+
+msg_klog_ready:
+84E3  6B       .byte $6B
+84E4  65 72    ADC $72
+84E6  6E 65 6C ROR $6C65
+84E9  20 62 6F JSR L6F62
+84EC  6F 74 20 BBR6 $74,L850F
+84EF  64 6F    STZ $6F
+84F1  6E 65 00 ROR $0065
+
+rp_init:
+84F4  9C 24 B0 STZ rp_lock
+84F7  A2 00    LDX #$00
+
+@rp_clear:
+84F9  9E 00 B0 STZ $B000,X
+84FC  E8       INX
+84FD  E0 14    CPX #$14
+84FF  D0 F8    BNE @rp_clear
+8501  9C 10 E0 STZ $E010
+8504  60       RTS
+
+set_brk_vector:
+8505  8D 22 B0 STA brk_vector
+8508  8E 23 B0 STX $B023
+850B  60       RTS
+
+irq_entry:
+850C  78       SEI
+850D  48       PHA
+850E  DA       PHX
+
+L850F:
+850F  5A       PHY
+8510  BA       TSX
+8511  BD 04 01 LDA $0104,X
+8514  29 10    AND #$10
+8516  F0 03    BEQ L851B
+8518  4C B8 85 JMP brk_entry
+
+L851B:
+851B  AD 10 B0 LDA $B010
+851E  20 06 F0 JSR LF006
+8521  C9 00    CMP #$00
+8523  D0 03    BNE L8528
+
+L8525:
+8525  4C B4 85 JMP irq_restore
+
+L8528:
+8528  C9 01    CMP #$01
+852A  D0 03    BNE L852F
+852C  4C A1 85 JMP @timer
+
+L852F:
+852F  C9 02    CMP #$02
+8531  D0 03    BNE L8536
+8533  4C 47 85 JMP @monitor
+
+L8536:
+8536  C9 03    CMP #$03
+8538  D0 03    BNE L853D
+853A  4C 75 85 JMP @fs_done
+
+L853D:
+853D  C9 04    CMP #$04
+
+L853F:
+853F  D0 03    BNE L8544
+8541  4C 4A 85 JMP @console_break
+
+L8544:
+8544  4C B4 85 JMP irq_restore
+
+@monitor:
+8547  4C 5C 8A JMP supervisor_enter_from_irq
+
+@console_break:
+854A  AD 95 B0 LDA monitor_active
+854D  D0 65    BNE irq_restore
+854F  AE 94 B0 LDX console_owner_pid
+8552  E0 01    CPX #$01
+8554  90 5E    BCC irq_restore
+8556  E0 08    CPX #$08
+8558  B0 5A    BCS irq_restore
+855A  BD 3F B0 LDA proc_state,X
+855D  C9 00    CMP #$00
+855F  F0 53    BEQ irq_restore
+8561  C9 06    CMP #$06
+8563  F0 4F    BEQ irq_restore
+8565  A9 02    LDA #$02
+8567  9D 8B B0 STA proc_signal_pending,X
+856A  AD 93 B0 LDA sched_lock
+856D  0D 24 B0 ORA rp_lock
+8570  D0 42    BNE irq_restore
+8572  4C 5C 89 JMP sched_context_switch
+
+@fs_done:
+8575  AE 26 B0 LDX file_io_gate_owner
+8578  E0 FF    CPX #$FF
+857A  F0 38    BEQ irq_restore
+857C  E0 08    CPX #$08
+857E  B0 34    BCS irq_restore
+8580  BD 3F B0 LDA proc_state,X
+8583  C9 04    CMP #$04
+8585  D0 2D    BNE irq_restore
+8587  BD 47 B1 LDA wait_reason,X
+858A  C9 08    CMP #$08
+858C  D0 26    BNE irq_restore
+858E  20 C9 86 JSR proc_wake
+8591  AD 95 B0 LDA monitor_active
+8594  D0 1E    BNE irq_restore
+8596  AD 93 B0 LDA sched_lock
+8599  0D 24 B0 ORA rp_lock
+859C  D0 16    BNE irq_restore
+859E  4C 5C 89 JMP sched_context_switch
+
+@timer:
+85A1  AD 95 B0 LDA monitor_active
+85A4  D0 0E    BNE irq_restore
+85A6  20 93 86 JSR scheduler_irq_tick
+85A9  AD 93 B0 LDA sched_lock
+85AC  0D 24 B0 ORA rp_lock
+85AF  D0 03    BNE irq_restore
+85B1  4C 5C 89 JMP sched_context_switch
+
+irq_restore:
+85B4  7A       PLY
+85B5  FA       PLX
+85B6  68       PLA
+85B7  40       RTI
+
+brk_entry:
+85B8  6C 22 B0 JMP (brk_vector)
+
+nmi_entry:
+85BB  40       RTI
+
+klog_putc:
+85BC  4C 03 F0 JMP LF003
+
+klog_crlf:
+85BF  A9 0D    LDA #$0D
+85C1  4C BC 85 JMP klog_putc
+
+klog_clear:
+85C4  A9 0C    LDA #$0C
+85C6  4C BC 85 JMP klog_putc
+
+klog_puts:
+85C9  A0 00    LDY #$00
+
+@loop:
+85CB  B1 AE    LDA ($AE),Y
+85CD  F0 0A    BEQ @done
+85CF  20 BC 85 JSR klog_putc
+85D2  C8       INY
+85D3  D0 F6    BNE @loop
+85D5  E6 AF    INC $AF
+85D7  80 F2    BRA @loop
+
+@done:
+85D9  60       RTS
+
+klog_boot:
+85DA  A5 AE    LDA $AE
+85DC  48       PHA
+85DD  A5 AF    LDA $AF
+85DF  48       PHA
+85E0  A9 31    LDA #$31
+85E2  85 AE    STA $AE
+85E4  A9 86    LDA #$86
+85E6  85 AF    STA $AF
+85E8  20 C9 85 JSR klog_puts
+85EB  68       PLA
+85EC  85 AF    STA $AF
+85EE  68       PLA
+85EF  85 AE    STA $AE
+85F1  20 C9 85 JSR klog_puts
+85F4  4C BF 85 JMP klog_crlf
+
+klog_ok:
+85F7  A5 AE    LDA $AE
+85F9  48       PHA
+85FA  A5 AF    LDA $AF
+85FC  48       PHA
+85FD  A9 39    LDA #$39
+85FF  85 AE    STA $AE
+8601  A9 86    LDA #$86
+8603  85 AF    STA $AF
+8605  20 C9 85 JSR klog_puts
+8608  68       PLA
+8609  85 AF    STA $AF
+860B  68       PLA
+860C  85 AE    STA $AE
+860E  20 C9 85 JSR klog_puts
+8611  4C BF 85 JMP klog_crlf
+
+klog_fail:
+8614  A5 AE    LDA $AE
+8616  48       PHA
+8617  A5 AF    LDA $AF
+8619  48       PHA
+861A  A9 41    LDA #$41
+861C  85 AE    STA $AE
+861E  A9 86    LDA #$86
+8620  85 AF    STA $AF
+8622  20 C9 85 JSR klog_puts
+8625  68       PLA
+8626  85 AF    STA $AF
+8628  68       PLA
+8629  85 AE    STA $AE
+862B  20 C9 85 JSR klog_puts
+862E  4C BF 85 JMP klog_crlf
+
+msg_boot_prefix:
+8631  5B       .byte $5B
+8632  62       .byte $62
+8633  6F 6F 74 BBR6 $6F,L86AA
+8636  5D 20 00 EOR __ZP_SIZE__,X
+
+msg_ok_prefix:
+8639  5B       .byte $5B
+863A  20 6F 6B JSR L6B6F
+863D  20 5D 20 JSR L205D
+8640  00       BRK
+
+msg_fail_prefix:
+8641  5B       .byte $5B
+8642  66 61    ROR $61
+8644  69 6C    ADC #$6C
+8646  5D 20 00 EOR __ZP_SIZE__,X
+
+mul8u_core:
+8649  A9 00    LDA #$00
+864B  A2 08    LDX #$08
+864D  46 A0    LSR $A0
+
+@loop:
+864F  90 03    BCC @no_add
+8651  18       CLC
+8652  65 A1    ADC $A1
+
+@no_add:
+8654  6A       ROR
+8655  66 A0    ROR $A0
+8657  CA       DEX
+8658  D0 F5    BNE @loop
+865A  85 A1    STA $A1
+865C  60       RTS
+
+mul8u:
+865D  85 A0    STA $A0
+865F  86 A1    STX $A1
+8661  20 49 86 JSR mul8u_core
+8664  A5 A0    LDA $A0
+8666  A6 A1    LDX $A1
+8668  60       RTS
+
+sched_lock_try_enter:
+8669  08       PHP
+866A  78       SEI
+866B  A9 01    LDA #$01
+866D  0C 93 B0 TSB sched_lock
+8670  D0 03    BNE @busy
+8672  68       PLA
+8673  18       CLC
+8674  60       RTS
+
+@busy:
+8675  28       PLP
+8676  38       SEC
+8677  60       RTS
+
+sched_lock_leave:
+8678  08       PHP
+8679  48       PHA
+867A  78       SEI
+867B  AD 93 B0 LDA sched_lock
+867E  29 01    AND #$01
+8680  F0 05    BEQ @done
+8682  A9 01    LDA #$01
+8684  1C 93 B0 TRB sched_lock
+
+@done:
+8687  68       PLA
+8688  28       PLP
+8689  60       RTS
+
+scheduler_tick:
+868A  EE 6F B3 INC system_ticks_lo
+868D  D0 03    BNE @done
+868F  EE 70 B3 INC system_ticks_hi
+
+@done:
+8692  60       RTS
+
+scheduler_irq_tick:
+8693  20 5F 87 JSR sched_account_tick
+8696  4C 8A 86 JMP scheduler_tick
+
+proc_set_state:
+8699  9D 3F B0 STA proc_state,X
+869C  60       RTS
+
+proc_set_ready:
+869D  A9 02    LDA #$02
+869F  4C 99 86 JMP proc_set_state
+
+proc_set_running:
+86A2  8E E2 B5 STX sched_selected_tmp
+86A5  A2 00    LDX #$00
+
+@scan_running:
+86A7  EC E2 B5 CPX sched_selected_tmp
+
+L86AA:
+86AA  F0 0C    BEQ @next_pid
+86AC  BD 3F B0 LDA proc_state,X
+86AF  C9 03    CMP #$03
+86B1  D0 05    BNE @next_pid
+86B3  A9 02    LDA #$02
+86B5  20 99 86 JSR proc_set_state
+
+@next_pid:
+86B8  E8       INX
+86B9  E0 08    CPX #$08
+86BB  D0 EA    BNE @scan_running
+86BD  AE E2 B5 LDX sched_selected_tmp
+86C0  A9 03    LDA #$03
+86C2  20 99 86 JSR proc_set_state
+86C5  8E 3E B0 STX sched_cursor_pid
+86C8  60       RTS
+
+proc_wake:
+86C9  BD 3F B0 LDA proc_state,X
+86CC  C9 04    CMP #$04
+86CE  D0 06    BNE @done
+86D0  20 2D 87 JSR proc_clear_wait
+86D3  4C 9D 86 JMP proc_set_ready
+
+@done:
+86D6  60       RTS
+
+scheduler_wake_one:
+86D7  8D E0 B5 STA sched_wake_reason_tmp
+86DA  8C E1 B5 STY sched_wake_object_tmp
+86DD  AE 3E B0 LDX sched_cursor_pid
+86E0  E0 01    CPX #$01
+86E2  90 05    BCC @start_first
+86E4  E8       INX
+86E5  E0 08    CPX #$08
+86E7  D0 02    BNE @set_count
+
+@start_first:
+86E9  A2 01    LDX #$01
+
+@set_count:
+86EB  A9 07    LDA #$07
+86ED  8D E3 B5 STA sched_scan_count
+
+@check:
+86F0  BD 3F B0 LDA proc_state,X
+86F3  C9 04    CMP #$04
+86F5  D0 15    BNE @next
+86F7  BD 47 B1 LDA wait_reason,X
+86FA  CD E0 B5 CMP sched_wake_reason_tmp
+86FD  D0 0D    BNE @next
+86FF  BD 4F B1 LDA wait_object,X
+8702  CD E1 B5 CMP sched_wake_object_tmp
+8705  D0 05    BNE @next
+8707  20 C9 86 JSR proc_wake
+870A  18       CLC
+870B  60       RTS
+
+@next:
+870C  CE E3 B5 DEC sched_scan_count
+870F  F0 09    BEQ @none
+8711  E8       INX
+8712  E0 08    CPX #$08
+8714  D0 DA    BNE @check
+8716  A2 01    LDX #$01
+8718  80 D6    BRA @check
+
+@none:
+871A  38       SEC
+871B  60       RTS
+
+proc_set_wait:
+871C  E0 00    CPX #$00
+871E  F0 0C    BEQ @done
+8720  9D 47 B1 STA wait_reason,X
+8723  98       TYA
+8724  9D 4F B1 STA wait_object,X
+8727  A9 04    LDA #$04
+8729  20 99 86 JSR proc_set_state
+
+@done:
+872C  60       RTS
+
+proc_clear_wait:
+872D  A9 00    LDA #$00
+872F  9D 47 B1 STA wait_reason,X
+8732  9E 4F B1 STZ wait_object,X
+8735  60       RTS
+
+proc_exit_current:
+8736  AE 3D B0 LDX active_pid
+8739  E0 00    CPX #$00
+873B  F0 13    BEQ @yield
+873D  48       PHA
+873E  20 E8 82 JSR proc_gate_acquire
+8741  B0 03    BCS @gate_acquired
+8743  68       PLA
+8744  80 0A    BRA @yield
+
+@gate_acquired:
+8746  AE 3D B0 LDX active_pid
+8749  68       PLA
+874A  20 44 8C JSR proc_exit_lifecycle
+874D  20 18 83 JSR proc_gate_release
+
+@yield:
+8750  4C 8E 89 JMP sched_yield
+
+proc_accounting_init:
+8753  A2 07    LDX #$07
+
+@clear_proc:
+8755  9E 89 B3 STZ proc_ticks_lo,X
+8758  9E 91 B3 STZ proc_ticks_hi,X
+875B  CA       DEX
+875C  10 F7    BPL @clear_proc
+875E  60       RTS
+
+sched_account_tick:
+875F  AE 3D B0 LDX active_pid
+8762  FE 89 B3 INC proc_ticks_lo,X
+8765  D0 03    BNE @done
+8767  FE 91 B3 INC proc_ticks_hi,X
+
+@done:
+876A  60       RTS
+
+sched_update_console_focus:
+876B  AD 11 B0 LDA $B011
+876E  C9 FF    CMP #$FF
+8770  F0 17    BEQ @validated_none
+8772  C9 00    CMP #$00
+8774  F0 13    BEQ @validated_none
+8776  C9 08    CMP #$08
+8778  B0 0F    BCS @validated_none
+877A  AA       TAX
+877B  BD 3F B0 LDA proc_state,X
+877E  C9 00    CMP #$00
+8780  F0 07    BEQ @validated_none
+8782  C9 06    CMP #$06
+8784  F0 03    BEQ @validated_none
+8786  8A       TXA
+8787  80 02    BRA @validated
+
+@validated_none:
+8789  A9 FF    LDA #$FF
+
+@validated:
+878B  CD DE B5 CMP console_focus_pid
+878E  F0 09    BEQ @done
+8790  8D DE B5 STA console_focus_pid
+8793  8D 94 B0 STA console_owner_pid
+8796  20 9A 87 JSR scheduler_wake_console_owner
+
+@done:
+8799  60       RTS
+
+scheduler_wake_console_owner:
+879A  AE 94 B0 LDX console_owner_pid
+879D  E0 FF    CPX #$FF
+879F  F0 19    BEQ @done
+87A1  E0 01    CPX #$01
+87A3  90 15    BCC @done
+87A5  E0 08    CPX #$08
+87A7  B0 11    BCS @done
+87A9  BD 3F B0 LDA proc_state,X
+87AC  C9 04    CMP #$04
+87AE  D0 0A    BNE @done
+87B0  BD 47 B1 LDA wait_reason,X
+87B3  C9 01    CMP #$01
+87B5  D0 03    BNE @done
+87B7  4C C9 86 JMP proc_wake
+
+@done:
+87BA  60       RTS
+
+scheduler_wake_console_input:
+87BB  AD 12 B0 LDA $B012
+87BE  F0 20    BEQ @done
+87C0  AE 94 B0 LDX console_owner_pid
+87C3  E0 FF    CPX #$FF
+87C5  F0 19    BEQ @done
+87C7  E0 01    CPX #$01
+87C9  90 15    BCC @done
+87CB  E0 08    CPX #$08
+87CD  B0 11    BCS @done
+87CF  BD 3F B0 LDA proc_state,X
+87D2  C9 04    CMP #$04
+87D4  D0 0A    BNE @done
+87D6  BD 47 B1 LDA wait_reason,X
+87D9  C9 01    CMP #$01
+87DB  D0 03    BNE @done
+87DD  4C C9 86 JMP proc_wake
+
+@done:
+87E0  60       RTS
+
+scheduler_init:
+87E1  20 53 87 JSR proc_accounting_init
+87E4  9C 6F B3 STZ system_ticks_lo
+87E7  9C 70 B3 STZ system_ticks_hi
+87EA  9C 3D B0 STZ active_pid
+87ED  9C 3E B0 STZ sched_cursor_pid
+87F0  9C 93 B0 STZ sched_lock
+87F3  9C 96 B0 STZ active_context
+87F6  9C 95 B0 STZ monitor_active
+87F9  A9 FF    LDA #$FF
+87FB  8D DE B5 STA console_focus_pid
+87FE  8D 94 B0 STA console_owner_pid
+8801  A2 00    LDX #$00
+
+@clear:
+8803  9E 3F B0 STZ proc_state,X
+8806  A9 FF    LDA #$FF
+8808  9D 47 B0 STA proc_context,X
+880B  9E 63 B0 STZ proc_sp,X
+880E  9E 6B B0 STZ proc_entryL,X
+8811  9E 73 B0 STZ proc_entryH,X
+8814  9E 7B B0 STZ proc_flags,X
+8817  9E 8B B0 STZ proc_signal_pending,X
+881A  A9 FF    LDA #$FF
+881C  9D 83 B0 STA proc_parent_pid,X
+881F  A9 00    LDA #$00
+8821  9D 47 B1 STA wait_reason,X
+8824  9E 4F B1 STZ wait_object,X
+8827  9E 57 B1 STZ proc_exit_code,X
+882A  E8       INX
+882B  E0 08    CPX #$08
+882D  D0 D4    BNE @clear
+882F  A9 00    LDA #$00
+8831  8D 47 B0 STA proc_context
+8834  A9 FF    LDA #$FF
+8836  8D 63 B0 STA proc_sp
+8839  A9 01    LDA #$01
+883B  8D 7B B0 STA proc_flags
+883E  20 85 9B JSR timer_init
+8841  60       RTS
+
+scheduler_set_current_context:
+8842  AE 3D B0 LDX active_pid
+8845  9D 47 B0 STA proc_context,X
+8848  60       RTS
+
+sched_pick_next:
+8849  AE 3E B0 LDX sched_cursor_pid
+884C  E0 01    CPX #$01
+884E  90 05    BCC @start_first
+8850  E8       INX
+8851  E0 08    CPX #$08
+8853  D0 02    BNE @set_count
+
+@start_first:
+8855  A2 01    LDX #$01
+
+@set_count:
+8857  A9 07    LDA #$07
+8859  8D E3 B5 STA sched_scan_count
+
+@check:
+885C  BD 3F B0 LDA proc_state,X
+885F  C9 01    CMP #$01
+8861  F0 26    BEQ @found
+8863  C9 02    CMP #$02
+8865  F0 22    BEQ @found
+8867  CE E3 B5 DEC sched_scan_count
+886A  F0 09    BEQ @idle
+886C  E8       INX
+886D  E0 08    CPX #$08
+886F  D0 EB    BNE @check
+8871  A2 01    LDX #$01
+8873  80 E7    BRA @check
+
+@idle:
+8875  A2 01    LDX #$01
+
+@scan_stale_running:
+8877  BD 3F B0 LDA proc_state,X
+887A  C9 03    CMP #$03
+887C  F0 09    BEQ @stale_running
+887E  E8       INX
+887F  E0 08    CPX #$08
+8881  D0 F4    BNE @scan_stale_running
+8883  A2 00    LDX #$00
+8885  38       SEC
+8886  60       RTS
+
+@stale_running:
+8887  38       SEC
+8888  60       RTS
+
+@found:
+8889  38       SEC
+888A  60       RTS
+
+scheduler_apply_pending_signals:
+888B  A2 01    LDX #$01
+
+@scan:
+888D  8E E4 B5 STX sched_signal_pid
+8890  20 10 8E JSR proc_apply_scheduler_signal
+8893  AE E4 B5 LDX sched_signal_pid
+8896  E8       INX
+8897  E0 08    CPX #$08
+8899  D0 F2    BNE @scan
+889B  60       RTS
+
+sched_switch_context:
+889C  20 49 88 JSR sched_pick_next
+889F  E0 00    CPX #$00
+88A1  D0 03    BNE @not_idle
+88A3  4C 26 89 JMP resume_idle
+
+@not_idle:
+88A6  BD 3F B0 LDA proc_state,X
+88A9  C9 01    CMP #$01
+88AB  D0 03    BNE @resume_existing
+88AD  4C F2 88 JMP start_new
+
+@resume_existing:
+88B0  20 A2 86 JSR proc_set_running
+88B3  BD 47 B0 LDA proc_context,X
+88B6  8D E6 B5 STA sched_handoff_context
+88B9  8E E5 B5 STX sched_handoff_pid
+88BC  BD 63 B0 LDA proc_sp,X
+88BF  8D E7 B5 STA sched_handoff_sp
+88C2  AA       TAX
+88C3  AD E5 B5 LDA sched_handoff_pid
+88C6  8D 3D B0 STA active_pid
+88C9  AD E6 B5 LDA sched_handoff_context
+88CC  8D 96 B0 STA active_context
+88CF  A8       TAY
+
+LOCAL_MACRO_SYMBOL_0001:
+88D0  AD 02 E0 LDA $E002
+88D3  D0 FB    BNE LOCAL_MACRO_SYMBOL_0001
+88D5  8C 03 E0 STY $E003
+88D8  A9 02    LDA #$02
+88DA  8D 02 E0 STA $E002
+
+LOCAL_MACRO_SYMBOL_0000:
+88DD  AD 02 E0 LDA $E002
+88E0  D0 FB    BNE LOCAL_MACRO_SYMBOL_0000
+88E2  9A       TXS
+88E3  BD 04 01 LDA $0104,X
+88E6  29 FB    AND #$FB
+88E8  9D 04 01 STA $0104,X
+88EB  20 78 86 JSR sched_lock_leave
+88EE  7A       PLY
+88EF  FA       PLX
+88F0  68       PLA
+88F1  40       RTI
+
+start_new:
+88F2  20 A2 86 JSR proc_set_running
+88F5  BD 47 B0 LDA proc_context,X
+88F8  8D E6 B5 STA sched_handoff_context
+88FB  8E E5 B5 STX sched_handoff_pid
+88FE  AD E5 B5 LDA sched_handoff_pid
+8901  8D 3D B0 STA active_pid
+8904  AD E6 B5 LDA sched_handoff_context
+8907  8D 96 B0 STA active_context
+890A  A8       TAY
+
+LOCAL_MACRO_SYMBOL_0003:
+890B  AD 02 E0 LDA $E002
+890E  D0 FB    BNE LOCAL_MACRO_SYMBOL_0003
+8910  8C 03 E0 STY $E003
+8913  A9 02    LDA #$02
+8915  8D 02 E0 STA $E002
+
+LOCAL_MACRO_SYMBOL_0002:
+8918  AD 02 E0 LDA $E002
+891B  D0 FB    BNE LOCAL_MACRO_SYMBOL_0002
+891D  A2 FF    LDX #$FF
+891F  9A       TXS
+8920  20 78 86 JSR sched_lock_leave
+8923  4C 41 8A JMP first_run_entry
+
+resume_idle:
+8926  A2 00    LDX #$00
+8928  20 A2 86 JSR proc_set_running
+892B  AD 96 B0 LDA active_context
+892E  F0 1D    BEQ idle_context_ready
+8930  9C 3D B0 STZ active_pid
+8933  9C 96 B0 STZ active_context
+8936  A9 00    LDA #$00
+8938  A8       TAY
+
+LOCAL_MACRO_SYMBOL_0005:
+8939  AD 02 E0 LDA $E002
+893C  D0 FB    BNE LOCAL_MACRO_SYMBOL_0005
+893E  8C 03 E0 STY $E003
+8941  A9 02    LDA #$02
+8943  8D 02 E0 STA $E002
+
+LOCAL_MACRO_SYMBOL_0004:
+8946  AD 02 E0 LDA $E002
+8949  D0 FB    BNE LOCAL_MACRO_SYMBOL_0004
+894B  80 06    BRA idle_stack_ready
+
+idle_context_ready:
+894D  9C 3D B0 STZ active_pid
+8950  9C 96 B0 STZ active_context
+
+idle_stack_ready:
+8953  A2 FF    LDX #$FF
+8955  9A       TXS
+8956  20 78 86 JSR sched_lock_leave
+8959  4C 36 8B JMP idle_loop
+
+sched_context_switch:
+895C  20 69 86 JSR sched_lock_try_enter
+895F  90 03    BCC @irq_lock_acquired
+8961  4C 8B 89 JMP @skip_locked
+
+@irq_lock_acquired:
+8964  AC 3D B0 LDY active_pid
+8967  C0 00    CPY #$00
+8969  F0 11    BEQ @wake_events
+896B  BA       TSX
+896C  8A       TXA
+896D  99 63 B0 STA proc_sp,Y
+8970  B9 3F B0 LDA proc_state,Y
+8973  C9 03    CMP #$03
+8975  D0 05    BNE @wake_events
+8977  98       TYA
+8978  AA       TAX
+8979  20 9D 86 JSR proc_set_ready
+
+@wake_events:
+897C  20 6B 87 JSR sched_update_console_focus
+897F  20 BB 87 JSR scheduler_wake_console_input
+8982  20 03 9C JSR scheduler_wake_timers
+8985  20 8B 88 JSR scheduler_apply_pending_signals
+8988  4C 9C 88 JMP sched_switch_context
+
+@skip_locked:
+898B  4C B4 85 JMP irq_restore
+
+sched_yield:
+898E  78       SEI
+898F  20 69 86 JSR sched_lock_try_enter
+8992  90 03    BCC @yield_lock_acquired
+8994  4C D2 89 JMP @halt
+
+@yield_lock_acquired:
+8997  AC 3D B0 LDY active_pid
+899A  C0 00    CPY #$00
+899C  F0 25    BEQ @entry_done
+899E  08       PHP
+899F  48       PHA
+89A0  DA       PHX
+89A1  5A       PHY
+89A2  BA       TSX
+89A3  BD 04 01 LDA $0104,X
+89A6  29 FB    AND #$FB
+89A8  9D 04 01 STA $0104,X
+89AB  FE 05 01 INC $0105,X
+89AE  D0 03    BNE @pc_adjust_done
+89B0  FE 06 01 INC $0106,X
+
+@pc_adjust_done:
+89B3  8A       TXA
+89B4  99 63 B0 STA proc_sp,Y
+89B7  B9 3F B0 LDA proc_state,Y
+89BA  C9 03    CMP #$03
+89BC  D0 05    BNE @entry_done
+89BE  98       TYA
+89BF  AA       TAX
+89C0  20 9D 86 JSR proc_set_ready
+
+@entry_done:
+89C3  20 6B 87 JSR sched_update_console_focus
+89C6  20 BB 87 JSR scheduler_wake_console_input
+89C9  20 03 9C JSR scheduler_wake_timers
+89CC  20 8B 88 JSR scheduler_apply_pending_signals
+89CF  4C 9C 88 JMP sched_switch_context
+
+@halt:
+89D2  80 FE    BRA @halt
+
+sched_block_current:
+89D4  08       PHP
+89D5  78       SEI
+89D6  8D E0 B5 STA sched_wake_reason_tmp
+89D9  8C E1 B5 STY sched_wake_object_tmp
+89DC  AD E0 B5 LDA sched_wake_reason_tmp
+89DF  C9 04    CMP #$04
+89E1  D0 0B    BNE @discard_entry_p
+89E3  AE E1 B5 LDX sched_wake_object_tmp
+89E6  20 DF 9B JSR timer_commit_current
+89E9  90 03    BCC @discard_entry_p
+89EB  28       PLP
+89EC  18       CLC
+89ED  60       RTS
+
+@discard_entry_p:
+89EE  68       PLA
+89EF  20 69 86 JSR sched_lock_try_enter
+89F2  90 0F    BCC @block_lock_acquired
+89F4  AD E0 B5 LDA sched_wake_reason_tmp
+89F7  C9 04    CMP #$04
+89F9  D0 06    BNE @halt
+89FB  AE E1 B5 LDX sched_wake_object_tmp
+89FE  20 AC 9B JSR timer_free
+
+@halt:
+8A01  80 FE    BRA @halt
+
+@block_lock_acquired:
+8A03  AC 3D B0 LDY active_pid
+8A06  C0 00    CPY #$00
+8A08  F0 28    BEQ @entry_done
+8A0A  18       CLC
+8A0B  08       PHP
+8A0C  A9 00    LDA #$00
+8A0E  48       PHA
+8A0F  DA       PHX
+8A10  5A       PHY
+8A11  BA       TSX
+8A12  BD 04 01 LDA $0104,X
+8A15  29 FB    AND #$FB
+8A17  9D 04 01 STA $0104,X
+8A1A  FE 05 01 INC $0105,X
+8A1D  D0 03    BNE @pc_adjust_done
+8A1F  FE 06 01 INC $0106,X
+
+@pc_adjust_done:
+8A22  8A       TXA
+8A23  99 63 B0 STA proc_sp,Y
+
+@set_wait:
+8A26  AE 3D B0 LDX active_pid
+8A29  AD E0 B5 LDA sched_wake_reason_tmp
+8A2C  AC E1 B5 LDY sched_wake_object_tmp
+8A2F  20 1C 87 JSR proc_set_wait
+
+@entry_done:
+8A32  20 6B 87 JSR sched_update_console_focus
+8A35  20 BB 87 JSR scheduler_wake_console_input
+8A38  20 03 9C JSR scheduler_wake_timers
+8A3B  20 8B 88 JSR scheduler_apply_pending_signals
+8A3E  4C 9C 88 JMP sched_switch_context
+
+first_run_entry:
+8A41  A2 FF    LDX #$FF
+8A43  9A       TXS
+8A44  AE 3D B0 LDX active_pid
+8A47  BD 6B B0 LDA proc_entryL,X
+8A4A  85 A4    STA $A4
+8A4C  BD 73 B0 LDA proc_entryH,X
+8A4F  85 A5    STA $A5
+8A51  BD 47 B0 LDA proc_context,X
+8A54  8D 96 B0 STA active_context
+8A57  D8       CLD
+8A58  58       CLI
+8A59  6C A4 00 JMP (sched_ptr)
+
+supervisor_enter_from_irq:
+8A5C  78       SEI
+8A5D  AC 3D B0 LDY active_pid
+8A60  8C E8 B5 STY supervisor_saved_pid
+8A63  AD 96 B0 LDA active_context
+8A66  8D EA B5 STA supervisor_saved_context
+8A69  BA       TSX
+8A6A  8E E9 B5 STX supervisor_saved_sp
+8A6D  A9 01    LDA #$01
+8A6F  8D EB B5 STA supervisor_saved_return_mode
+8A72  20 69 86 JSR sched_lock_try_enter
+8A75  B0 21    BCS busy_restore_irq
+8A77  20 57 A2 JSR console_monitor_enter
+8A7A  9C 3D B0 STZ active_pid
+8A7D  A9 00    LDA #$00
+8A7F  8D 96 B0 STA active_context
+8A82  A8       TAY
+
+LOCAL_MACRO_SYMBOL_0001:
+8A83  AD 02 E0 LDA $E002
+8A86  D0 FB    BNE LOCAL_MACRO_SYMBOL_0001
+8A88  8C 03 E0 STY $E003
+8A8B  A9 02    LDA #$02
+8A8D  8D 02 E0 STA $E002
+
+LOCAL_MACRO_SYMBOL_0000:
+8A90  AD 02 E0 LDA $E002
+8A93  D0 FB    BNE LOCAL_MACRO_SYMBOL_0000
+8A95  4C 03 D0 JMP LD003
+
+busy_restore_irq:
+8A98  4C B4 85 JMP irq_restore
+
+enter_monitor:
+8A9B  AC 3D B0 LDY active_pid
+8A9E  8C E8 B5 STY supervisor_saved_pid
+8AA1  AD 96 B0 LDA active_context
+8AA4  8D EA B5 STA supervisor_saved_context
+8AA7  BA       TSX
+8AA8  8E E9 B5 STX supervisor_saved_sp
+8AAB  A9 00    LDA #$00
+8AAD  8D EB B5 STA supervisor_saved_return_mode
+8AB0  20 69 86 JSR sched_lock_try_enter
+8AB3  B0 21    BCS busy_rts
+8AB5  20 57 A2 JSR console_monitor_enter
+8AB8  9C 3D B0 STZ active_pid
+8ABB  A9 00    LDA #$00
+8ABD  8D 96 B0 STA active_context
+8AC0  A8       TAY
+
+LOCAL_MACRO_SYMBOL_0003:
+8AC1  AD 02 E0 LDA $E002
+8AC4  D0 FB    BNE LOCAL_MACRO_SYMBOL_0003
+8AC6  8C 03 E0 STY $E003
+8AC9  A9 02    LDA #$02
+8ACB  8D 02 E0 STA $E002
+
+LOCAL_MACRO_SYMBOL_0002:
+8ACE  AD 02 E0 LDA $E002
+8AD1  D0 FB    BNE LOCAL_MACRO_SYMBOL_0002
+8AD3  4C 03 D0 JMP LD003
+
+busy_rts:
+8AD6  60       RTS
+
+leave_monitor:
+8AD7  78       SEI
+8AD8  20 61 A2 JSR console_monitor_exit
+8ADB  AD EB B5 LDA supervisor_saved_return_mode
+8ADE  C9 01    CMP #$01
+8AE0  F0 29    BEQ return_irq
+
+return_rts:
+8AE2  AD E8 B5 LDA supervisor_saved_pid
+8AE5  8D 3D B0 STA active_pid
+8AE8  AD EA B5 LDA supervisor_saved_context
+8AEB  8D 96 B0 STA active_context
+8AEE  A8       TAY
+
+LOCAL_MACRO_SYMBOL_0005:
+8AEF  AD 02 E0 LDA $E002
+8AF2  D0 FB    BNE LOCAL_MACRO_SYMBOL_0005
+8AF4  8C 03 E0 STY $E003
+8AF7  A9 02    LDA #$02
+8AF9  8D 02 E0 STA $E002
+
+LOCAL_MACRO_SYMBOL_0004:
+8AFC  AD 02 E0 LDA $E002
+8AFF  D0 FB    BNE LOCAL_MACRO_SYMBOL_0004
+8B01  AE E9 B5 LDX supervisor_saved_sp
+8B04  9A       TXS
+8B05  20 78 86 JSR sched_lock_leave
+8B08  4C 34 8B JMP resume_rts_from_monitor
+
+return_irq:
+8B0B  AD E8 B5 LDA supervisor_saved_pid
+8B0E  8D 3D B0 STA active_pid
+8B11  AD EA B5 LDA supervisor_saved_context
+8B14  8D 96 B0 STA active_context
+8B17  A8       TAY
+
+LOCAL_MACRO_SYMBOL_0007:
+8B18  AD 02 E0 LDA $E002
+8B1B  D0 FB    BNE LOCAL_MACRO_SYMBOL_0007
+8B1D  8C 03 E0 STY $E003
+8B20  A9 02    LDA #$02
+8B22  8D 02 E0 STA $E002
+
+LOCAL_MACRO_SYMBOL_0006:
+8B25  AD 02 E0 LDA $E002
+8B28  D0 FB    BNE LOCAL_MACRO_SYMBOL_0006
+8B2A  AE E9 B5 LDX supervisor_saved_sp
+8B2D  9A       TXS
+8B2E  20 78 86 JSR sched_lock_leave
+8B31  4C B4 85 JMP irq_restore
+
+resume_rts_from_monitor:
+8B34  58       CLI
+8B35  60       RTS
+
+idle_loop:
+8B36  58       CLI
+
+@idle:
+8B37  20 BA 8D JSR proc_reap_zombies
+8B3A  80 FB    BRA @idle
+
+proc_find_free_pid:
+8B3C  A2 01    LDX #$01
+
+@scan:
+8B3E  BD 3F B0 LDA proc_state,X
+8B41  F0 07    BEQ @found
+8B43  E8       INX
+8B44  E0 08    CPX #$08
+8B46  D0 F6    BNE @scan
+8B48  18       CLC
+8B49  60       RTS
+
+@found:
+8B4A  38       SEC
+8B4B  60       RTS
+
+proc_clear_launch_state:
+8B4C  A9 FF    LDA #$FF
+8B4E  9D 5F B1 STA proc_launch_id,X
+8B51  9E 67 B1 STZ proc_launch_line_len,X
+8B54  60       RTS
+
+proc_alloc_preloaded:
+8B55  18       CLC
+8B56  4C 5D 8B JMP proc_alloc_preloaded_common
+
+proc_alloc_preloaded_unpublished:
+8B59  38       SEC
+8B5A  4C 5D 8B JMP proc_alloc_preloaded_common
+
+proc_alloc_preloaded_common:
+8B5D  8D EC B5 STA proc_alloc_parent_pid
+8B60  8E ED B5 STX proc_alloc_entryL
+8B63  8C EE B5 STY proc_alloc_entryH
+8B66  90 07    BCC @boot_mode
+8B68  A9 01    LDA #$01
+8B6A  8D EF B5 STA proc_alloc_mode
+8B6D  80 03    BRA @allocate
+
+@boot_mode:
+8B6F  9C EF B5 STZ proc_alloc_mode
+
+@allocate:
+8B72  20 3C 8B JSR proc_find_free_pid
+8B75  90 75    BCC @fail
+8B77  20 30 81 JSR ctx_alloc_preloaded_for_pid
+8B7A  B0 70    BCS @fail
+8B7C  9D 47 B0 STA proc_context,X
+8B7F  AD ED B5 LDA proc_alloc_entryL
+8B82  9D 6B B0 STA proc_entryL,X
+8B85  AD EE B5 LDA proc_alloc_entryH
+8B88  9D 73 B0 STA proc_entryH,X
+8B8B  AD EC B5 LDA proc_alloc_parent_pid
+8B8E  9D 83 B0 STA proc_parent_pid,X
+8B91  A9 FF    LDA #$FF
+8B93  9D 63 B0 STA proc_sp,X
+8B96  A9 00    LDA #$00
+8B98  9D 47 B1 STA wait_reason,X
+8B9B  9E 4F B1 STZ wait_object,X
+8B9E  9E 8B B0 STZ proc_signal_pending,X
+8BA1  A9 00    LDA #$00
+8BA3  9D 57 B1 STA proc_exit_code,X
+8BA6  20 4C 8B JSR proc_clear_launch_state
+8BA9  A9 00    LDA #$00
+8BAB  9D 7B B0 STA proc_flags,X
+8BAE  DA       PHX
+8BAF  20 05 82 JSR file_io_gate_acquire
+8BB2  B0 06    BCS @file_gate_acquired
+8BB4  FA       PLX
+8BB5  20 59 81 JSR ctx_free_for_pid
+8BB8  80 32    BRA @fail
+
+@file_gate_acquired:
+8BBA  FA       PLX
+8BBB  AD EF B5 LDA proc_alloc_mode
+8BBE  F0 05    BEQ @init_boot_fds
+8BC0  20 27 92 JSR fd_clear_process_slots
+8BC3  80 03    BRA @fd_initialized
+
+@init_boot_fds:
+8BC5  20 71 92 JSR fd_init_process
+
+@fd_initialized:
+8BC8  B0 14    BCS @fd_fail_release
+8BCA  DA       PHX
+8BCB  20 35 82 JSR file_io_gate_release
+8BCE  90 18    BCC @file_release_fail
+8BD0  FA       PLX
+8BD1  AD EF B5 LDA proc_alloc_mode
+8BD4  D0 05    BNE @return_unpublished
+8BD6  A9 01    LDA #$01
+8BD8  20 99 86 JSR proc_set_state
+
+@return_unpublished:
+8BDB  8A       TXA
+8BDC  18       CLC
+8BDD  60       RTS
+
+@fd_fail_release:
+8BDE  DA       PHX
+8BDF  20 35 82 JSR file_io_gate_release
+8BE2  FA       PLX
+8BE3  20 59 81 JSR ctx_free_for_pid
+8BE6  80 04    BRA @fail
+
+@file_release_fail:
+8BE8  FA       PLX
+8BE9  20 59 81 JSR ctx_free_for_pid
+
+@fail:
+8BEC  38       SEC
+8BED  60       RTS
+
+proc_create:
+8BEE  86 A4    STX $A4
+8BF0  84 A5    STY $A5
+8BF2  20 E8 82 JSR proc_gate_acquire
+8BF5  B0 02    BCS @gate_acquired
+8BF7  38       SEC
+8BF8  60       RTS
+
+@gate_acquired:
+8BF9  A0 00    LDY #$00
+8BFB  B1 A4    LDA ($A4),Y
+8BFD  48       PHA
+8BFE  29 F1    AND #$F1
+8C00  F0 03    BEQ @flags_valid
+8C02  68       PLA
+8C03  80 1F    BRA @fail_release
+
+@flags_valid:
+8C05  A0 02    LDY #$02
+8C07  B1 A4    LDA ($A4),Y
+8C09  AA       TAX
+8C0A  C8       INY
+8C0B  B1 A4    LDA ($A4),Y
+8C0D  A8       TAY
+8C0E  AD 3D B0 LDA active_pid
+8C11  20 55 8B JSR proc_alloc_preloaded
+8C14  B0 0D    BCS @fail_release_drop_flags
+8C16  AA       TAX
+8C17  68       PLA
+8C18  9D 7B B0 STA proc_flags,X
+8C1B  8A       TXA
+8C1C  48       PHA
+8C1D  20 18 83 JSR proc_gate_release
+8C20  68       PLA
+8C21  18       CLC
+8C22  60       RTS
+
+@fail_release_drop_flags:
+8C23  68       PLA
+
+@fail_release:
+8C24  20 18 83 JSR proc_gate_release
+
+@fail:
+8C27  38       SEC
+8C28  60       RTS
+
+proc_close_fds_for_pid:
+8C29  DA       PHX
+8C2A  20 05 82 JSR file_io_gate_acquire
+8C2D  B0 03    BCS @gate_acquired
+8C2F  FA       PLX
+8C30  38       SEC
+8C31  60       RTS
+
+@gate_acquired:
+8C32  FA       PLX
+8C33  DA       PHX
+8C34  20 E5 92 JSR fd_close_process
+8C37  08       PHP
+8C38  48       PHA
+8C39  DA       PHX
+8C3A  5A       PHY
+8C3B  20 35 82 JSR file_io_gate_release
+8C3E  7A       PLY
+8C3F  FA       PLX
+8C40  68       PLA
+8C41  28       PLP
+8C42  FA       PLX
+8C43  60       RTS
+
+proc_exit_lifecycle:
+8C44  E0 00    CPX #$00
+8C46  F0 4E    BEQ @done
+8C48  E0 08    CPX #$08
+8C4A  B0 4A    BCS @done
+8C4C  9D 57 B1 STA proc_exit_code,X
+8C4F  BC 83 B0 LDY proc_parent_pid,X
+8C52  C0 01    CPY #$01
+8C54  90 41    BCC @terminate_now_from_saved
+8C56  C0 08    CPY #$08
+8C58  B0 3D    BCS @terminate_now_from_saved
+8C5A  B9 3F B0 LDA proc_state,Y
+8C5D  C9 00    CMP #$00
+8C5F  F0 36    BEQ @terminate_now_from_saved
+8C61  C9 06    CMP #$06
+8C63  F0 32    BEQ @terminate_now_from_saved
+8C65  20 29 8C JSR proc_close_fds_for_pid
+8C68  B0 2D    BCS @terminate_now_from_saved
+8C6A  A9 00    LDA #$00
+8C6C  9D 47 B1 STA wait_reason,X
+8C6F  9E 4F B1 STZ wait_object,X
+8C72  9E 8B B0 STZ proc_signal_pending,X
+8C75  A9 06    LDA #$06
+8C77  20 99 86 JSR proc_set_state
+8C7A  BC 83 B0 LDY proc_parent_pid,X
+8C7D  B9 3F B0 LDA proc_state,Y
+8C80  C9 04    CMP #$04
+8C82  D0 12    BNE @done
+8C84  B9 47 B1 LDA wait_reason,Y
+8C87  C9 05    CMP #$05
+8C89  D0 0B    BNE @done
+8C8B  8A       TXA
+8C8C  D9 4F B1 CMP wait_object,Y
+8C8F  D0 05    BNE @done
+8C91  98       TYA
+8C92  AA       TAX
+8C93  20 C9 86 JSR proc_wake
+
+@done:
+8C96  60       RTS
+
+@terminate_now_from_saved:
+8C97  BD 57 B1 LDA proc_exit_code,X
+8C9A  4C B8 8C JMP proc_terminate
+
+proc_reap_waited_child:
+8C9D  E0 00    CPX #$00
+8C9F  F0 15    BEQ @fail
+8CA1  E0 08    CPX #$08
+8CA3  B0 11    BCS @fail
+8CA5  BD 3F B0 LDA proc_state,X
+8CA8  C9 06    CMP #$06
+8CAA  D0 0A    BNE @fail
+8CAC  BD 57 B1 LDA proc_exit_code,X
+8CAF  48       PHA
+8CB0  20 B8 8C JSR proc_terminate
+8CB3  68       PLA
+8CB4  18       CLC
+8CB5  60       RTS
+
+@fail:
+8CB6  38       SEC
+8CB7  60       RTS
+
+proc_terminate:
+8CB8  E0 00    CPX #$00
+8CBA  F0 4F    BEQ @done
+8CBC  E0 08    CPX #$08
+8CBE  B0 4B    BCS @done
+8CC0  9D 57 B1 STA proc_exit_code,X
+8CC3  DA       PHX
+8CC4  20 05 82 JSR file_io_gate_acquire
+8CC7  B0 02    BCS @gate_acquired
+8CC9  FA       PLX
+8CCA  60       RTS
+
+@gate_acquired:
+8CCB  FA       PLX
+8CCC  DA       PHX
+8CCD  20 E5 92 JSR fd_close_process
+8CD0  08       PHP
+8CD1  48       PHA
+8CD2  DA       PHX
+8CD3  5A       PHY
+8CD4  20 35 82 JSR file_io_gate_release
+8CD7  7A       PLY
+8CD8  FA       PLX
+8CD9  68       PLA
+8CDA  28       PLP
+8CDB  FA       PLX
+8CDC  A9 00    LDA #$00
+8CDE  9D 47 B1 STA wait_reason,X
+8CE1  9E 4F B1 STZ wait_object,X
+8CE4  9E 8B B0 STZ proc_signal_pending,X
+8CE7  20 4C 8B JSR proc_clear_launch_state
+8CEA  20 59 81 JSR ctx_free_for_pid
+8CED  A9 FF    LDA #$FF
+8CEF  9D 83 B0 STA proc_parent_pid,X
+8CF2  9D 47 B0 STA proc_context,X
+8CF5  9E 63 B0 STZ proc_sp,X
+8CF8  9E 6B B0 STZ proc_entryL,X
+8CFB  9E 73 B0 STZ proc_entryH,X
+8CFE  9E 7B B0 STZ proc_flags,X
+8D01  A9 FF    LDA #$FF
+8D03  9D 83 B0 STA proc_parent_pid,X
+8D06  A9 00    LDA #$00
+8D08  9D 3F B0 STA proc_state,X
+
+@done:
+8D0B  60       RTS
+
+proc_send_signal:
+8D0C  E0 00    CPX #$00
+8D0E  F0 30    BEQ @fail
+8D10  E0 08    CPX #$08
+8D12  B0 2C    BCS @fail
+8D14  BC 3F B0 LDY proc_state,X
+8D17  C0 00    CPY #$00
+8D19  F0 25    BEQ @fail
+8D1B  C0 06    CPY #$06
+8D1D  F0 21    BEQ @fail
+8D1F  C9 09    CMP #$09
+8D21  F0 05    BEQ @kill
+8D23  9D 8B B0 STA proc_signal_pending,X
+8D26  18       CLC
+8D27  60       RTS
+
+@kill:
+8D28  EC 26 B0 CPX file_io_gate_owner
+8D2B  F0 0F    BEQ @busy
+8D2D  EC 32 B0 CPX proc_gate_owner
+8D30  D0 05    BNE @mark_killed
+8D32  EC 3D B0 CPX active_pid
+8D35  D0 05    BNE @busy
+
+@mark_killed:
+8D37  A9 FF    LDA #$FF
+8D39  4C 44 8D JMP proc_mark_zombie
+
+@busy:
+8D3C  A0 0C    LDY #$0C
+8D3E  38       SEC
+8D3F  60       RTS
+
+@fail:
+8D40  A0 06    LDY #$06
+8D42  38       SEC
+8D43  60       RTS
+
+proc_mark_zombie:
+8D44  E0 00    CPX #$00
+8D46  F0 70    BEQ @fail
+8D48  E0 08    CPX #$08
+8D4A  B0 6C    BCS @fail
+8D4C  BC 3F B0 LDY proc_state,X
+8D4F  C0 00    CPY #$00
+8D51  F0 65    BEQ @fail
+8D53  C0 06    CPY #$06
+8D55  F0 5F    BEQ @already_zombie
+8D57  9D 57 B1 STA proc_exit_code,X
+8D5A  9E 8B B0 STZ proc_signal_pending,X
+8D5D  BD 47 B1 LDA wait_reason,X
+8D60  C9 04    CMP #$04
+8D62  F0 11    BEQ @free_timer
+8D64  C9 06    CMP #$06
+8D66  D0 20    BNE @clear_wait
+8D68  BD 4F B1 LDA wait_object,X
+8D6B  C9 00    CMP #$00
+8D6D  F0 11    BEQ @cancel_file_io_wait
+8D6F  C9 01    CMP #$01
+8D71  F0 12    BEQ @cancel_proc_wait
+8D73  80 13    BRA @clear_wait
+
+@free_timer:
+8D75  BD 4F B1 LDA wait_object,X
+8D78  DA       PHX
+8D79  AA       TAX
+8D7A  20 AC 9B JSR timer_free
+8D7D  FA       PLX
+8D7E  80 08    BRA @clear_wait
+
+@cancel_file_io_wait:
+8D80  20 5A 82 JSR file_io_gate_cancel_wait
+8D83  80 03    BRA @clear_wait
+
+@cancel_proc_wait:
+8D85  20 3D 83 JSR proc_gate_cancel_wait
+
+@clear_wait:
+8D88  20 2D 87 JSR proc_clear_wait
+8D8B  A9 06    LDA #$06
+8D8D  20 99 86 JSR proc_set_state
+8D90  BC 83 B0 LDY proc_parent_pid,X
+8D93  C0 01    CPY #$01
+8D95  90 1F    BCC @already_zombie
+8D97  C0 08    CPY #$08
+8D99  B0 1B    BCS @already_zombie
+8D9B  B9 3F B0 LDA proc_state,Y
+8D9E  C9 04    CMP #$04
+8DA0  D0 14    BNE @already_zombie
+8DA2  B9 47 B1 LDA wait_reason,Y
+8DA5  C9 05    CMP #$05
+8DA7  D0 0D    BNE @already_zombie
+8DA9  8A       TXA
+8DAA  D9 4F B1 CMP wait_object,Y
+8DAD  D0 07    BNE @already_zombie
+8DAF  DA       PHX
+8DB0  98       TYA
+8DB1  AA       TAX
+8DB2  20 C9 86 JSR proc_wake
+8DB5  FA       PLX
+
+@already_zombie:
+8DB6  18       CLC
+8DB7  60       RTS
+
+@fail:
+8DB8  38       SEC
+8DB9  60       RTS
+
+proc_reap_zombies:
+8DBA  A2 01    LDX #$01
+
+@scan:
+8DBC  BD 3F B0 LDA proc_state,X
+8DBF  C9 06    CMP #$06
+8DC1  F0 07    BEQ @candidate
+8DC3  E8       INX
+8DC4  E0 08    CPX #$08
+8DC6  D0 F4    BNE @scan
+8DC8  18       CLC
+8DC9  60       RTS
+
+@candidate:
+8DCA  BC 83 B0 LDY proc_parent_pid,X
+8DCD  C0 01    CPY #$01
+8DCF  90 16    BCC @idle_reap_candidate
+8DD1  C0 08    CPY #$08
+8DD3  B0 12    BCS @idle_reap_candidate
+8DD5  B9 3F B0 LDA proc_state,Y
+8DD8  C9 00    CMP #$00
+8DDA  F0 0B    BEQ @idle_reap_candidate
+8DDC  C9 06    CMP #$06
+8DDE  F0 07    BEQ @idle_reap_candidate
+8DE0  E8       INX
+8DE1  E0 08    CPX #$08
+8DE3  D0 D7    BNE @scan
+8DE5  18       CLC
+8DE6  60       RTS
+
+@idle_reap_candidate:
+8DE7  08       PHP
+8DE8  78       SEI
+8DE9  AD 31 B0 LDA proc_gate
+8DEC  0D 25 B0 ORA file_io_gate
+8DEF  D0 1C    BNE @busy
+8DF1  A9 01    LDA #$01
+8DF3  8D 31 B0 STA proc_gate
+8DF6  AD 3D B0 LDA active_pid
+8DF9  8D 32 B0 STA proc_gate_owner
+8DFC  BD 57 B1 LDA proc_exit_code,X
+8DFF  20 B8 8C JSR proc_terminate
+8E02  A9 FF    LDA #$FF
+8E04  8D 32 B0 STA proc_gate_owner
+8E07  9C 31 B0 STZ proc_gate
+8E0A  28       PLP
+8E0B  38       SEC
+8E0C  60       RTS
+
+@busy:
+8E0D  28       PLP
+8E0E  18       CLC
+8E0F  60       RTS
+
+proc_apply_scheduler_signal:
+8E10  BD 8B B0 LDA proc_signal_pending,X
+8E13  F0 0C    BEQ @none
+8E15  C9 13    CMP #$13
+8E17  F0 35    BEQ @halt
+8E19  C9 12    CMP #$12
+8E1B  F0 59    BEQ @cont
+8E1D  C9 02    CMP #$02
+8E1F  F0 02    BEQ @interrupt
+
+@none:
+8E21  18       CLC
+8E22  60       RTS
+
+@interrupt:
+8E23  EC 26 B0 CPX file_io_gate_owner
+8E26  F0 F9    BEQ @none
+8E28  EC 32 B0 CPX proc_gate_owner
+8E2B  F0 F4    BEQ @none
+8E2D  BD 7B B0 LDA proc_flags,X
+8E30  29 08    AND #$08
+8E32  F0 13    BEQ @interrupt_default
+8E34  BD 3F B0 LDA proc_state,X
+8E37  C9 04    CMP #$04
+8E39  D0 E6    BNE @none
+8E3B  BD 47 B1 LDA wait_reason,X
+8E3E  C9 01    CMP #$01
+8E40  D0 DF    BNE @none
+8E42  20 C9 86 JSR proc_wake
+8E45  38       SEC
+8E46  60       RTS
+
+@interrupt_default:
+8E47  A9 FE    LDA #$FE
+8E49  20 44 8D JSR proc_mark_zombie
+8E4C  38       SEC
+8E4D  60       RTS
+
+@halt:
+8E4E  EC 26 B0 CPX file_io_gate_owner
+8E51  F0 CE    BEQ @none
+8E53  EC 32 B0 CPX proc_gate_owner
+8E56  F0 C9    BEQ @none
+8E58  BD 3F B0 LDA proc_state,X
+8E5B  C9 01    CMP #$01
+8E5D  F0 0A    BEQ @halt_runnable
+8E5F  C9 02    CMP #$02
+8E61  F0 06    BEQ @halt_runnable
+8E63  C9 03    CMP #$03
+8E65  F0 02    BEQ @halt_runnable
+8E67  18       CLC
+8E68  60       RTS
+
+@halt_runnable:
+8E69  9E 8B B0 STZ proc_signal_pending,X
+8E6C  20 2D 87 JSR proc_clear_wait
+8E6F  A9 05    LDA #$05
+8E71  20 99 86 JSR proc_set_state
+8E74  38       SEC
+8E75  60       RTS
+
+@cont:
+8E76  BD 3F B0 LDA proc_state,X
+8E79  C9 05    CMP #$05
+8E7B  F0 05    BEQ @cont_stopped
+8E7D  9E 8B B0 STZ proc_signal_pending,X
+8E80  38       SEC
+8E81  60       RTS
+
+@cont_stopped:
+8E82  9E 8B B0 STZ proc_signal_pending,X
+8E85  20 2D 87 JSR proc_clear_wait
+8E88  A9 02    LDA #$02
+8E8A  20 99 86 JSR proc_set_state
+8E8D  38       SEC
+8E8E  60       RTS
+
+fd_calc_pid_offset:
+8E8F  A2 06    LDX #$06
+8E91  20 5D 86 JSR mul8u
+8E94  8D F0 B5 STA fd_mul_lo
+8E97  8E F1 B5 STX fd_mul_hi
+8E9A  60       RTS
+
+fd_alloc_open:
+8E9B  A2 00    LDX #$00
+
+@scan:
+8E9D  E0 10    CPX #$10
+8E9F  F0 0F    BEQ @full
+8EA1  BD F7 B0 LDA open_type,X
+8EA4  D0 07    BNE @next
+8EA6  BD 07 B1 LDA open_refcnt,X
+8EA9  D0 02    BNE @next
+8EAB  18       CLC
+8EAC  60       RTS
+
+@next:
+8EAD  E8       INX
+8EAE  80 ED    BRA @scan
+
+@full:
+8EB0  A0 0D    LDY #$0D
+8EB2  38       SEC
+8EB3  60       RTS
+
+fd_free_open:
+8EB4  9E F7 B0 STZ open_type,X
+8EB7  9E 07 B1 STZ open_refcnt,X
+8EBA  9E 17 B1 STZ open_flags,X
+8EBD  9E 27 B1 STZ open_dev,X
+8EC0  9E 37 B1 STZ open_file_handle,X
+8EC3  18       CLC
+8EC4  60       RTS
+
+fd_init_open:
+8EC5  9D F7 B0 STA open_type,X
+8EC8  98       TYA
+8EC9  9D 17 B1 STA open_flags,X
+8ECC  9E 07 B1 STZ open_refcnt,X
+8ECF  9E 27 B1 STZ open_dev,X
+8ED2  9E 37 B1 STZ open_file_handle,X
+8ED5  18       CLC
+8ED6  60       RTS
+
+fd_attach_current:
+8ED7  8D F5 B5 STA fd_flags_tmp
+8EDA  8A       TXA
+8EDB  AE 3D B0 LDX active_pid
+8EDE  4C 20 90 JMP fd_attach
+
+fd_check_free_pid_fd:
+8EE1  E0 08    CPX #$08
+8EE3  90 04    BCC @pid_ok
+8EE5  A0 06    LDY #$06
+8EE7  38       SEC
+8EE8  60       RTS
+
+@pid_ok:
+8EE9  C0 06    CPY #$06
+8EEB  90 04    BCC @fd_ok
+8EED  A0 09    LDY #$09
+8EEF  38       SEC
+8EF0  60       RTS
+
+@fd_ok:
+8EF1  8E F2 B5 STX fd_pid_tmp
+8EF4  8C F3 B5 STY fd_index_tmp
+8EF7  8A       TXA
+8EF8  20 8F 8E JSR fd_calc_pid_offset
+8EFB  18       CLC
+8EFC  A9 97    LDA #$97
+8EFE  6D F0 B5 ADC fd_mul_lo
+8F01  85 A8    STA $A8
+8F03  A9 B0    LDA #$B0
+8F05  6D F1 B5 ADC fd_mul_hi
+8F08  85 A9    STA $A9
+8F0A  AC F3 B5 LDY fd_index_tmp
+8F0D  B1 A8    LDA ($A8),Y
+8F0F  C9 FF    CMP #$FF
+8F11  F0 04    BEQ @free
+8F13  A0 08    LDY #$08
+8F15  38       SEC
+8F16  60       RTS
+
+@free:
+8F17  AE F2 B5 LDX fd_pid_tmp
+8F1A  AC F3 B5 LDY fd_index_tmp
+8F1D  18       CLC
+8F1E  60       RTS
+
+fd_attach_pid_fd_read:
+8F1F  48       PHA
+8F20  A9 01    LDA #$01
+8F22  8D F5 B5 STA fd_flags_tmp
+8F25  68       PLA
+8F26  4C 33 8F JMP fd_attach_pid_fd_mode
+
+fd_attach_pid_fd_write:
+8F29  48       PHA
+8F2A  A9 02    LDA #$02
+8F2C  8D F5 B5 STA fd_flags_tmp
+8F2F  68       PLA
+8F30  4C 33 8F JMP fd_attach_pid_fd_mode
+
+fd_attach_pid_fd_mode:
+8F33  8D F2 B5 STA fd_pid_tmp
+8F36  8E F4 B5 STX fd_obj_tmp
+8F39  8C F3 B5 STY fd_index_tmp
+8F3C  AE F2 B5 LDX fd_pid_tmp
+8F3F  AC F3 B5 LDY fd_index_tmp
+8F42  20 E1 8E JSR fd_check_free_pid_fd
+8F45  90 02    BCC @free
+8F47  38       SEC
+8F48  60       RTS
+
+@free:
+8F49  AE F2 B5 LDX fd_pid_tmp
+8F4C  AC F3 B5 LDY fd_index_tmp
+8F4F  AD F4 B5 LDA fd_obj_tmp
+8F52  4C 20 90 JMP fd_attach
+
+fd_check_perm:
+8F55  8D F5 B5 STA fd_flags_tmp
+8F58  AD 3D B0 LDA active_pid
+8F5B  20 8F 8E JSR fd_calc_pid_offset
+8F5E  18       CLC
+8F5F  A9 C7    LDA #$C7
+8F61  6D F0 B5 ADC fd_mul_lo
+8F64  85 A8    STA $A8
+8F66  A9 B0    LDA #$B0
+8F68  6D F1 B5 ADC fd_mul_hi
+8F6B  85 A9    STA $A9
+8F6D  AC F3 B5 LDY fd_index_tmp
+8F70  B1 A8    LDA ($A8),Y
+8F72  2D F5 B5 AND fd_flags_tmp
+8F75  D0 04    BNE @allowed
+8F77  A0 09    LDY #$09
+8F79  38       SEC
+8F7A  60       RTS
+
+@allowed:
+8F7B  18       CLC
+8F7C  60       RTS
+
+fd_close_current:
+8F7D  C9 06    CMP #$06
+8F7F  90 04    BCC @fd_ok
+8F81  A0 09    LDY #$09
+8F83  38       SEC
+8F84  60       RTS
+
+@fd_ok:
+8F85  8D F3 B5 STA fd_index_tmp
+8F88  AD 3D B0 LDA active_pid
+8F8B  20 8F 8E JSR fd_calc_pid_offset
+8F8E  18       CLC
+8F8F  A9 97    LDA #$97
+8F91  6D F0 B5 ADC fd_mul_lo
+8F94  85 A8    STA $A8
+8F96  A9 B0    LDA #$B0
+8F98  6D F1 B5 ADC fd_mul_hi
+8F9B  85 A9    STA $A9
+8F9D  AC F3 B5 LDY fd_index_tmp
+8FA0  B1 A8    LDA ($A8),Y
+8FA2  C9 FF    CMP #$FF
+8FA4  D0 04    BNE @is_open
+8FA6  A0 09    LDY #$09
+8FA8  38       SEC
+8FA9  60       RTS
+
+@is_open:
+8FAA  AA       TAX
+8FAB  A9 FF    LDA #$FF
+8FAD  91 A8    STA ($A8),Y
+8FAF  18       CLC
+8FB0  A9 C7    LDA #$C7
+8FB2  6D F0 B5 ADC fd_mul_lo
+8FB5  85 A8    STA $A8
+8FB7  A9 B0    LDA #$B0
+8FB9  6D F1 B5 ADC fd_mul_hi
+8FBC  85 A9    STA $A9
+8FBE  AC F3 B5 LDY fd_index_tmp
+8FC1  A9 00    LDA #$00
+8FC3  91 A8    STA ($A8),Y
+8FC5  BD 07 B1 LDA open_refcnt,X
+8FC8  F0 03    BEQ @ok
+8FCA  DE 07 B1 DEC open_refcnt,X
+
+@ok:
+8FCD  18       CLC
+8FCE  60       RTS
+
+fd_detach_current:
+8FCF  4C 7D 8F JMP fd_close_current
+
+fd_init_tables:
+8FD2  A2 00    LDX #$00
+8FD4  A9 FF    LDA #$FF
+
+@clear_proc_fd_obj:
+8FD6  9D 97 B0 STA proc_fd_obj,X
+8FD9  E8       INX
+8FDA  E0 30    CPX #$30
+8FDC  D0 F8    BNE @clear_proc_fd_obj
+8FDE  A2 00    LDX #$00
+8FE0  A9 00    LDA #$00
+
+@clear_proc_fd_flags:
+8FE2  9D C7 B0 STA proc_fd_flags,X
+8FE5  E8       INX
+8FE6  E0 30    CPX #$30
+8FE8  D0 F8    BNE @clear_proc_fd_flags
+8FEA  A2 00    LDX #$00
+
+@clear_open:
+8FEC  9E F7 B0 STZ open_type,X
+8FEF  9E 07 B1 STZ open_refcnt,X
+8FF2  9E 17 B1 STZ open_flags,X
+8FF5  9E 27 B1 STZ open_dev,X
+8FF8  9E 37 B1 STZ open_file_handle,X
+8FFB  E8       INX
+8FFC  E0 10    CPX #$10
+8FFE  D0 EC    BNE @clear_open
+9000  A9 01    LDA #$01
+9002  8D F7 B0 STA open_type
+9005  A9 01    LDA #$01
+9007  8D 27 B1 STA open_dev
+900A  A9 01    LDA #$01
+900C  8D F8 B0 STA $B0F8
+900F  A9 01    LDA #$01
+9011  8D 28 B1 STA $B128
+9014  A9 01    LDA #$01
+9016  8D F9 B0 STA $B0F9
+9019  A9 01    LDA #$01
+901B  8D 29 B1 STA $B129
+901E  18       CLC
+901F  60       RTS
+
+fd_attach:
+9020  8E F2 B5 STX fd_pid_tmp
+9023  8C F3 B5 STY fd_index_tmp
+9026  8D F4 B5 STA fd_obj_tmp
+9029  AD F2 B5 LDA fd_pid_tmp
+902C  20 8F 8E JSR fd_calc_pid_offset
+902F  18       CLC
+9030  A9 97    LDA #$97
+9032  6D F0 B5 ADC fd_mul_lo
+9035  85 A8    STA $A8
+9037  A9 B0    LDA #$B0
+9039  6D F1 B5 ADC fd_mul_hi
+903C  85 A9    STA $A9
+903E  AC F3 B5 LDY fd_index_tmp
+9041  AD F4 B5 LDA fd_obj_tmp
+9044  91 A8    STA ($A8),Y
+9046  18       CLC
+9047  A9 C7    LDA #$C7
+9049  6D F0 B5 ADC fd_mul_lo
+904C  85 A8    STA $A8
+904E  A9 B0    LDA #$B0
+9050  6D F1 B5 ADC fd_mul_hi
+9053  85 A9    STA $A9
+9055  AC F3 B5 LDY fd_index_tmp
+9058  AD F5 B5 LDA fd_flags_tmp
+905B  91 A8    STA ($A8),Y
+905D  AE F4 B5 LDX fd_obj_tmp
+9060  FE 07 B1 INC open_refcnt,X
+9063  AE F2 B5 LDX fd_pid_tmp
+9066  AC F3 B5 LDY fd_index_tmp
+9069  AD F4 B5 LDA fd_obj_tmp
+906C  18       CLC
+906D  60       RTS
+
+fd_lookup:
+906E  C9 06    CMP #$06
+9070  90 04    BCC @fd_ok
+9072  A0 09    LDY #$09
+9074  38       SEC
+9075  60       RTS
+
+@fd_ok:
+9076  8D F3 B5 STA fd_index_tmp
+9079  AD 3D B0 LDA active_pid
+907C  20 8F 8E JSR fd_calc_pid_offset
+907F  18       CLC
+9080  A9 97    LDA #$97
+9082  6D F0 B5 ADC fd_mul_lo
+9085  85 A8    STA $A8
+9087  A9 B0    LDA #$B0
+9089  6D F1 B5 ADC fd_mul_hi
+908C  85 A9    STA $A9
+908E  AC F3 B5 LDY fd_index_tmp
+9091  B1 A8    LDA ($A8),Y
+9093  C9 FF    CMP #$FF
+9095  D0 04    BNE @obj_ok
+9097  A0 09    LDY #$09
+9099  38       SEC
+909A  60       RTS
+
+@obj_ok:
+909B  AA       TAX
+909C  18       CLC
+909D  60       RTS
+
+fd_clone_between:
+909E  86 A4    STX $A4
+90A0  84 A5    STY $A5
+90A2  A0 00    LDY #$00
+90A4  B1 A4    LDA ($A4),Y
+90A6  8D F8 B5 STA fd_clone_source_pid
+90A9  A0 01    LDY #$01
+90AB  B1 A4    LDA ($A4),Y
+90AD  8D F9 B5 STA fd_clone_source_fd
+90B0  A0 02    LDY #$02
+90B2  B1 A4    LDA ($A4),Y
+90B4  8D FA B5 STA fd_clone_target_pid
+90B7  A0 03    LDY #$03
+90B9  B1 A4    LDA ($A4),Y
+90BB  8D FB B5 STA fd_clone_target_fd
+90BE  AD F8 B5 LDA fd_clone_source_pid
+90C1  C9 08    CMP #$08
+90C3  90 04    BCC @source_pid_ok
+90C5  A0 06    LDY #$06
+90C7  38       SEC
+90C8  60       RTS
+
+@source_pid_ok:
+90C9  AD FA B5 LDA fd_clone_target_pid
+90CC  C9 08    CMP #$08
+90CE  90 04    BCC @target_pid_ok
+90D0  A0 06    LDY #$06
+90D2  38       SEC
+90D3  60       RTS
+
+@target_pid_ok:
+90D4  AD F9 B5 LDA fd_clone_source_fd
+90D7  C9 06    CMP #$06
+90D9  90 04    BCC @source_fd_ok
+90DB  A0 09    LDY #$09
+90DD  38       SEC
+90DE  60       RTS
+
+@source_fd_ok:
+90DF  AD FB B5 LDA fd_clone_target_fd
+90E2  C9 06    CMP #$06
+90E4  90 04    BCC @target_fd_ok
+90E6  A0 09    LDY #$09
+90E8  38       SEC
+90E9  60       RTS
+
+@target_fd_ok:
+90EA  AD F8 B5 LDA fd_clone_source_pid
+90ED  CD FA B5 CMP fd_clone_target_pid
+90F0  D0 0A    BNE @resolve_source
+90F2  AD F9 B5 LDA fd_clone_source_fd
+90F5  CD FB B5 CMP fd_clone_target_fd
+90F8  D0 02    BNE @resolve_source
+90FA  18       CLC
+90FB  60       RTS
+
+@resolve_source:
+90FC  AD F8 B5 LDA fd_clone_source_pid
+90FF  20 8F 8E JSR fd_calc_pid_offset
+9102  18       CLC
+9103  A9 97    LDA #$97
+9105  6D F0 B5 ADC fd_mul_lo
+9108  85 A8    STA $A8
+910A  A9 B0    LDA #$B0
+910C  6D F1 B5 ADC fd_mul_hi
+910F  85 A9    STA $A9
+9111  AC F9 B5 LDY fd_clone_source_fd
+9114  B1 A8    LDA ($A8),Y
+9116  C9 FF    CMP #$FF
+9118  D0 04    BNE @source_open
+911A  A0 09    LDY #$09
+911C  38       SEC
+911D  60       RTS
+
+@source_open:
+911E  8D F4 B5 STA fd_obj_tmp
+9121  18       CLC
+9122  A9 C7    LDA #$C7
+9124  6D F0 B5 ADC fd_mul_lo
+9127  85 A8    STA $A8
+9129  A9 B0    LDA #$B0
+912B  6D F1 B5 ADC fd_mul_hi
+912E  85 A9    STA $A9
+9130  AC F9 B5 LDY fd_clone_source_fd
+9133  B1 A8    LDA ($A8),Y
+9135  8D F5 B5 STA fd_flags_tmp
+9138  AE FA B5 LDX fd_clone_target_pid
+913B  AD FB B5 LDA fd_clone_target_fd
+913E  20 56 91 JSR fd_close_pid
+9141  90 06    BCC @target_closed_ok
+9143  C0 09    CPY #$09
+9145  F0 02    BEQ @target_closed_ok
+9147  38       SEC
+9148  60       RTS
+
+@target_closed_ok:
+9149  AE FA B5 LDX fd_clone_target_pid
+914C  AC FB B5 LDY fd_clone_target_fd
+914F  AD F4 B5 LDA fd_obj_tmp
+9152  20 20 90 JSR fd_attach
+9155  60       RTS
+
+fd_close_pid:
+9156  E0 08    CPX #$08
+9158  90 04    BCC @pid_ok
+915A  A0 06    LDY #$06
+915C  38       SEC
+915D  60       RTS
+
+@pid_ok:
+915E  C9 06    CMP #$06
+9160  90 04    BCC @fd_ok
+9162  A0 09    LDY #$09
+9164  38       SEC
+9165  60       RTS
+
+@fd_ok:
+9166  48       PHA
+9167  68       PLA
+9168  8E F2 B5 STX fd_pid_tmp
+916B  8D F3 B5 STA fd_index_tmp
+916E  AD F2 B5 LDA fd_pid_tmp
+9171  20 8F 8E JSR fd_calc_pid_offset
+9174  18       CLC
+9175  A9 97    LDA #$97
+9177  6D F0 B5 ADC fd_mul_lo
+917A  85 A8    STA $A8
+917C  A9 B0    LDA #$B0
+917E  6D F1 B5 ADC fd_mul_hi
+9181  85 A9    STA $A9
+9183  AC F3 B5 LDY fd_index_tmp
+9186  B1 A8    LDA ($A8),Y
+9188  C9 FF    CMP #$FF
+918A  D0 04    BNE @is_open
+918C  A0 09    LDY #$09
+918E  38       SEC
+918F  60       RTS
+
+@is_open:
+9190  AA       TAX
+9191  A9 FF    LDA #$FF
+9193  91 A8    STA ($A8),Y
+9195  18       CLC
+9196  A9 C7    LDA #$C7
+9198  6D F0 B5 ADC fd_mul_lo
+919B  85 A8    STA $A8
+919D  A9 B0    LDA #$B0
+919F  6D F1 B5 ADC fd_mul_hi
+91A2  85 A9    STA $A9
+91A4  AC F3 B5 LDY fd_index_tmp
+91A7  A9 00    LDA #$00
+91A9  91 A8    STA ($A8),Y
+91AB  BD 07 B1 LDA open_refcnt,X
+91AE  F0 47    BEQ @done
+91B0  DE 07 B1 DEC open_refcnt,X
+91B3  BD 07 B1 LDA open_refcnt,X
+91B6  D0 3F    BNE @done
+91B8  BD F7 B0 LDA open_type,X
+91BB  C9 03    CMP #$03
+91BD  F0 11    BEQ @close_pipe
+91BF  C9 01    CMP #$01
+91C1  F0 39    BEQ @close_device
+91C3  C9 02    CMP #$02
+91C5  F0 14    BEQ @close_file
+91C7  C9 04    CMP #$04
+91C9  F0 14    BEQ @close_dir
+91CB  20 B4 8E JSR fd_free_open
+91CE  80 27    BRA @done
+
+@close_pipe:
+91D0  DA       PHX
+91D1  8A       TXA
+91D2  20 1D 9A JSR pipe_close_endpoint
+91D5  FA       PLX
+91D6  20 B4 8E JSR fd_free_open
+91D9  80 1C    BRA @done
+
+@close_file:
+91DB  A9 04    LDA #$04
+91DD  80 02    BRA @close_rp_object
+
+@close_dir:
+91DF  A9 0E    LDA #$0E
+
+@close_rp_object:
+91E1  DA       PHX
+91E2  48       PHA
+91E3  BD 37 B1 LDA open_file_handle,X
+91E6  AA       TAX
+91E7  64 A2    STZ $A2
+91E9  64 A3    STZ $A3
+91EB  68       PLA
+91EC  A0 00    LDY #$00
+91EE  20 29 A3 JSR rp_fs_exec
+91F1  FA       PLX
+91F2  20 B4 8E JSR fd_free_open
+91F5  80 00    BRA @done
+
+@done:
+91F7  A9 00    LDA #$00
+91F9  AA       TAX
+91FA  18       CLC
+91FB  60       RTS
+
+@close_device:
+91FC  A9 06    LDA #$06
+91FE  20 16 A2 JSR dev_resolve_op
+9201  90 05    BCC @close_op_ok
+9203  A9 00    LDA #$00
+9205  AA       TAX
+9206  18       CLC
+9207  60       RTS
+
+@close_op_ok:
+9208  A5 A6    LDA $A6
+920A  F0 0B    BEQ @target_low_zero
+920C  A5 A7    LDA $A7
+920E  48       PHA
+920F  A5 A6    LDA $A6
+9211  38       SEC
+9212  E9 01    SBC #$01
+9214  48       PHA
+9215  80 09    BRA @target_ready
+
+@target_low_zero:
+9217  A5 A7    LDA $A7
+9219  38       SEC
+921A  E9 01    SBC #$01
+921C  48       PHA
+921D  A9 FF    LDA #$FF
+921F  48       PHA
+
+@target_ready:
+9220  60       RTS
+
+fd_close:
+9221  AE 3D B0 LDX active_pid
+9224  4C 56 91 JMP fd_close_pid
+
+fd_clear_process_slots:
+9227  E0 08    CPX #$08
+9229  90 04    BCC @pid_ok
+922B  A0 06    LDY #$06
+922D  38       SEC
+922E  60       RTS
+
+@pid_ok:
+922F  8E F2 B5 STX fd_pid_tmp
+9232  AD F2 B5 LDA fd_pid_tmp
+9235  20 8F 8E JSR fd_calc_pid_offset
+9238  18       CLC
+9239  A9 97    LDA #$97
+923B  6D F0 B5 ADC fd_mul_lo
+923E  85 A8    STA $A8
+9240  A9 B0    LDA #$B0
+9242  6D F1 B5 ADC fd_mul_hi
+9245  85 A9    STA $A9
+9247  A0 00    LDY #$00
+9249  A9 FF    LDA #$FF
+
+@clear_obj:
+924B  91 A8    STA ($A8),Y
+924D  C8       INY
+924E  C0 06    CPY #$06
+9250  D0 F9    BNE @clear_obj
+9252  18       CLC
+9253  A9 C7    LDA #$C7
+9255  6D F0 B5 ADC fd_mul_lo
+9258  85 A8    STA $A8
+925A  A9 B0    LDA #$B0
+925C  6D F1 B5 ADC fd_mul_hi
+925F  85 A9    STA $A9
+9261  A0 00    LDY #$00
+9263  A9 00    LDA #$00
+
+@clear_flags:
+9265  91 A8    STA ($A8),Y
+9267  C8       INY
+9268  C0 06    CPY #$06
+926A  D0 F9    BNE @clear_flags
+926C  AE F2 B5 LDX fd_pid_tmp
+926F  18       CLC
+9270  60       RTS
+
+fd_init_process:
+9271  E0 08    CPX #$08
+9273  90 04    BCC @pid_ok
+9275  A0 06    LDY #$06
+9277  38       SEC
+9278  60       RTS
+
+@pid_ok:
+9279  8E F2 B5 STX fd_pid_tmp
+927C  AD F2 B5 LDA fd_pid_tmp
+927F  20 8F 8E JSR fd_calc_pid_offset
+9282  18       CLC
+9283  A9 97    LDA #$97
+9285  6D F0 B5 ADC fd_mul_lo
+9288  85 A8    STA $A8
+928A  A9 B0    LDA #$B0
+928C  6D F1 B5 ADC fd_mul_hi
+928F  85 A9    STA $A9
+9291  A0 00    LDY #$00
+9293  A9 FF    LDA #$FF
+
+@clear_obj:
+9295  91 A8    STA ($A8),Y
+9297  C8       INY
+9298  C0 06    CPY #$06
+929A  D0 F9    BNE @clear_obj
+929C  18       CLC
+929D  A9 C7    LDA #$C7
+929F  6D F0 B5 ADC fd_mul_lo
+92A2  85 A8    STA $A8
+92A4  A9 B0    LDA #$B0
+92A6  6D F1 B5 ADC fd_mul_hi
+92A9  85 A9    STA $A9
+92AB  A0 00    LDY #$00
+92AD  A9 00    LDA #$00
+
+@clear_flags:
+92AF  91 A8    STA ($A8),Y
+92B1  C8       INY
+92B2  C0 06    CPY #$06
+92B4  D0 F9    BNE @clear_flags
+92B6  AE F2 B5 LDX fd_pid_tmp
+92B9  A9 01    LDA #$01
+92BB  8D F5 B5 STA fd_flags_tmp
+92BE  A0 00    LDY #$00
+92C0  A9 00    LDA #$00
+92C2  20 20 90 JSR fd_attach
+92C5  AE F2 B5 LDX fd_pid_tmp
+92C8  A9 02    LDA #$02
+92CA  8D F5 B5 STA fd_flags_tmp
+92CD  A0 01    LDY #$01
+92CF  A9 01    LDA #$01
+92D1  20 20 90 JSR fd_attach
+92D4  AE F2 B5 LDX fd_pid_tmp
+92D7  A9 02    LDA #$02
+92D9  8D F5 B5 STA fd_flags_tmp
+92DC  A0 02    LDY #$02
+92DE  A9 02    LDA #$02
+92E0  20 20 90 JSR fd_attach
+92E3  18       CLC
+92E4  60       RTS
+
+fd_close_process:
+92E5  E0 08    CPX #$08
+92E7  90 04    BCC @pid_ok
+92E9  A0 06    LDY #$06
+92EB  38       SEC
+92EC  60       RTS
+
+@pid_ok:
+92ED  8E F6 B5 STX fd_closeproc_pid
+92F0  9C F7 B5 STZ fd_closeproc_fd
+
+@loop:
+92F3  AD F7 B5 LDA fd_closeproc_fd
+92F6  C9 06    CMP #$06
+92F8  F0 16    BEQ @done
+92FA  AE F6 B5 LDX fd_closeproc_pid
+92FD  AD F7 B5 LDA fd_closeproc_fd
+9300  20 56 91 JSR fd_close_pid
+9303  90 06    BCC @next
+9305  C0 09    CPY #$09
+9307  F0 02    BEQ @next
+9309  38       SEC
+930A  60       RTS
+
+@next:
+930B  EE F7 B5 INC fd_closeproc_fd
+930E  80 E3    BRA @loop
+
+@done:
+9310  18       CLC
+9311  60       RTS
+
+fd_tail_call_device:
+9312  FA       PLX
+9313  68       PLA
+9314  A8       TAY
+9315  A5 A6    LDA $A6
+9317  F0 0B    BEQ @target_low_zero
+
+@target_low_nonzero:
+9319  A5 A7    LDA $A7
+931B  48       PHA
+931C  A5 A6    LDA $A6
+931E  38       SEC
+931F  E9 01    SBC #$01
+9321  48       PHA
+9322  80 09    BRA @target_ready
+
+@target_low_zero:
+9324  A5 A7    LDA $A7
+9326  38       SEC
+9327  E9 01    SBC #$01
+9329  48       PHA
+932A  A9 FF    LDA #$FF
+932C  48       PHA
+
+@target_ready:
+932D  98       TYA
+932E  60       RTS
+
+fd_resolve_read:
+932F  A9 01    LDA #$01
+9331  80 02    BRA fd_resolve_rw
+
+fd_resolve_write:
+9333  A9 02    LDA #$02
+
+fd_resolve_rw:
+9335  8D F5 B5 STA fd_flags_tmp
+9338  98       TYA
+9339  20 6E 90 JSR fd_lookup
+933C  90 02    BCC @fd_ok
+933E  38       SEC
+933F  60       RTS
+
+@fd_ok:
+9340  DA       PHX
+9341  AD F5 B5 LDA fd_flags_tmp
+9344  20 55 8F JSR fd_check_perm
+9347  90 03    BCC @perm_ok
+9349  FA       PLX
+934A  38       SEC
+934B  60       RTS
+
+@perm_ok:
+934C  FA       PLX
+934D  BD F7 B0 LDA open_type,X
+9350  48       PHA
+9351  BD 27 B1 LDA open_dev,X
+9354  A8       TAY
+9355  68       PLA
+9356  18       CLC
+9357  60       RTS
+
+fd_resolve_file:
+9358  98       TYA
+9359  20 6E 90 JSR fd_lookup
+935C  90 02    BCC @fd_ok
+935E  38       SEC
+935F  60       RTS
+
+@fd_ok:
+9360  BD F7 B0 LDA open_type,X
+9363  C9 02    CMP #$02
+9365  F0 04    BEQ @file_ok
+9367  A0 0A    LDY #$0A
+9369  38       SEC
+936A  60       RTS
+
+@file_ok:
+936B  BD 37 B1 LDA open_file_handle,X
+936E  18       CLC
+936F  60       RTS
+
+fd_resolve_dir:
+9370  98       TYA
+9371  20 6E 90 JSR fd_lookup
+9374  90 02    BCC @fd_ok
+9376  38       SEC
+9377  60       RTS
+
+@fd_ok:
+9378  BD F7 B0 LDA open_type,X
+937B  C9 04    CMP #$04
+937D  F0 04    BEQ @dir_ok
+937F  A0 0A    LDY #$0A
+9381  38       SEC
+9382  60       RTS
+
+@dir_ok:
+9383  BD 37 B1 LDA open_file_handle,X
+9386  18       CLC
+9387  60       RTS
+
+fd_read:
+9388  48       PHA
+9389  DA       PHX
+938A  98       TYA
+938B  20 6E 90 JSR fd_lookup
+938E  90 04    BCC @fd_ok
+9390  FA       PLX
+9391  68       PLA
+9392  38       SEC
+9393  60       RTS
+
+@fd_ok:
+9394  DA       PHX
+9395  A9 01    LDA #$01
+9397  20 55 8F JSR fd_check_perm
+939A  90 05    BCC @perm_ok
+939C  FA       PLX
+939D  FA       PLX
+939E  68       PLA
+939F  38       SEC
+93A0  60       RTS
+
+@perm_ok:
+93A1  FA       PLX
+93A2  BD F7 B0 LDA open_type,X
+93A5  C9 03    CMP #$03
+93A7  F0 0A    BEQ @pipe_ok
+93A9  C9 01    CMP #$01
+93AB  F0 17    BEQ @device_ok
+93AD  FA       PLX
+93AE  68       PLA
+93AF  A0 0A    LDY #$0A
+93B1  38       SEC
+93B2  60       RTS
+
+@pipe_ok:
+93B3  8A       TXA
+93B4  48       PHA
+93B5  A5 A2    LDA $A2
+93B7  85 AA    STA $AA
+93B9  A5 A3    LDA $A3
+93BB  85 AB    STA $AB
+93BD  68       PLA
+93BE  A8       TAY
+93BF  FA       PLX
+93C0  68       PLA
+93C1  4C 82 9A JMP pipe_read
+
+@device_ok:
+93C4  A9 00    LDA #$00
+93C6  20 16 A2 JSR dev_resolve_op
+93C9  90 04    BCC @op_ok
+93CB  FA       PLX
+93CC  68       PLA
+93CD  38       SEC
+93CE  60       RTS
+
+@op_ok:
+93CF  4C 12 93 JMP fd_tail_call_device
+
+fd_write:
+93D2  48       PHA
+93D3  DA       PHX
+93D4  98       TYA
+93D5  20 6E 90 JSR fd_lookup
+93D8  90 04    BCC @fd_ok
+93DA  FA       PLX
+93DB  68       PLA
+93DC  38       SEC
+93DD  60       RTS
+
+@fd_ok:
+93DE  DA       PHX
+93DF  A9 02    LDA #$02
+93E1  20 55 8F JSR fd_check_perm
+93E4  90 05    BCC @perm_ok
+93E6  FA       PLX
+93E7  FA       PLX
+93E8  68       PLA
+93E9  38       SEC
+93EA  60       RTS
+
+@perm_ok:
+93EB  FA       PLX
+93EC  BD F7 B0 LDA open_type,X
+93EF  C9 03    CMP #$03
+93F1  F0 0A    BEQ @pipe_ok
+93F3  C9 01    CMP #$01
+93F5  F0 17    BEQ @device_ok
+93F7  FA       PLX
+93F8  68       PLA
+93F9  A0 0A    LDY #$0A
+93FB  38       SEC
+93FC  60       RTS
+
+@pipe_ok:
+93FD  8A       TXA
+93FE  48       PHA
+93FF  A5 A2    LDA $A2
+9401  85 AA    STA $AA
+9403  A5 A3    LDA $A3
+9405  85 AB    STA $AB
+9407  68       PLA
+9408  A8       TAY
+9409  FA       PLX
+940A  68       PLA
+940B  4C 00 9B JMP pipe_write
+
+@device_ok:
+940E  A9 02    LDA #$02
+9410  20 16 A2 JSR dev_resolve_op
+9413  90 04    BCC @op_ok
+9415  FA       PLX
+9416  68       PLA
+9417  38       SEC
+9418  60       RTS
+
+@op_ok:
+9419  4C 12 93 JMP fd_tail_call_device
+
+fd_get_flags_current:
+941C  AD 3D B0 LDA active_pid
+941F  20 8F 8E JSR fd_calc_pid_offset
+9422  18       CLC
+9423  A9 C7    LDA #$C7
+9425  6D F0 B5 ADC fd_mul_lo
+9428  85 A8    STA $A8
+942A  A9 B0    LDA #$B0
+942C  6D F1 B5 ADC fd_mul_hi
+942F  85 A9    STA $A9
+9431  AC F3 B5 LDY fd_index_tmp
+9434  B1 A8    LDA ($A8),Y
+9436  60       RTS
+
+fd_find_free_current:
+9437  AD 3D B0 LDA active_pid
+943A  20 8F 8E JSR fd_calc_pid_offset
+943D  18       CLC
+943E  A9 97    LDA #$97
+9440  6D F0 B5 ADC fd_mul_lo
+9443  85 A8    STA $A8
+9445  A9 B0    LDA #$B0
+9447  6D F1 B5 ADC fd_mul_hi
+944A  85 A9    STA $A9
+944C  A0 00    LDY #$00
+
+@scan:
+944E  C0 06    CPY #$06
+9450  F0 0B    BEQ @full
+9452  B1 A8    LDA ($A8),Y
+9454  C9 FF    CMP #$FF
+9456  F0 03    BEQ @found
+9458  C8       INY
+9459  80 F3    BRA @scan
+
+@found:
+945B  18       CLC
+945C  60       RTS
+
+@full:
+945D  A0 08    LDY #$08
+945F  38       SEC
+9460  60       RTS
+
+fd_alloc_fd_current:
+9461  4C 37 94 JMP fd_find_free_current
+
+fd_dup:
+9464  48       PHA
+9465  68       PLA
+9466  20 6E 90 JSR fd_lookup
+9469  90 02    BCC @old_ok
+946B  38       SEC
+946C  60       RTS
+
+@old_ok:
+946D  DA       PHX
+946E  20 1C 94 JSR fd_get_flags_current
+9471  8D F5 B5 STA fd_flags_tmp
+9474  20 37 94 JSR fd_find_free_current
+9477  90 03    BCC @slot_ok
+9479  FA       PLX
+947A  38       SEC
+947B  60       RTS
+
+@slot_ok:
+947C  5A       PHY
+947D  7A       PLY
+947E  FA       PLX
+947F  8A       TXA
+9480  AE 3D B0 LDX active_pid
+9483  5A       PHY
+9484  20 20 90 JSR fd_attach
+9487  7A       PLY
+9488  98       TYA
+9489  A2 00    LDX #$00
+948B  18       CLC
+948C  60       RTS
+
+fd_dup2:
+948D  C0 06    CPY #$06
+948F  90 04    BCC @newfd_ok
+9491  A0 09    LDY #$09
+9493  38       SEC
+9494  60       RTS
+
+@newfd_ok:
+9495  48       PHA
+9496  5A       PHY
+9497  7A       PLY
+9498  68       PLA
+9499  5A       PHY
+949A  20 6E 90 JSR fd_lookup
+949D  90 03    BCC @old_ok
+949F  68       PLA
+94A0  38       SEC
+94A1  60       RTS
+
+@old_ok:
+94A2  7A       PLY
+94A3  CC F3 B5 CPY fd_index_tmp
+94A6  D0 05    BNE @different
+94A8  98       TYA
+94A9  A2 00    LDX #$00
+94AB  18       CLC
+94AC  60       RTS
+
+@different:
+94AD  DA       PHX
+94AE  5A       PHY
+94AF  20 1C 94 JSR fd_get_flags_current
+94B2  8D F5 B5 STA fd_flags_tmp
+94B5  7A       PLY
+94B6  5A       PHY
+94B7  98       TYA
+94B8  20 7D 8F JSR fd_close_current
+94BB  90 08    BCC @target_closed_ok
+94BD  C0 09    CPY #$09
+94BF  F0 04    BEQ @target_closed_ok
+94C1  7A       PLY
+94C2  FA       PLX
+94C3  38       SEC
+94C4  60       RTS
+
+@target_closed_ok:
+94C5  7A       PLY
+94C6  FA       PLX
+94C7  8A       TXA
+94C8  AE 3D B0 LDX active_pid
+94CB  5A       PHY
+94CC  20 20 90 JSR fd_attach
+94CF  7A       PLY
+94D0  98       TYA
+94D1  A2 00    LDX #$00
+94D3  18       CLC
+94D4  60       RTS
+
+spawn_set_launch_line_dev_ptr:
+94D5  8A       TXA
+94D6  A2 40    LDX #$40
+94D8  20 5D 86 JSR mul8u
+94DB  18       CLC
+94DC  69 6F    ADC #$6F
+94DE  85 A6    STA $A6
+94E0  8A       TXA
+94E1  69 B1    ADC #$B1
+94E3  85 A7    STA $A7
+94E5  60       RTS
+
+spawn_copy_parent_to_launch_line:
+94E6  A0 00    LDY #$00
+
+@loop:
+94E8  CC 88 02 CPY spawn_line_len
+94EB  F0 07    BEQ @terminate
+94ED  B1 A2    LDA ($A2),Y
+94EF  91 A6    STA ($A6),Y
+94F1  C8       INY
+94F2  80 F4    BRA @loop
+
+@terminate:
+94F4  A9 00    LDA #$00
+94F6  91 A6    STA ($A6),Y
+94F8  18       CLC
+94F9  60       RTS
+
+spawn_copy_launch_line_to_child:
+94FA  A0 00    LDY #$00
+
+@loop:
+94FC  CC 88 02 CPY spawn_line_len
+94FF  F0 07    BEQ @terminate
+9501  B1 A6    LDA ($A6),Y
+9503  91 A2    STA ($A2),Y
+9505  C8       INY
+9506  80 F4    BRA @loop
+
+@terminate:
+9508  A9 00    LDA #$00
+950A  91 A2    STA ($A2),Y
+950C  18       CLC
+950D  60       RTS
+
+spawn_clone_mapped_fd_locked:
+950E  C9 FF    CMP #$FF
+9510  F0 19    BEQ @closed
+9512  8D 90 02 STA $0290
+9515  8C 92 02 STY $0292
+9518  AD 3D B0 LDA active_pid
+951B  8D 8F 02 STA spawn_fd_clone_args
+951E  AD 84 02 LDA spawn_child_pid
+9521  8D 91 02 STA $0291
+9524  A2 8F    LDX #$8F
+9526  A0 02    LDY #$02
+9528  4C 9E 90 JMP fd_clone_between
+
+@closed:
+952B  18       CLC
+952C  60       RTS
+
+spawn_validate_mapped_fd:
+952D  C9 FF    CMP #$FF
+952F  F0 08    BEQ @ok
+9531  C9 06    CMP #$06
+9533  90 04    BCC @ok
+9535  A0 09    LDY #$09
+9537  38       SEC
+9538  60       RTS
+
+@ok:
+9539  18       CLC
+953A  60       RTS
+
+spawn_clear_process_slot_locked:
+953B  AE 84 02 LDX spawn_child_pid
+953E  20 59 81 JSR ctx_free_for_pid
+9541  AE 84 02 LDX spawn_child_pid
+9544  A9 00    LDA #$00
+9546  9D 47 B1 STA wait_reason,X
+9549  9E 4F B1 STZ wait_object,X
+954C  9E 8B B0 STZ proc_signal_pending,X
+954F  A9 00    LDA #$00
+9551  9D 57 B1 STA proc_exit_code,X
+9554  A9 FF    LDA #$FF
+9556  9D 83 B0 STA proc_parent_pid,X
+9559  9D 47 B0 STA proc_context,X
+955C  9E 63 B0 STZ proc_sp,X
+955F  9E 6B B0 STZ proc_entryL,X
+9562  9E 73 B0 STZ proc_entryH,X
+9565  9E 7B B0 STZ proc_flags,X
+9568  20 4C 8B JSR proc_clear_launch_state
+956B  A9 00    LDA #$00
+956D  20 99 86 JSR proc_set_state
+9570  18       CLC
+9571  60       RTS
+
+spawn_rollback_child_locked:
+9572  AE 84 02 LDX spawn_child_pid
+9575  20 E5 92 JSR fd_close_process
+9578  4C 3B 95 JMP spawn_clear_process_slot_locked
+
+spawn_release_proc_success:
+957B  20 18 83 JSR proc_gate_release
+957E  B0 04    BCS @ok
+9580  A0 0C    LDY #$0C
+9582  38       SEC
+9583  60       RTS
+
+@ok:
+9584  18       CLC
+9585  60       RTS
+
+spawn_release_proc_error:
+9586  8C 8E 02 STY spawn_errno
+9589  20 18 83 JSR proc_gate_release
+958C  AC 8E 02 LDY spawn_errno
+958F  38       SEC
+9590  60       RTS
+
+spawn_release_both_success:
+9591  9C 8E 02 STZ spawn_errno
+9594  20 35 82 JSR file_io_gate_release
+9597  B0 05    BCS L959E
+9599  A9 0C    LDA #$0C
+959B  8D 8E 02 STA spawn_errno
+
+L959E:
+959E  20 18 83 JSR proc_gate_release
+95A1  B0 05    BCS L95A8
+95A3  A9 0C    LDA #$0C
+95A5  8D 8E 02 STA spawn_errno
+
+L95A8:
+95A8  AD 8E 02 LDA spawn_errno
+95AB  F0 03    BEQ @ok
+95AD  A8       TAY
+95AE  38       SEC
+95AF  60       RTS
+
+@ok:
+95B0  18       CLC
+95B1  60       RTS
+
+spawn_release_both_error:
+95B2  8C 8E 02 STY spawn_errno
+95B5  20 35 82 JSR file_io_gate_release
+95B8  20 18 83 JSR proc_gate_release
+95BB  AC 8E 02 LDY spawn_errno
+95BE  38       SEC
+95BF  60       RTS
+
+ksys_spawn_resident:
+95C0  8A       TXA
+95C1  48       PHA
+95C2  98       TYA
+95C3  48       PHA
+95C4  20 E8 82 JSR proc_gate_acquire
+95C7  B0 06    BCS @proc_locked
+95C9  68       PLA
+95CA  68       PLA
+95CB  A0 0C    LDY #$0C
+95CD  38       SEC
+95CE  60       RTS
+
+@proc_locked:
+95CF  68       PLA
+95D0  8D 81 02 STA spawn_arg_ptrH
+95D3  85 A5    STA $A5
+95D5  68       PLA
+95D6  8D 80 02 STA __BSS_LOAD__
+95D9  85 A4    STA $A4
+95DB  A0 00    LDY #$00
+95DD  B1 A4    LDA ($A4),Y
+95DF  8D 82 02 STA spawn_entryL
+95E2  C8       INY
+95E3  B1 A4    LDA ($A4),Y
+95E5  8D 83 02 STA spawn_entryH
+95E8  A0 02    LDY #$02
+95EA  B1 A4    LDA ($A4),Y
+95EC  8D 85 02 STA spawn_launch_id_arg
+95EF  A0 03    LDY #$03
+95F1  B1 A4    LDA ($A4),Y
+95F3  8D 86 02 STA spawn_line_ptrL
+95F6  C8       INY
+95F7  B1 A4    LDA ($A4),Y
+95F9  8D 87 02 STA spawn_line_ptrH
+95FC  A0 05    LDY #$05
+95FE  B1 A4    LDA ($A4),Y
+9600  8D 88 02 STA spawn_line_len
+9603  C9 40    CMP #$40
+9605  90 05    BCC L960C
+9607  A0 06    LDY #$06
+9609  4C 1B 97 JMP @fail_proc
+
+L960C:
+960C  A0 06    LDY #$06
+960E  B1 A4    LDA ($A4),Y
+9610  8D 8A 02 STA spawn_stdin_fd
+9613  20 2D 95 JSR spawn_validate_mapped_fd
+9616  90 03    BCC L961B
+9618  4C 1B 97 JMP @fail_proc
+
+L961B:
+961B  A0 07    LDY #$07
+961D  B1 A4    LDA ($A4),Y
+961F  8D 8B 02 STA spawn_stdout_fd
+9622  20 2D 95 JSR spawn_validate_mapped_fd
+9625  90 03    BCC L962A
+9627  4C 1B 97 JMP @fail_proc
+
+L962A:
+962A  A0 08    LDY #$08
+962C  B1 A4    LDA ($A4),Y
+962E  8D 8C 02 STA spawn_stderr_fd
+9631  20 2D 95 JSR spawn_validate_mapped_fd
+9634  90 03    BCC L9639
+9636  4C 1B 97 JMP @fail_proc
+
+L9639:
+9639  A0 09    LDY #$09
+963B  B1 A4    LDA ($A4),Y
+963D  8D 8D 02 STA spawn_flags
+9640  29 F1    AND #$F1
+9642  F0 05    BEQ L9649
+9644  A0 06    LDY #$06
+9646  4C 1B 97 JMP @fail_proc
+
+L9649:
+9649  AD 3D B0 LDA active_pid
+964C  AE 82 02 LDX spawn_entryL
+964F  AC 83 02 LDY spawn_entryH
+9652  20 59 8B JSR proc_alloc_preloaded_unpublished
+9655  90 05    BCC @allocated
+9657  A0 0D    LDY #$0D
+9659  4C 1B 97 JMP @fail_proc
+
+@allocated:
+965C  8D 84 02 STA spawn_child_pid
+965F  AA       TAX
+9660  AD 8D 02 LDA spawn_flags
+9663  9D 7B B0 STA proc_flags,X
+9666  20 4C 8B JSR proc_clear_launch_state
+9669  AD 85 02 LDA spawn_launch_id_arg
+966C  9D 5F B1 STA proc_launch_id,X
+966F  AD 88 02 LDA spawn_line_len
+9672  9D 67 B1 STA proc_launch_line_len,X
+9675  AD 86 02 LDA spawn_line_ptrL
+9678  85 A2    STA $A2
+967A  AD 87 02 LDA spawn_line_ptrH
+967D  85 A3    STA $A3
+967F  AE 84 02 LDX spawn_child_pid
+9682  20 D5 94 JSR spawn_set_launch_line_dev_ptr
+9685  20 E6 94 JSR spawn_copy_parent_to_launch_line
+9688  20 05 82 JSR file_io_gate_acquire
+968B  B0 0E    BCS @file_locked
+968D  A0 0C    LDY #$0C
+968F  8C 8E 02 STY spawn_errno
+9692  20 3B 95 JSR spawn_clear_process_slot_locked
+9695  AC 8E 02 LDY spawn_errno
+9698  4C 86 95 JMP spawn_release_proc_error
+
+@file_locked:
+969B  AD 8A 02 LDA spawn_stdin_fd
+969E  A0 00    LDY #$00
+96A0  20 0E 95 JSR spawn_clone_mapped_fd_locked
+96A3  90 03    BCC L96A8
+96A5  4C D3 96 JMP @rollback
+
+L96A8:
+96A8  AD 8B 02 LDA spawn_stdout_fd
+96AB  A0 01    LDY #$01
+96AD  20 0E 95 JSR spawn_clone_mapped_fd_locked
+96B0  90 03    BCC L96B5
+96B2  4C D3 96 JMP @rollback
+
+L96B5:
+96B5  AD 8C 02 LDA spawn_stderr_fd
+96B8  A0 02    LDY #$02
+96BA  20 0E 95 JSR spawn_clone_mapped_fd_locked
+96BD  90 03    BCC L96C2
+96BF  4C D3 96 JMP @rollback
+
+L96C2:
+96C2  64 A2    STZ $A2
+96C4  64 A3    STZ $A3
+96C6  A9 13    LDA #$13
+96C8  AE 84 02 LDX spawn_child_pid
+96CB  AC 3D B0 LDY active_pid
+96CE  20 29 A3 JSR rp_fs_exec
+96D1  90 0C    BCC @publish
+
+@rollback:
+96D3  8C 8E 02 STY spawn_errno
+96D6  20 72 95 JSR spawn_rollback_child_locked
+96D9  AC 8E 02 LDY spawn_errno
+96DC  4C B2 95 JMP spawn_release_both_error
+
+@publish:
+96DF  AE 84 02 LDX spawn_child_pid
+96E2  A9 01    LDA #$01
+96E4  20 99 86 JSR proc_set_state
+96E7  AD 8D 02 LDA spawn_flags
+96EA  29 04    AND #$04
+96EC  F0 11    BEQ L96FF
+96EE  AD 94 B0 LDA console_owner_pid
+96F1  CD 3D B0 CMP active_pid
+96F4  D0 09    BNE L96FF
+96F6  AD 84 02 LDA spawn_child_pid
+96F9  8D 94 B0 STA console_owner_pid
+96FC  20 9A 87 JSR scheduler_wake_console_owner
+
+L96FF:
+96FF  AD 80 02 LDA __BSS_LOAD__
+9702  85 A4    STA $A4
+9704  AD 81 02 LDA spawn_arg_ptrH
+9707  85 A5    STA $A5
+9709  A0 0A    LDY #$0A
+970B  AD 84 02 LDA spawn_child_pid
+970E  91 A4    STA ($A4),Y
+9710  20 91 95 JSR spawn_release_both_success
+9713  90 01    BCC @success
+9715  60       RTS
+
+@success:
+9716  AD 84 02 LDA spawn_child_pid
+9719  18       CLC
+971A  60       RTS
+
+@fail_proc:
+971B  4C 86 95 JMP spawn_release_proc_error
+
+ksys_get_launch_id:
+971E  AE 3D B0 LDX active_pid
+9721  E0 08    CPX #$08
+9723  90 04    BCC @pid_ok
+9725  A0 06    LDY #$06
+9727  38       SEC
+9728  60       RTS
+
+@pid_ok:
+9729  BD 5F B1 LDA proc_launch_id,X
+972C  C9 FF    CMP #$FF
+972E  D0 04    BNE @ok
+9730  A0 06    LDY #$06
+9732  38       SEC
+9733  60       RTS
+
+@ok:
+9734  18       CLC
+9735  60       RTS
+
+ksys_get_launch_line:
+9736  8A       TXA
+9737  48       PHA
+9738  98       TYA
+9739  48       PHA
+973A  20 E8 82 JSR proc_gate_acquire
+973D  B0 06    BCS @proc_locked
+973F  68       PLA
+9740  68       PLA
+9741  A0 0C    LDY #$0C
+9743  38       SEC
+9744  60       RTS
+
+@proc_locked:
+9745  68       PLA
+9746  8D 81 02 STA spawn_arg_ptrH
+9749  85 A5    STA $A5
+974B  68       PLA
+974C  8D 80 02 STA __BSS_LOAD__
+974F  85 A4    STA $A4
+9751  AE 3D B0 LDX active_pid
+9754  E0 08    CPX #$08
+9756  90 05    BCC L975D
+9758  A0 06    LDY #$06
+975A  4C 86 95 JMP spawn_release_proc_error
+
+L975D:
+975D  A0 00    LDY #$00
+975F  B1 A4    LDA ($A4),Y
+9761  8D 86 02 STA spawn_line_ptrL
+9764  C8       INY
+9765  B1 A4    LDA ($A4),Y
+9767  8D 87 02 STA spawn_line_ptrH
+976A  A0 02    LDY #$02
+976C  B1 A4    LDA ($A4),Y
+976E  F0 0E    BEQ @invalid
+9770  8D 89 02 STA spawn_copy_len
+9773  AE 3D B0 LDX active_pid
+9776  BD 67 B1 LDA proc_launch_line_len,X
+9779  CD 89 02 CMP spawn_copy_len
+977C  90 05    BCC @size_ok
+
+@invalid:
+977E  A0 06    LDY #$06
+9780  4C 86 95 JMP spawn_release_proc_error
+
+@size_ok:
+9783  8D 88 02 STA spawn_line_len
+9786  AD 86 02 LDA spawn_line_ptrL
+9789  85 A2    STA $A2
+978B  AD 87 02 LDA spawn_line_ptrH
+978E  85 A3    STA $A3
+9790  AE 3D B0 LDX active_pid
+9793  20 D5 94 JSR spawn_set_launch_line_dev_ptr
+9796  20 FA 94 JSR spawn_copy_launch_line_to_child
+9799  AD 80 02 LDA __BSS_LOAD__
+979C  85 A4    STA $A4
+979E  AD 81 02 LDA spawn_arg_ptrH
+97A1  85 A5    STA $A5
+97A3  A0 03    LDY #$03
+97A5  AD 88 02 LDA spawn_line_len
+97A8  91 A4    STA ($A4),Y
+97AA  4C 7B 95 JMP spawn_release_proc_success
+
+pipe_set_buf_base:
+97AD  DA       PHX
+97AE  8A       TXA
+97AF  A2 40    LDX #$40
+97B1  20 5D 86 JSR mul8u
+97B4  18       CLC
+97B5  69 BE    ADC #$BE
+97B7  85 AC    STA $AC
+97B9  8A       TXA
+97BA  69 B3    ADC #$B3
+97BC  85 AD    STA $AD
+97BE  FA       PLX
+97BF  60       RTS
+
+pipe_init_tables:
+97C0  A2 00    LDX #$00
+
+@clear_pipes:
+97C2  9E 9E B3 STZ pipe_state,X
+97C5  9E A6 B3 STZ pipe_head,X
+97C8  9E AE B3 STZ pipe_tail,X
+97CB  9E B6 B3 STZ pipe_count,X
+97CE  E8       INX
+97CF  E0 08    CPX #$08
+97D1  D0 EF    BNE @clear_pipes
+97D3  A2 00    LDX #$00
+
+@clear_open:
+97D5  A9 FF    LDA #$FF
+97D7  9D BE B5 STA open_pipe,X
+97DA  9E CE B5 STZ open_pipe_mode,X
+97DD  E8       INX
+97DE  E0 10    CPX #$10
+97E0  D0 F3    BNE @clear_open
+97E2  18       CLC
+97E3  60       RTS
+
+pipe_alloc_pair:
+97E4  A9 FF    LDA #$FF
+97E6  8D FC B5 STA pipe_obj
+97E9  8D FE B5 STA pipe_mode
+97EC  8D FD B5 STA pipe_idx
+97EF  20 9B 8E JSR fd_alloc_open
+97F2  90 01    BCC @read_obj_ok
+97F4  60       RTS
+
+@read_obj_ok:
+97F5  8E FC B5 STX pipe_obj
+97F8  A9 03    LDA #$03
+97FA  A0 01    LDY #$01
+97FC  20 C5 8E JSR fd_init_open
+97FF  20 9B 8E JSR fd_alloc_open
+9802  90 0E    BCC @write_obj_ok
+9804  8C FF B5 STY pipe_req_lo
+9807  AE FC B5 LDX pipe_obj
+980A  20 B4 8E JSR fd_free_open
+980D  AC FF B5 LDY pipe_req_lo
+9810  38       SEC
+9811  60       RTS
+
+@write_obj_ok:
+9812  8E FE B5 STX pipe_mode
+9815  A9 03    LDA #$03
+9817  A0 02    LDY #$02
+9819  20 C5 8E JSR fd_init_open
+981C  20 C6 99 JSR pipe_alloc
+981F  90 14    BCC @pipe_ok
+9821  8C FF B5 STY pipe_req_lo
+9824  AE FE B5 LDX pipe_mode
+9827  20 B4 8E JSR fd_free_open
+982A  AE FC B5 LDX pipe_obj
+982D  20 B4 8E JSR fd_free_open
+9830  AC FF B5 LDY pipe_req_lo
+9833  38       SEC
+9834  60       RTS
+
+@pipe_ok:
+9835  8D FD B5 STA pipe_idx
+9838  AD FC B5 LDA pipe_obj
+983B  AE FD B5 LDX pipe_idx
+983E  A0 01    LDY #$01
+9840  20 F6 99 JSR pipe_endpoint_init
+9843  AD FE B5 LDA pipe_mode
+9846  AE FD B5 LDX pipe_idx
+9849  A0 02    LDY #$02
+984B  20 F6 99 JSR pipe_endpoint_init
+984E  AD FD B5 LDA pipe_idx
+9851  AE FC B5 LDX pipe_obj
+9854  AC FE B5 LDY pipe_mode
+9857  18       CLC
+9858  60       RTS
+
+pipe_release_pair:
+9859  DA       PHX
+985A  98       TYA
+985B  48       PHA
+985C  20 1D 9A JSR pipe_close_endpoint
+985F  68       PLA
+9860  AA       TAX
+9861  20 B4 8E JSR fd_free_open
+9864  68       PLA
+9865  48       PHA
+9866  20 1D 9A JSR pipe_close_endpoint
+9869  68       PLA
+986A  AA       TAX
+986B  4C B4 8E JMP fd_free_open
+
+pipe_create:
+986E  A9 FF    LDA #$FF
+9870  48       PHA
+9871  48       PHA
+9872  48       PHA
+9873  48       PHA
+9874  A9 03    LDA #$03
+9876  48       PHA
+9877  20 E4 97 JSR pipe_alloc_pair
+987A  90 08    BCC @pair_ok
+987C  98       TYA
+987D  BA       TSX
+987E  9D 01 01 STA $0101,X
+9881  4C F7 98 JMP @fail_frame
+
+@pair_ok:
+9884  BA       TSX
+9885  AD FC B5 LDA pipe_obj
+9888  9D 02 01 STA $0102,X
+988B  AD FE B5 LDA pipe_mode
+988E  9D 03 01 STA $0103,X
+9891  20 61 94 JSR fd_alloc_fd_current
+9894  90 08    BCC @read_fd_ok
+9896  98       TYA
+9897  BA       TSX
+9898  9D 01 01 STA $0101,X
+989B  4C E9 98 JMP @fail_pair
+
+@read_fd_ok:
+989E  98       TYA
+989F  BA       TSX
+98A0  9D 04 01 STA $0104,X
+98A3  BC 04 01 LDY $0104,X
+98A6  BD 02 01 LDA $0102,X
+98A9  AA       TAX
+98AA  A9 01    LDA #$01
+98AC  20 D7 8E JSR fd_attach_current
+98AF  20 61 94 JSR fd_alloc_fd_current
+98B2  90 08    BCC @write_fd_ok
+98B4  98       TYA
+98B5  BA       TSX
+98B6  9D 01 01 STA $0101,X
+98B9  4C E2 98 JMP @fail_read_fd
+
+@write_fd_ok:
+98BC  98       TYA
+98BD  BA       TSX
+98BE  9D 05 01 STA $0105,X
+98C1  BC 05 01 LDY $0105,X
+98C4  BD 03 01 LDA $0103,X
+98C7  AA       TAX
+98C8  A9 02    LDA #$02
+98CA  20 D7 8E JSR fd_attach_current
+98CD  BA       TSX
+98CE  BD 04 01 LDA $0104,X
+98D1  48       PHA
+98D2  BD 05 01 LDA $0105,X
+98D5  48       PHA
+98D6  68       PLA
+98D7  AA       TAX
+98D8  68       PLA
+98D9  A8       TAY
+98DA  68       PLA
+98DB  68       PLA
+98DC  68       PLA
+98DD  68       PLA
+98DE  68       PLA
+98DF  98       TYA
+98E0  18       CLC
+98E1  60       RTS
+
+@fail_read_fd:
+98E2  BA       TSX
+98E3  BD 04 01 LDA $0104,X
+98E6  20 CF 8F JSR fd_detach_current
+
+@fail_pair:
+98E9  BA       TSX
+98EA  BD 02 01 LDA $0102,X
+98ED  48       PHA
+98EE  BD 03 01 LDA $0103,X
+98F1  A8       TAY
+98F2  68       PLA
+98F3  AA       TAX
+98F4  20 59 98 JSR pipe_release_pair
+
+@fail_frame:
+98F7  BA       TSX
+98F8  BC 01 01 LDY $0101,X
+98FB  68       PLA
+98FC  68       PLA
+98FD  68       PLA
+98FE  68       PLA
+98FF  68       PLA
+9900  38       SEC
+9901  60       RTS
+
+pipe_create_between_fd:
+9902  48       PHA
+9903  DA       PHX
+9904  5A       PHY
+9905  20 05 82 JSR file_io_gate_acquire
+9908  B0 07    BCS @gate_acquired
+990A  7A       PLY
+990B  FA       PLX
+990C  68       PLA
+990D  A0 06    LDY #$06
+990F  38       SEC
+9910  60       RTS
+
+@gate_acquired:
+9911  7A       PLY
+9912  FA       PLX
+9913  68       PLA
+9914  20 23 99 JSR pipe_create_between_fd_inner
+9917  08       PHP
+9918  48       PHA
+9919  DA       PHX
+991A  5A       PHY
+991B  20 35 82 JSR file_io_gate_release
+991E  7A       PLY
+991F  FA       PLX
+9920  68       PLA
+9921  28       PLP
+9922  60       RTS
+
+pipe_create_between_fd_inner:
+9923  48       PHA
+9924  DA       PHX
+9925  5A       PHY
+9926  A9 FF    LDA #$FF
+9928  48       PHA
+9929  48       PHA
+992A  A9 03    LDA #$03
+992C  48       PHA
+992D  BA       TSX
+992E  BD 06 01 LDA $0106,X
+9931  DD 05 01 CMP $0105,X
+9934  D0 08    BNE @pids_ok
+9936  A9 06    LDA #$06
+9938  9D 01 01 STA $0101,X
+993B  4C BA 99 JMP @fail_frame
+
+@pids_ok:
+993E  BC 04 01 LDY $0104,X
+9941  BD 06 01 LDA $0106,X
+9944  AA       TAX
+9945  20 E1 8E JSR fd_check_free_pid_fd
+9948  90 08    BCC @reader_fd_free
+994A  98       TYA
+994B  BA       TSX
+994C  9D 01 01 STA $0101,X
+994F  4C BA 99 JMP @fail_frame
+
+@reader_fd_free:
+9952  BA       TSX
+9953  BC 04 01 LDY $0104,X
+9956  BD 05 01 LDA $0105,X
+9959  AA       TAX
+995A  20 E1 8E JSR fd_check_free_pid_fd
+995D  90 08    BCC @writer_fd_free
+995F  98       TYA
+9960  BA       TSX
+9961  9D 01 01 STA $0101,X
+9964  4C BA 99 JMP @fail_frame
+
+@writer_fd_free:
+9967  20 E4 97 JSR pipe_alloc_pair
+996A  90 08    BCC @pair_ok
+996C  98       TYA
+996D  BA       TSX
+996E  9D 01 01 STA $0101,X
+9971  4C BA 99 JMP @fail_frame
+
+@pair_ok:
+9974  BA       TSX
+9975  AD FE B5 LDA pipe_mode
+9978  9D 02 01 STA $0102,X
+997B  AD FC B5 LDA pipe_obj
+997E  9D 03 01 STA $0103,X
+9981  BC 04 01 LDY $0104,X
+9984  BD 03 01 LDA $0103,X
+9987  48       PHA
+9988  BD 06 01 LDA $0106,X
+998B  FA       PLX
+998C  20 1F 8F JSR fd_attach_pid_fd_read
+998F  90 08    BCC @read_attached
+9991  98       TYA
+9992  BA       TSX
+9993  9D 01 01 STA $0101,X
+9996  4C BA 99 JMP @fail_frame
+
+@read_attached:
+9999  BA       TSX
+999A  BC 04 01 LDY $0104,X
+999D  BD 02 01 LDA $0102,X
+99A0  48       PHA
+99A1  BD 05 01 LDA $0105,X
+99A4  FA       PLX
+99A5  20 29 8F JSR fd_attach_pid_fd_write
+99A8  90 08    BCC @success
+99AA  98       TYA
+99AB  BA       TSX
+99AC  9D 01 01 STA $0101,X
+99AF  4C BA 99 JMP @fail_frame
+
+@success:
+99B2  68       PLA
+99B3  68       PLA
+99B4  68       PLA
+99B5  68       PLA
+99B6  68       PLA
+99B7  68       PLA
+99B8  18       CLC
+99B9  60       RTS
+
+@fail_frame:
+99BA  BA       TSX
+99BB  BC 01 01 LDY $0101,X
+99BE  68       PLA
+99BF  68       PLA
+99C0  68       PLA
+99C1  68       PLA
+99C2  68       PLA
+99C3  68       PLA
+99C4  38       SEC
+99C5  60       RTS
+
+pipe_alloc:
+99C6  A2 00    LDX #$00
+
+@scan:
+99C8  BD 9E B3 LDA pipe_state,X
+99CB  F0 09    BEQ @found
+99CD  E8       INX
+99CE  E0 08    CPX #$08
+99D0  D0 F6    BNE @scan
+99D2  A0 0D    LDY #$0D
+99D4  38       SEC
+99D5  60       RTS
+
+@found:
+99D6  A9 03    LDA #$03
+99D8  9D 9E B3 STA pipe_state,X
+99DB  9E A6 B3 STZ pipe_head,X
+99DE  9E AE B3 STZ pipe_tail,X
+99E1  9E B6 B3 STZ pipe_count,X
+99E4  8A       TXA
+99E5  18       CLC
+99E6  60       RTS
+
+pipe_free:
+99E7  AA       TAX
+99E8  9E 9E B3 STZ pipe_state,X
+99EB  9E A6 B3 STZ pipe_head,X
+99EE  9E AE B3 STZ pipe_tail,X
+99F1  9E B6 B3 STZ pipe_count,X
+99F4  18       CLC
+99F5  60       RTS
+
+pipe_endpoint_init:
+99F6  DA       PHX
+99F7  AA       TAX
+99F8  68       PLA
+99F9  9D BE B5 STA open_pipe,X
+99FC  98       TYA
+99FD  9D CE B5 STA open_pipe_mode,X
+9A00  18       CLC
+9A01  60       RTS
+
+pipe_resolve_endpoint:
+9A02  DD CE B5 CMP open_pipe_mode,X
+9A05  D0 12    BNE @bad_endpoint
+9A07  BD BE B5 LDA open_pipe,X
+9A0A  C9 FF    CMP #$FF
+9A0C  F0 0B    BEQ @bad_endpoint
+9A0E  8D FD B5 STA pipe_idx
+9A11  AA       TAX
+9A12  BD 9E B3 LDA pipe_state,X
+9A15  F0 02    BEQ @bad_endpoint
+9A17  18       CLC
+9A18  60       RTS
+
+@bad_endpoint:
+9A19  A0 09    LDY #$09
+9A1B  38       SEC
+9A1C  60       RTS
+
+pipe_close_endpoint:
+9A1D  AA       TAX
+9A1E  BD BE B5 LDA open_pipe,X
+9A21  C9 FF    CMP #$FF
+9A23  D0 02    BNE @have_pipe
+9A25  18       CLC
+9A26  60       RTS
+
+@have_pipe:
+9A27  8D FD B5 STA pipe_idx
+9A2A  BD CE B5 LDA open_pipe_mode,X
+9A2D  8D FE B5 STA pipe_mode
+9A30  A9 FF    LDA #$FF
+9A32  9D BE B5 STA open_pipe,X
+9A35  9E CE B5 STZ open_pipe_mode,X
+9A38  AD FE B5 LDA pipe_mode
+9A3B  C9 01    CMP #$01
+9A3D  F0 04    BEQ @valid_mode
+9A3F  C9 02    CMP #$02
+9A41  D0 31    BNE @maybe_free
+
+@valid_mode:
+9A43  AE FD B5 LDX pipe_idx
+9A46  BD 9E B3 LDA pipe_state,X
+9A49  2D FE B5 AND pipe_mode
+9A4C  F0 26    BEQ @maybe_free
+9A4E  AD FE B5 LDA pipe_mode
+9A51  49 FF    EOR #$FF
+9A53  3D 9E B3 AND pipe_state,X
+9A56  9D 9E B3 STA pipe_state,X
+9A59  AD FE B5 LDA pipe_mode
+9A5C  C9 01    CMP #$01
+9A5E  F0 04    BEQ @wake_writers
+9A60  A9 03    LDA #$03
+9A62  80 02    BRA @wake_all
+
+@wake_writers:
+9A64  A9 07    LDA #$07
+
+@wake_all:
+9A66  8D FE B5 STA pipe_mode
+
+@wake_next:
+9A69  AD FE B5 LDA pipe_mode
+9A6C  AC FD B5 LDY pipe_idx
+9A6F  20 D7 86 JSR scheduler_wake_one
+9A72  90 F5    BCC @wake_next
+
+@maybe_free:
+9A74  AE FD B5 LDX pipe_idx
+9A77  BD 9E B3 LDA pipe_state,X
+9A7A  D0 04    BNE @done
+9A7C  8A       TXA
+9A7D  20 E7 99 JSR pipe_free
+
+@done:
+9A80  18       CLC
+9A81  60       RTS
+
+pipe_read:
+9A82  E0 00    CPX #$00
+9A84  D0 09    BNE @save_inputs
+9A86  C9 00    CMP #$00
+9A88  D0 05    BNE @save_inputs
+9A8A  A9 00    LDA #$00
+9A8C  AA       TAX
+9A8D  18       CLC
+9A8E  60       RTS
+
+@save_inputs:
+9A8F  48       PHA
+9A90  DA       PHX
+9A91  5A       PHY
+9A92  7A       PLY
+9A93  FA       PLX
+9A94  8E 00 B6 STX pipe_req_hi
+9A97  68       PLA
+9A98  8D FF B5 STA pipe_req_lo
+9A9B  98       TYA
+9A9C  AA       TAX
+9A9D  A9 01    LDA #$01
+9A9F  20 02 9A JSR pipe_resolve_endpoint
+9AA2  90 01    BCC @state_ok
+9AA4  60       RTS
+
+@state_ok:
+9AA5  BD B6 B3 LDA pipe_count,X
+9AA8  D0 0C    BNE @can_read
+9AAA  BD 9E B3 LDA pipe_state,X
+9AAD  29 02    AND #$02
+9AAF  D0 4B    BNE @err_eagain
+9AB1  A9 00    LDA #$00
+9AB3  AA       TAX
+9AB4  18       CLC
+9AB5  60       RTS
+
+@can_read:
+9AB6  9C 01 B6 STZ pipe_done_lo
+9AB9  20 AD 97 JSR pipe_set_buf_base
+
+@read_loop:
+9ABC  AD 00 B6 LDA pipe_req_hi
+9ABF  D0 08    BNE @check_available
+9AC1  AD 01 B6 LDA pipe_done_lo
+9AC4  CD FF B5 CMP pipe_req_lo
+9AC7  F0 20    BEQ @done
+
+@check_available:
+9AC9  BD B6 B3 LDA pipe_count,X
+9ACC  F0 1B    BEQ @done
+9ACE  BC AE B3 LDY pipe_tail,X
+9AD1  B1 AC    LDA ($AC),Y
+9AD3  AC 01 B6 LDY pipe_done_lo
+9AD6  91 AA    STA ($AA),Y
+9AD8  BD AE B3 LDA pipe_tail,X
+9ADB  1A       INC
+9ADC  29 3F    AND #$3F
+9ADE  9D AE B3 STA pipe_tail,X
+9AE1  DE B6 B3 DEC pipe_count,X
+9AE4  EE 01 B6 INC pipe_done_lo
+9AE7  80 D3    BRA @read_loop
+
+@done:
+9AE9  AD 01 B6 LDA pipe_done_lo
+9AEC  F0 0A    BEQ @return_done
+9AEE  48       PHA
+9AEF  A9 07    LDA #$07
+9AF1  AC FD B5 LDY pipe_idx
+9AF4  20 D7 86 JSR scheduler_wake_one
+9AF7  68       PLA
+
+@return_done:
+9AF8  A2 00    LDX #$00
+9AFA  18       CLC
+9AFB  60       RTS
+
+@err_eagain:
+9AFC  A0 0C    LDY #$0C
+9AFE  38       SEC
+9AFF  60       RTS
+
+pipe_write:
+9B00  E0 00    CPX #$00
+9B02  D0 09    BNE @save_inputs
+9B04  C9 00    CMP #$00
+9B06  D0 05    BNE @save_inputs
+9B08  A9 00    LDA #$00
+9B0A  AA       TAX
+9B0B  18       CLC
+9B0C  60       RTS
+
+@save_inputs:
+9B0D  48       PHA
+9B0E  DA       PHX
+9B0F  5A       PHY
+9B10  7A       PLY
+9B11  FA       PLX
+9B12  8E 00 B6 STX pipe_req_hi
+9B15  68       PLA
+9B16  8D FF B5 STA pipe_req_lo
+9B19  98       TYA
+9B1A  AA       TAX
+9B1B  A9 02    LDA #$02
+9B1D  20 02 9A JSR pipe_resolve_endpoint
+9B20  90 01    BCC @state_ok
+9B22  60       RTS
+
+@state_ok:
+9B23  BD 9E B3 LDA pipe_state,X
+9B26  29 01    AND #$01
+9B28  D0 03    BNE @can_start
+9B2A  4C 81 9B JMP @err_epipe
+
+@can_start:
+9B2D  9C 01 B6 STZ pipe_done_lo
+9B30  20 AD 97 JSR pipe_set_buf_base
+
+@write_loop:
+9B33  AD 00 B6 LDA pipe_req_hi
+9B36  D0 08    BNE @check_space
+9B38  AD 01 B6 LDA pipe_done_lo
+9B3B  CD FF B5 CMP pipe_req_lo
+9B3E  F0 2A    BEQ @done
+
+@check_space:
+9B40  BD B6 B3 LDA pipe_count,X
+9B43  C9 40    CMP #$40
+9B45  D0 08    BNE @space_available
+9B47  AD 01 B6 LDA pipe_done_lo
+9B4A  D0 1E    BNE @done
+9B4C  4C 7D 9B JMP @err_eagain
+
+@space_available:
+9B4F  AC 01 B6 LDY pipe_done_lo
+9B52  B1 AA    LDA ($AA),Y
+9B54  BC A6 B3 LDY pipe_head,X
+9B57  91 AC    STA ($AC),Y
+9B59  BD A6 B3 LDA pipe_head,X
+9B5C  1A       INC
+9B5D  29 3F    AND #$3F
+9B5F  9D A6 B3 STA pipe_head,X
+9B62  FE B6 B3 INC pipe_count,X
+9B65  EE 01 B6 INC pipe_done_lo
+9B68  80 C9    BRA @write_loop
+
+@done:
+9B6A  AD 01 B6 LDA pipe_done_lo
+9B6D  F0 0A    BEQ @return_done
+9B6F  48       PHA
+9B70  A9 03    LDA #$03
+9B72  AC FD B5 LDY pipe_idx
+9B75  20 D7 86 JSR scheduler_wake_one
+9B78  68       PLA
+
+@return_done:
+9B79  A2 00    LDX #$00
+9B7B  18       CLC
+9B7C  60       RTS
+
+@err_eagain:
+9B7D  A0 0C    LDY #$0C
+9B7F  38       SEC
+9B80  60       RTS
+
+@err_epipe:
+9B81  A0 0E    LDY #$0E
+9B83  38       SEC
+9B84  60       RTS
+
+timer_init:
+9B85  A2 00    LDX #$00
+
+@clear:
+9B87  A9 FF    LDA #$FF
+9B89  9D 71 B3 STA timer_pid,X
+9B8C  9E 79 B3 STZ timer_until_lo,X
+9B8F  9E 81 B3 STZ timer_until_hi,X
+9B92  E8       INX
+9B93  E0 08    CPX #$08
+9B95  D0 F0    BNE @clear
+9B97  60       RTS
+
+timer_alloc:
+9B98  A2 00    LDX #$00
+
+@scan:
+9B9A  E0 08    CPX #$08
+9B9C  B0 0C    BCS @fail
+9B9E  BD 71 B3 LDA timer_pid,X
+9BA1  C9 FF    CMP #$FF
+9BA3  F0 03    BEQ @found
+9BA5  E8       INX
+9BA6  80 F2    BRA @scan
+
+@found:
+9BA8  18       CLC
+9BA9  60       RTS
+
+@fail:
+9BAA  38       SEC
+9BAB  60       RTS
+
+timer_free:
+9BAC  A9 FF    LDA #$FF
+9BAE  9D 71 B3 STA timer_pid,X
+9BB1  9E 79 B3 STZ timer_until_lo,X
+9BB4  9E 81 B3 STZ timer_until_hi,X
+9BB7  60       RTS
+
+timer_start_current:
+9BB8  08       PHP
+9BB9  78       SEI
+9BBA  48       PHA
+9BBB  20 98 9B JSR timer_alloc
+9BBE  90 04    BCC @slot_ok
+9BC0  68       PLA
+9BC1  28       PLP
+9BC2  38       SEC
+9BC3  60       RTS
+
+@slot_ok:
+9BC4  8A       TXA
+9BC5  A8       TAY
+9BC6  AD 3D B0 LDA active_pid
+9BC9  9D 71 B3 STA timer_pid,X
+9BCC  68       PLA
+9BCD  18       CLC
+9BCE  6D 6F B3 ADC system_ticks_lo
+9BD1  9D 79 B3 STA timer_until_lo,X
+9BD4  AD 70 B3 LDA system_ticks_hi
+9BD7  69 00    ADC #$00
+9BD9  9D 81 B3 STA timer_until_hi,X
+9BDC  28       PLP
+9BDD  18       CLC
+9BDE  60       RTS
+
+timer_commit_current:
+9BDF  E0 08    CPX #$08
+9BE1  B0 1E    BCS @fail
+9BE3  BD 71 B3 LDA timer_pid,X
+9BE6  CD 3D B0 CMP active_pid
+9BE9  D0 16    BNE @fail
+9BEB  38       SEC
+9BEC  AD 6F B3 LDA system_ticks_lo
+9BEF  FD 79 B3 SBC timer_until_lo,X
+9BF2  AD 70 B3 LDA system_ticks_hi
+9BF5  FD 81 B3 SBC timer_until_hi,X
+9BF8  30 05    BMI @pending
+9BFA  20 AC 9B JSR timer_free
+9BFD  38       SEC
+9BFE  60       RTS
+
+@pending:
+9BFF  18       CLC
+9C00  60       RTS
+
+@fail:
+9C01  38       SEC
+9C02  60       RTS
+
+scheduler_wake_timers:
+9C03  A2 00    LDX #$00
+
+@scan:
+9C05  E0 08    CPX #$08
+9C07  B0 56    BCS @done
+9C09  BD 71 B3 LDA timer_pid,X
+9C0C  C9 FF    CMP #$FF
+9C0E  F0 4C    BEQ @next
+9C10  8D 03 B6 STA timer_scan_pid_tmp
+9C13  8E 02 B6 STX timer_scan_slot_tmp
+9C16  38       SEC
+9C17  AD 6F B3 LDA system_ticks_lo
+9C1A  FD 79 B3 SBC timer_until_lo,X
+9C1D  AD 70 B3 LDA system_ticks_hi
+9C20  FD 81 B3 SBC timer_until_hi,X
+9C23  30 37    BMI @next
+9C25  AE 03 B6 LDX timer_scan_pid_tmp
+9C28  BD 3F B0 LDA proc_state,X
+9C2B  C9 04    CMP #$04
+9C2D  D0 21    BNE @free_stale
+9C2F  BD 47 B1 LDA wait_reason,X
+9C32  C9 04    CMP #$04
+9C34  D0 1A    BNE @free_stale
+9C36  BD 4F B1 LDA wait_object,X
+9C39  CD 02 B6 CMP timer_scan_slot_tmp
+9C3C  D0 12    BNE @free_stale
+9C3E  AE 02 B6 LDX timer_scan_slot_tmp
+9C41  20 AC 9B JSR timer_free
+9C44  AE 03 B6 LDX timer_scan_pid_tmp
+9C47  20 C9 86 JSR proc_wake
+9C4A  AE 02 B6 LDX timer_scan_slot_tmp
+9C4D  E8       INX
+9C4E  80 B5    BRA @scan
+
+@free_stale:
+9C50  AE 02 B6 LDX timer_scan_slot_tmp
+9C53  20 AC 9B JSR timer_free
+9C56  AE 02 B6 LDX timer_scan_slot_tmp
+9C59  E8       INX
+9C5A  80 A9    BRA @scan
+
+@next:
+9C5C  E8       INX
+9C5D  80 A6    BRA @scan
+
+@done:
+9C5F  60       RTS
+
+ksys_io_init:
+9C60  20 B5 81 JSR file_io_gate_init
+9C63  4C 98 82 JMP proc_gate_init
+
+ksys_io_block:
+9C66  48       PHA
+9C67  5A       PHY
+9C68  20 35 82 JSR file_io_gate_release
+9C6B  7A       PLY
+9C6C  68       PLA
+9C6D  4C D4 89 JMP sched_block_current
+
+ksys_read:
+9C70  8E 93 02 STX ksys_rw_args_lo
+9C73  8C 94 02 STY ksys_rw_args_hi
+
+@retry_gate:
+9C76  20 05 82 JSR file_io_gate_acquire
+9C79  B0 04    BCS @gate_acquired
+9C7B  A0 06    LDY #$06
+9C7D  38       SEC
+9C7E  60       RTS
+
+@gate_acquired:
+9C7F  AD 93 02 LDA ksys_rw_args_lo
+9C82  85 A2    STA $A2
+9C84  AD 94 02 LDA ksys_rw_args_hi
+9C87  85 A3    STA $A3
+9C89  A0 00    LDY #$00
+9C8B  B1 A2    LDA ($A2),Y
+9C8D  8D 04 B6 STA ksys_rw_fd_tmp
+9C90  A0 02    LDY #$02
+9C92  B1 A2    LDA ($A2),Y
+9C94  8D 07 B6 STA ksys_rw_buf_lo
+9C97  C8       INY
+9C98  B1 A2    LDA ($A2),Y
+9C9A  8D 08 B6 STA ksys_rw_buf_hi
+9C9D  A0 04    LDY #$04
+9C9F  B1 A2    LDA ($A2),Y
+9CA1  8D 05 B6 STA ksys_rw_len_lo
+9CA4  C8       INY
+9CA5  B1 A2    LDA ($A2),Y
+9CA7  8D 06 B6 STA ksys_rw_len_hi
+9CAA  9C 09 B6 STZ ksys_rw_wait_reason
+9CAD  9C 0A B6 STZ ksys_rw_wait_object
+9CB0  AC 04 B6 LDY ksys_rw_fd_tmp
+9CB3  20 2F 93 JSR fd_resolve_read
+9CB6  90 03    BCC @read_resolve_ok
+9CB8  4C 25 9D JMP @read_fail
+
+@read_resolve_ok:
+9CBB  C9 02    CMP #$02
+9CBD  F0 0D    BEQ @read_file
+9CBF  C9 01    CMP #$01
+9CC1  F0 19    BEQ @class_device
+9CC3  C9 03    CMP #$03
+9CC5  F0 20    BEQ @class_pipe
+9CC7  A0 0A    LDY #$0A
+9CC9  4C 25 9D JMP @read_fail
+
+@read_file:
+9CCC  BD 37 B1 LDA open_file_handle,X
+9CCF  AA       TAX
+9CD0  A9 03    LDA #$03
+9CD2  A0 00    LDY #$00
+9CD4  20 29 A3 JSR rp_fs_exec
+9CD7  90 43    BCC @read_success
+9CD9  4C 25 9D JMP @read_fail
+
+@class_device:
+9CDC  C0 01    CPY #$01
+9CDE  D0 12    BNE @read_call
+9CE0  A9 01    LDA #$01
+9CE2  8D 09 B6 STA ksys_rw_wait_reason
+9CE5  80 0B    BRA @read_call
+
+@class_pipe:
+9CE7  BD BE B5 LDA open_pipe,X
+9CEA  8D 0A B6 STA ksys_rw_wait_object
+9CED  A9 03    LDA #$03
+9CEF  8D 09 B6 STA ksys_rw_wait_reason
+
+@read_call:
+9CF2  AD 07 B6 LDA ksys_rw_buf_lo
+9CF5  85 A2    STA $A2
+9CF7  AD 08 B6 LDA ksys_rw_buf_hi
+9CFA  85 A3    STA $A3
+9CFC  AC 04 B6 LDY ksys_rw_fd_tmp
+9CFF  AD 05 B6 LDA ksys_rw_len_lo
+9D02  AE 06 B6 LDX ksys_rw_len_hi
+9D05  20 88 93 JSR fd_read
+9D08  90 12    BCC @read_success
+9D0A  C0 0C    CPY #$0C
+9D0C  D0 17    BNE @read_fail
+9D0E  AD 09 B6 LDA ksys_rw_wait_reason
+9D11  F0 12    BEQ @read_fail
+9D13  AC 0A B6 LDY ksys_rw_wait_object
+9D16  20 66 9C JSR ksys_io_block
+9D19  4C 76 9C JMP @retry_gate
+
+@read_success:
+9D1C  48       PHA
+9D1D  DA       PHX
+9D1E  20 35 82 JSR file_io_gate_release
+9D21  FA       PLX
+9D22  68       PLA
+9D23  18       CLC
+9D24  60       RTS
+
+@read_fail:
+9D25  5A       PHY
+9D26  20 35 82 JSR file_io_gate_release
+9D29  7A       PLY
+9D2A  38       SEC
+9D2B  60       RTS
+
+ksys_write:
+9D2C  8E 93 02 STX ksys_rw_args_lo
+9D2F  8C 94 02 STY ksys_rw_args_hi
+
+@retry_gate:
+9D32  20 05 82 JSR file_io_gate_acquire
+9D35  B0 04    BCS @gate_acquired
+9D37  A0 06    LDY #$06
+9D39  38       SEC
+9D3A  60       RTS
+
+@gate_acquired:
+9D3B  AD 93 02 LDA ksys_rw_args_lo
+9D3E  85 A2    STA $A2
+9D40  AD 94 02 LDA ksys_rw_args_hi
+9D43  85 A3    STA $A3
+9D45  A0 00    LDY #$00
+9D47  B1 A2    LDA ($A2),Y
+9D49  8D 04 B6 STA ksys_rw_fd_tmp
+9D4C  A0 02    LDY #$02
+9D4E  B1 A2    LDA ($A2),Y
+9D50  8D 07 B6 STA ksys_rw_buf_lo
+9D53  C8       INY
+9D54  B1 A2    LDA ($A2),Y
+9D56  8D 08 B6 STA ksys_rw_buf_hi
+9D59  A0 04    LDY #$04
+9D5B  B1 A2    LDA ($A2),Y
+9D5D  8D 05 B6 STA ksys_rw_len_lo
+9D60  C8       INY
+9D61  B1 A2    LDA ($A2),Y
+9D63  8D 06 B6 STA ksys_rw_len_hi
+9D66  9C 09 B6 STZ ksys_rw_wait_reason
+9D69  9C 0A B6 STZ ksys_rw_wait_object
+9D6C  AC 04 B6 LDY ksys_rw_fd_tmp
+9D6F  20 33 93 JSR fd_resolve_write
+9D72  90 03    BCC @write_resolve_ok
+9D74  4C D6 9D JMP @write_fail
+
+@write_resolve_ok:
+9D77  C9 02    CMP #$02
+9D79  F0 0D    BEQ @write_file
+9D7B  C9 03    CMP #$03
+9D7D  F0 19    BEQ @class_pipe
+9D7F  C9 01    CMP #$01
+9D81  F0 20    BEQ @write_call
+9D83  A0 0A    LDY #$0A
+9D85  4C D6 9D JMP @write_fail
+
+@write_file:
+9D88  BD 37 B1 LDA open_file_handle,X
+9D8B  AA       TAX
+9D8C  A9 05    LDA #$05
+9D8E  A0 00    LDY #$00
+9D90  20 29 A3 JSR rp_fs_exec
+9D93  90 38    BCC @write_success
+9D95  4C D6 9D JMP @write_fail
+
+@class_pipe:
+9D98  BD BE B5 LDA open_pipe,X
+9D9B  8D 0A B6 STA ksys_rw_wait_object
+9D9E  A9 07    LDA #$07
+9DA0  8D 09 B6 STA ksys_rw_wait_reason
+
+@write_call:
+9DA3  AD 07 B6 LDA ksys_rw_buf_lo
+9DA6  85 A2    STA $A2
+9DA8  AD 08 B6 LDA ksys_rw_buf_hi
+9DAB  85 A3    STA $A3
+9DAD  AC 04 B6 LDY ksys_rw_fd_tmp
+9DB0  AD 05 B6 LDA ksys_rw_len_lo
+9DB3  AE 06 B6 LDX ksys_rw_len_hi
+9DB6  20 D2 93 JSR fd_write
+9DB9  90 12    BCC @write_success
+9DBB  C0 0C    CPY #$0C
+9DBD  D0 17    BNE @write_fail
+9DBF  AD 09 B6 LDA ksys_rw_wait_reason
+9DC2  F0 12    BEQ @write_fail
+9DC4  AC 0A B6 LDY ksys_rw_wait_object
+9DC7  20 66 9C JSR ksys_io_block
+9DCA  4C 32 9D JMP @retry_gate
+
+@write_success:
+9DCD  48       PHA
+9DCE  DA       PHX
+9DCF  20 35 82 JSR file_io_gate_release
+9DD2  FA       PLX
+9DD3  68       PLA
+9DD4  18       CLC
+9DD5  60       RTS
+
+@write_fail:
+9DD6  5A       PHY
+9DD7  20 35 82 JSR file_io_gate_release
+9DDA  7A       PLY
+9DDB  38       SEC
+9DDC  60       RTS
+
+ksys_close:
+9DDD  48       PHA
+9DDE  20 05 82 JSR file_io_gate_acquire
+9DE1  B0 05    BCS @gate_acquired
+9DE3  68       PLA
+9DE4  A0 06    LDY #$06
+9DE6  38       SEC
+9DE7  60       RTS
+
+@gate_acquired:
+9DE8  68       PLA
+9DE9  20 21 92 JSR fd_close
+9DEC  08       PHP
+9DED  48       PHA
+9DEE  DA       PHX
+9DEF  5A       PHY
+9DF0  20 35 82 JSR file_io_gate_release
+9DF3  7A       PLY
+9DF4  FA       PLX
+9DF5  68       PLA
+9DF6  28       PLP
+9DF7  60       RTS
+
+ksys_dup:
+9DF8  48       PHA
+9DF9  20 05 82 JSR file_io_gate_acquire
+9DFC  B0 05    BCS @gate_acquired
+9DFE  68       PLA
+9DFF  A0 06    LDY #$06
+9E01  38       SEC
+9E02  60       RTS
+
+@gate_acquired:
+9E03  68       PLA
+9E04  20 64 94 JSR fd_dup
+9E07  08       PHP
+9E08  48       PHA
+9E09  DA       PHX
+9E0A  5A       PHY
+9E0B  20 35 82 JSR file_io_gate_release
+9E0E  7A       PLY
+9E0F  FA       PLX
+9E10  68       PLA
+9E11  28       PLP
+9E12  60       RTS
+
+ksys_dup2:
+9E13  48       PHA
+9E14  5A       PHY
+9E15  20 05 82 JSR file_io_gate_acquire
+9E18  B0 06    BCS @gate_acquired
+9E1A  7A       PLY
+9E1B  68       PLA
+9E1C  A0 06    LDY #$06
+9E1E  38       SEC
+9E1F  60       RTS
+
+@gate_acquired:
+9E20  7A       PLY
+9E21  68       PLA
+9E22  20 8D 94 JSR fd_dup2
+9E25  08       PHP
+9E26  48       PHA
+9E27  DA       PHX
+9E28  5A       PHY
+9E29  20 35 82 JSR file_io_gate_release
+9E2C  7A       PLY
+9E2D  FA       PLX
+9E2E  68       PLA
+9E2F  28       PLP
+9E30  60       RTS
+
+ksys_pipe:
+9E31  20 05 82 JSR file_io_gate_acquire
+9E34  B0 04    BCS @gate_acquired
+9E36  A0 06    LDY #$06
+9E38  38       SEC
+9E39  60       RTS
+
+@gate_acquired:
+9E3A  20 6E 98 JSR pipe_create
+9E3D  08       PHP
+9E3E  48       PHA
+9E3F  DA       PHX
+9E40  5A       PHY
+9E41  20 35 82 JSR file_io_gate_release
+9E44  7A       PLY
+9E45  FA       PLX
+9E46  68       PLA
+9E47  28       PLP
+9E48  60       RTS
+
+ksys_fs_begin:
+9E49  8E 95 02 STX ksys_fs_snap0
+9E4C  8C 96 02 STY ksys_fs_snap1
+9E4F  20 05 82 JSR file_io_gate_acquire
+9E52  B0 04    BCS @owned
+9E54  A0 06    LDY #$06
+9E56  18       CLC
+9E57  60       RTS
+
+@owned:
+9E58  AD 95 02 LDA ksys_fs_snap0
+9E5B  85 A2    STA $A2
+9E5D  AD 96 02 LDA ksys_fs_snap1
+9E60  85 A3    STA $A3
+9E62  38       SEC
+9E63  60       RTS
+
+ksys_fs_finish:
+9E64  08       PHP
+9E65  48       PHA
+9E66  DA       PHX
+9E67  5A       PHY
+9E68  20 35 82 JSR file_io_gate_release
+9E6B  7A       PLY
+9E6C  FA       PLX
+9E6D  68       PLA
+9E6E  28       PLP
+9E6F  60       RTS
+
+ksys_fs_uppercase_path_at_y:
+9E70  B1 A2    LDA ($A2),Y
+9E72  85 A6    STA $A6
+9E74  C8       INY
+9E75  B1 A2    LDA ($A2),Y
+9E77  85 A7    STA $A7
+9E79  A0 00    LDY #$00
+
+@loop:
+9E7B  B1 A6    LDA ($A6),Y
+9E7D  F0 14    BEQ @done
+9E7F  C9 61    CMP #$61
+9E81  90 09    BCC @next
+9E83  C9 7B    CMP #$7B
+9E85  B0 05    BCS @next
+9E87  38       SEC
+9E88  E9 20    SBC #$20
+9E8A  91 A6    STA ($A6),Y
+
+@next:
+9E8C  C8       INY
+9E8D  D0 EC    BNE @loop
+9E8F  A0 06    LDY #$06
+9E91  38       SEC
+9E92  60       RTS
+
+@done:
+9E93  18       CLC
+9E94  60       RTS
+
+ksys_fs_normalize_no_handle_paths:
+9E95  C9 15    CMP #$15
+9E97  F0 15    BEQ @none
+9E99  C9 0B    CMP #$0B
+9E9B  F0 05    BEQ @rename
+9E9D  A0 00    LDY #$00
+9E9F  4C 70 9E JMP ksys_fs_uppercase_path_at_y
+
+@rename:
+9EA2  A0 00    LDY #$00
+9EA4  20 70 9E JSR ksys_fs_uppercase_path_at_y
+9EA7  B0 06    BCS @fail
+9EA9  A0 02    LDY #$02
+9EAB  4C 70 9E JMP ksys_fs_uppercase_path_at_y
+
+@none:
+9EAE  18       CLC
+
+@fail:
+9EAF  60       RTS
+
+ksys_fs_exec_no_handle:
+9EB0  48       PHA
+9EB1  20 49 9E JSR ksys_fs_begin
+9EB4  B0 03    BCS @owned
+9EB6  68       PLA
+9EB7  38       SEC
+9EB8  60       RTS
+
+@owned:
+9EB9  68       PLA
+9EBA  8D 0E B6 STA ksys_fs_operation
+9EBD  20 95 9E JSR ksys_fs_normalize_no_handle_paths
+9EC0  90 03    BCC @normalized
+9EC2  4C 64 9E JMP ksys_fs_finish
+
+@normalized:
+9EC5  AD 0E B6 LDA ksys_fs_operation
+9EC8  A2 FF    LDX #$FF
+9ECA  A0 00    LDY #$00
+9ECC  20 29 A3 JSR rp_fs_exec
+9ECF  4C 64 9E JMP ksys_fs_finish
+
+ksys_fs_exec_file_handle:
+9ED2  48       PHA
+9ED3  20 49 9E JSR ksys_fs_begin
+9ED6  B0 03    BCS @owned
+9ED8  68       PLA
+9ED9  38       SEC
+9EDA  60       RTS
+
+@owned:
+9EDB  A0 00    LDY #$00
+9EDD  B1 A2    LDA ($A2),Y
+9EDF  A8       TAY
+9EE0  20 58 93 JSR fd_resolve_file
+9EE3  B0 0A    BCS @resolve_fail
+9EE5  AA       TAX
+9EE6  68       PLA
+9EE7  A0 00    LDY #$00
+9EE9  20 29 A3 JSR rp_fs_exec
+9EEC  4C 64 9E JMP ksys_fs_finish
+
+@resolve_fail:
+9EEF  68       PLA
+9EF0  4C 64 9E JMP ksys_fs_finish
+
+ksys_open:
+9EF3  20 49 9E JSR ksys_fs_begin
+9EF6  B0 02    BCS @gate_owned
+9EF8  38       SEC
+9EF9  60       RTS
+
+@gate_owned:
+9EFA  A0 00    LDY #$00
+9EFC  20 70 9E JSR ksys_fs_uppercase_path_at_y
+9EFF  90 03    BCC @path_ready
+9F01  4C 96 9F JMP @fail
+
+@path_ready:
+9F04  A0 04    LDY #$04
+9F06  B1 A2    LDA ($A2),Y
+9F08  C9 00    CMP #$00
+9F0A  F0 15    BEQ @flags_ok
+9F0C  C9 01    CMP #$01
+9F0E  F0 11    BEQ @flags_ok
+9F10  C9 02    CMP #$02
+9F12  F0 0D    BEQ @flags_ok
+9F14  C9 03    CMP #$03
+9F16  F0 09    BEQ @flags_ok
+9F18  C9 04    CMP #$04
+9F1A  F0 05    BEQ @flags_ok
+9F1C  A0 06    LDY #$06
+9F1E  4C 96 9F JMP @fail
+
+@flags_ok:
+9F21  20 9B 8E JSR fd_alloc_open
+9F24  90 03    BCC @open_obj_ok
+9F26  4C 96 9F JMP @fail
+
+@open_obj_ok:
+9F29  8E 0C B6 STX ksys_open_obj
+9F2C  20 61 94 JSR fd_alloc_fd_current
+9F2F  90 09    BCC @fd_ok
+9F31  AE 0C B6 LDX ksys_open_obj
+9F34  20 B4 8E JSR fd_free_open
+9F37  4C 96 9F JMP @fail
+
+@fd_ok:
+9F3A  8C 0D B6 STY ksys_open_fd
+9F3D  A9 02    LDA #$02
+9F3F  A2 FF    LDX #$FF
+9F41  A0 00    LDY #$00
+9F43  20 29 A3 JSR rp_fs_exec
+9F46  90 0B    BCC @rp_ok
+9F48  5A       PHY
+9F49  AE 0C B6 LDX ksys_open_obj
+9F4C  20 B4 8E JSR fd_free_open
+9F4F  7A       PLY
+9F50  4C 96 9F JMP @fail
+
+@rp_ok:
+9F53  8C 0B B6 STY ksys_open_device
+9F56  AE 0C B6 LDX ksys_open_obj
+9F59  9D 37 B1 STA open_file_handle,X
+9F5C  A9 02    LDA #$02
+9F5E  9D F7 B0 STA open_type,X
+9F61  A0 04    LDY #$04
+9F63  B1 A2    LDA ($A2),Y
+9F65  C9 00    CMP #$00
+9F67  F0 0C    BEQ @read_flags
+9F69  C9 01    CMP #$01
+9F6B  F0 0C    BEQ @write_flags
+9F6D  C9 02    CMP #$02
+9F6F  F0 08    BEQ @write_flags
+9F71  A9 03    LDA #$03
+9F73  80 06    BRA @store_flags
+
+@read_flags:
+9F75  A9 01    LDA #$01
+9F77  80 02    BRA @store_flags
+
+@write_flags:
+9F79  A9 02    LDA #$02
+
+@store_flags:
+9F7B  9D 17 B1 STA open_flags,X
+9F7E  AD 0B B6 LDA ksys_open_device
+9F81  9D 27 B1 STA open_dev,X
+9F84  AC 0D B6 LDY ksys_open_fd
+9F87  BD 17 B1 LDA open_flags,X
+9F8A  20 D7 8E JSR fd_attach_current
+9F8D  AD 0D B6 LDA ksys_open_fd
+9F90  A2 00    LDX #$00
+9F92  18       CLC
+9F93  4C 64 9E JMP ksys_fs_finish
+
+@fail:
+9F96  38       SEC
+9F97  4C 64 9E JMP ksys_fs_finish
+
+ksys_load_file_to_memory:
+9F9A  A9 06    LDA #$06
+9F9C  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_save_memory_to_file:
+9F9F  A9 07    LDA #$07
+9FA1  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_seek:
+9FA4  A9 08    LDA #$08
+9FA6  4C D2 9E JMP ksys_fs_exec_file_handle
+
+ksys_tell:
+9FA9  A9 09    LDA #$09
+9FAB  4C D2 9E JMP ksys_fs_exec_file_handle
+
+ksys_delete:
+9FAE  A9 0A    LDA #$0A
+9FB0  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_rename:
+9FB3  A9 0B    LDA #$0B
+9FB5  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_opendir:
+9FB8  20 49 9E JSR ksys_fs_begin
+9FBB  B0 02    BCS @gate_owned
+9FBD  38       SEC
+9FBE  60       RTS
+
+@gate_owned:
+9FBF  A0 00    LDY #$00
+9FC1  20 70 9E JSR ksys_fs_uppercase_path_at_y
+9FC4  90 03    BCC @path_ready
+9FC6  4C 30 A0 JMP @fail
+
+@path_ready:
+9FC9  A0 05    LDY #$05
+9FCB  B1 A2    LDA ($A2),Y
+9FCD  F0 05    BEQ @flags_ok
+9FCF  A0 06    LDY #$06
+9FD1  4C 30 A0 JMP @fail
+
+@flags_ok:
+9FD4  20 9B 8E JSR fd_alloc_open
+9FD7  90 03    BCC @open_obj_ok
+9FD9  4C 30 A0 JMP @fail
+
+@open_obj_ok:
+9FDC  8E 0C B6 STX ksys_open_obj
+9FDF  20 61 94 JSR fd_alloc_fd_current
+9FE2  90 09    BCC @fd_ok
+9FE4  AE 0C B6 LDX ksys_open_obj
+9FE7  20 B4 8E JSR fd_free_open
+9FEA  4C 30 A0 JMP @fail
+
+@fd_ok:
+9FED  8C 0D B6 STY ksys_open_fd
+9FF0  A9 0C    LDA #$0C
+9FF2  A2 FF    LDX #$FF
+9FF4  A0 00    LDY #$00
+9FF6  20 29 A3 JSR rp_fs_exec
+9FF9  90 0B    BCC @rp_ok
+9FFB  5A       PHY
+9FFC  AE 0C B6 LDX ksys_open_obj
+9FFF  20 B4 8E JSR fd_free_open
+A002  7A       PLY
+A003  4C 30 A0 JMP @fail
+
+@rp_ok:
+A006  8C 0B B6 STY ksys_open_device
+A009  AE 0C B6 LDX ksys_open_obj
+A00C  9D 37 B1 STA open_file_handle,X
+A00F  A9 04    LDA #$04
+A011  9D F7 B0 STA open_type,X
+A014  A9 01    LDA #$01
+A016  9D 17 B1 STA open_flags,X
+A019  AD 0B B6 LDA ksys_open_device
+A01C  9D 27 B1 STA open_dev,X
+A01F  AC 0D B6 LDY ksys_open_fd
+A022  A9 01    LDA #$01
+A024  20 D7 8E JSR fd_attach_current
+A027  AD 0D B6 LDA ksys_open_fd
+A02A  A2 00    LDX #$00
+A02C  18       CLC
+A02D  4C 64 9E JMP ksys_fs_finish
+
+@fail:
+A030  38       SEC
+A031  4C 64 9E JMP ksys_fs_finish
+
+ksys_readdir:
+A034  20 49 9E JSR ksys_fs_begin
+A037  B0 02    BCS @owned
+A039  38       SEC
+A03A  60       RTS
+
+@owned:
+A03B  A0 00    LDY #$00
+A03D  B1 A2    LDA ($A2),Y
+A03F  A8       TAY
+A040  20 70 93 JSR fd_resolve_dir
+A043  B0 08    BCS @finish
+A045  AA       TAX
+A046  A9 0D    LDA #$0D
+A048  A0 00    LDY #$00
+A04A  20 29 A3 JSR rp_fs_exec
+
+@finish:
+A04D  4C 64 9E JMP ksys_fs_finish
+
+ksys_closedir:
+A050  20 49 9E JSR ksys_fs_begin
+A053  B0 02    BCS @owned
+A055  38       SEC
+A056  60       RTS
+
+@owned:
+A057  A0 00    LDY #$00
+A059  B1 A2    LDA ($A2),Y
+A05B  A8       TAY
+A05C  20 70 93 JSR fd_resolve_dir
+A05F  B0 07    BCS @finish
+A061  A0 00    LDY #$00
+A063  B1 A2    LDA ($A2),Y
+A065  20 21 92 JSR fd_close
+
+@finish:
+A068  4C 64 9E JMP ksys_fs_finish
+
+ksys_chdir:
+A06B  A9 14    LDA #$14
+A06D  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_mkdir:
+A070  A9 0F    LDA #$0F
+A072  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_rmdir:
+A075  A9 10    LDA #$10
+A077  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_getcwd:
+A07A  A9 15    LDA #$15
+A07C  4C B0 9E JMP ksys_fs_exec_no_handle
+
+ksys_exit:
+A07F  20 36 87 JSR proc_exit_current
+A082  4C 36 8B JMP idle_loop
+
+ksys_yield:
+A085  4C 8E 89 JMP sched_yield
+
+ksys_sleep:
+A088  C9 00    CMP #$00
+A08A  F0 0E    BEQ @done
+A08C  20 B8 9B JSR timer_start_current
+A08F  B0 05    BCS @fail
+A091  A9 04    LDA #$04
+A093  4C D4 89 JMP sched_block_current
+
+@fail:
+A096  A0 0C    LDY #$0C
+A098  38       SEC
+A099  60       RTS
+
+@done:
+A09A  18       CLC
+A09B  60       RTS
+
+ksys_signal:
+A09C  C9 13    CMP #$13
+A09E  F0 10    BEQ @valid_signal
+A0A0  C9 12    CMP #$12
+A0A2  F0 0C    BEQ @valid_signal
+A0A4  C9 09    CMP #$09
+A0A6  F0 08    BEQ @valid_signal
+A0A8  C9 02    CMP #$02
+A0AA  F0 04    BEQ @valid_signal
+A0AC  A0 06    LDY #$06
+A0AE  38       SEC
+A0AF  60       RTS
+
+@valid_signal:
+A0B0  48       PHA
+A0B1  8A       TXA
+A0B2  48       PHA
+A0B3  20 E8 82 JSR proc_gate_acquire
+A0B6  B0 06    BCS @gate_acquired
+A0B8  68       PLA
+A0B9  68       PLA
+A0BA  A0 0C    LDY #$0C
+A0BC  38       SEC
+A0BD  60       RTS
+
+@gate_acquired:
+A0BE  9C 0F B6 STZ ksys_signal_self_kill
+A0C1  68       PLA
+A0C2  AA       TAX
+A0C3  68       PLA
+A0C4  C9 09    CMP #$09
+A0C6  D0 0D    BNE @send_signal
+A0C8  48       PHA
+A0C9  8A       TXA
+A0CA  CD 3D B0 CMP active_pid
+A0CD  D0 05    BNE @not_self_kill
+A0CF  A9 01    LDA #$01
+A0D1  8D 0F B6 STA ksys_signal_self_kill
+
+@not_self_kill:
+A0D4  68       PLA
+
+@send_signal:
+A0D5  20 0C 8D JSR proc_send_signal
+A0D8  B0 13    BCS @invalid_target
+A0DA  20 18 83 JSR proc_gate_release
+A0DD  B0 04    BCS @released
+A0DF  A0 0C    LDY #$0C
+A0E1  38       SEC
+A0E2  60       RTS
+
+@released:
+A0E3  AD 0F B6 LDA ksys_signal_self_kill
+A0E6  D0 02    BNE @yield_zombie
+A0E8  18       CLC
+A0E9  60       RTS
+
+@yield_zombie:
+A0EA  4C 8E 89 JMP sched_yield
+
+@invalid_target:
+A0ED  5A       PHY
+A0EE  20 18 83 JSR proc_gate_release
+A0F1  7A       PLY
+A0F2  38       SEC
+A0F3  60       RTS
+
+ksys_waitpid:
+A0F4  48       PHA
+
+@retry:
+A0F5  20 E8 82 JSR proc_gate_acquire
+A0F8  B0 05    BCS @gate_acquired
+A0FA  68       PLA
+A0FB  A0 0C    LDY #$0C
+A0FD  38       SEC
+A0FE  60       RTS
+
+@gate_acquired:
+A0FF  68       PLA
+A100  48       PHA
+A101  C9 08    CMP #$08
+A103  90 05    BCC @pid_range_ok
+A105  A0 06    LDY #$06
+A107  4C 6A A1 JMP @fail_release
+
+@pid_range_ok:
+A10A  AA       TAX
+A10B  E0 00    CPX #$00
+A10D  D0 05    BNE @not_idle
+A10F  A0 06    LDY #$06
+A111  4C 6A A1 JMP @fail_release
+
+@not_idle:
+A114  BD 83 B0 LDA proc_parent_pid,X
+A117  CD 3D B0 CMP active_pid
+A11A  F0 05    BEQ @owned_child
+A11C  A0 06    LDY #$06
+A11E  4C 6A A1 JMP @fail_release
+
+@owned_child:
+A121  BD 3F B0 LDA proc_state,X
+A124  C9 06    CMP #$06
+A126  F0 1E    BEQ @reap_child
+A128  C9 00    CMP #$00
+A12A  F0 15    BEQ @invalid_state
+A12C  78       SEI
+A12D  68       PLA
+A12E  A8       TAY
+A12F  48       PHA
+A130  AE 3D B0 LDX active_pid
+A133  A9 05    LDA #$05
+A135  20 1C 87 JSR proc_set_wait
+A138  20 18 83 JSR proc_gate_release
+A13B  20 8E 89 JSR sched_yield
+A13E  4C F5 A0 JMP @retry
+
+@invalid_state:
+A141  A0 06    LDY #$06
+A143  4C 6A A1 JMP @fail_release
+
+@reap_child:
+A146  20 9D 8C JSR proc_reap_waited_child
+A149  90 05    BCC @reaped
+A14B  A0 06    LDY #$06
+A14D  4C 6A A1 JMP @fail_release
+
+@reaped:
+A150  48       PHA
+A151  EC 94 B0 CPX console_owner_pid
+A154  D0 09    BNE LA15F
+A156  AD 3D B0 LDA active_pid
+A159  8D 94 B0 STA console_owner_pid
+A15C  20 9A 87 JSR scheduler_wake_console_owner
+
+LA15F:
+A15F  20 18 83 JSR proc_gate_release
+A162  90 10    BCC @release_fail_after_reap
+A164  68       PLA
+A165  AA       TAX
+A166  68       PLA
+A167  8A       TXA
+A168  18       CLC
+A169  60       RTS
+
+@fail_release:
+A16A  98       TYA
+A16B  48       PHA
+A16C  20 18 83 JSR proc_gate_release
+A16F  68       PLA
+A170  A8       TAY
+A171  68       PLA
+A172  38       SEC
+A173  60       RTS
+
+@release_fail_after_reap:
+A174  68       PLA
+A175  68       PLA
+A176  A0 0C    LDY #$0C
+A178  38       SEC
+A179  60       RTS
+
+ksys_getprocinfo:
+A17A  08       PHP
+A17B  78       SEI
+A17C  86 A2    STX $A2
+A17E  84 A3    STY $A3
+A180  A0 00    LDY #$00
+A182  B1 A2    LDA ($A2),Y
+A184  C9 08    CMP #$08
+A186  90 06    BCC @pid_ok
+A188  28       PLP
+A189  58       CLI
+A18A  A0 06    LDY #$06
+A18C  38       SEC
+A18D  60       RTS
+
+@pid_ok:
+A18E  AA       TAX
+A18F  A0 05    LDY #$05
+A191  B1 A2    LDA ($A2),Y
+A193  D0 0F    BNE @extended_size
+A195  88       DEY
+A196  B1 A2    LDA ($A2),Y
+A198  C9 05    CMP #$05
+A19A  90 0D    BCC @size_fail
+A19C  C9 07    CMP #$07
+A19E  B0 04    BCS @extended_size
+A1A0  A9 00    LDA #$00
+A1A2  80 02    BRA @save_size_mode
+
+@extended_size:
+A1A4  A9 01    LDA #$01
+
+@save_size_mode:
+A1A6  48       PHA
+A1A7  80 06    BRA @size_ok
+
+@size_fail:
+A1A9  28       PLP
+A1AA  58       CLI
+A1AB  A0 06    LDY #$06
+A1AD  38       SEC
+A1AE  60       RTS
+
+@size_ok:
+A1AF  A0 02    LDY #$02
+A1B1  B1 A2    LDA ($A2),Y
+A1B3  48       PHA
+A1B4  C8       INY
+A1B5  B1 A2    LDA ($A2),Y
+A1B7  85 A3    STA $A3
+A1B9  68       PLA
+A1BA  85 A2    STA $A2
+A1BC  A0 00    LDY #$00
+A1BE  8A       TXA
+A1BF  91 A2    STA ($A2),Y
+A1C1  C8       INY
+A1C2  BD 83 B0 LDA proc_parent_pid,X
+A1C5  91 A2    STA ($A2),Y
+A1C7  C8       INY
+A1C8  BD 3F B0 LDA proc_state,X
+A1CB  91 A2    STA ($A2),Y
+A1CD  C8       INY
+A1CE  BD 47 B1 LDA wait_reason,X
+A1D1  91 A2    STA ($A2),Y
+A1D3  C8       INY
+A1D4  BD 8B B0 LDA proc_signal_pending,X
+A1D7  91 A2    STA ($A2),Y
+A1D9  68       PLA
+A1DA  F0 19    BEQ @record_done
+A1DC  C8       INY
+A1DD  BD 4F B1 LDA wait_object,X
+A1E0  91 A2    STA ($A2),Y
+A1E2  C8       INY
+A1E3  A9 00    LDA #$00
+A1E5  EC 26 B0 CPX file_io_gate_owner
+A1E8  D0 02    BNE @not_file_io_owner
+A1EA  09 01    ORA #$01
+
+@not_file_io_owner:
+A1EC  EC 32 B0 CPX proc_gate_owner
+A1EF  D0 02    BNE @hold_mask_ready
+A1F1  09 02    ORA #$02
+
+@hold_mask_ready:
+A1F3  91 A2    STA ($A2),Y
+
+@record_done:
+A1F5  28       PLP
+A1F6  58       CLI
+A1F7  18       CLC
+A1F8  60       RTS
+
+ksys_ticks:
+A1F9  AE 70 B3 LDX system_ticks_hi
+A1FC  AD 6F B3 LDA system_ticks_lo
+A1FF  EC 70 B3 CPX system_ticks_hi
+A202  D0 F5    BNE ksys_ticks
+A204  18       CLC
+A205  60       RTS
+
+dev_ops:
+A206  0A       ASL
+A207  A2 4F    LDX #$4F
+A209  A2 12    LDX #$12
+A20B  A2 12    LDX #$12
+A20D  A2 12    LDX #$12
+A20F  A2 12    LDX #$12
+A211  A2 A0    LDX #$A0
+A213  0A       ASL
+A214  38       SEC
+A215  60       RTS
+
+dev_resolve_op:
+A216  DA       PHX
+A217  48       PHA
+A218  BD 27 B1 LDA open_dev,X
+A21B  C9 02    CMP #$02
+A21D  90 06    BCC @dev_ok
+A21F  68       PLA
+A220  FA       PLX
+A221  A0 0A    LDY #$0A
+A223  38       SEC
+A224  60       RTS
+
+@dev_ok:
+A225  A2 02    LDX #$02
+A227  20 5D 86 JSR mul8u
+A22A  A8       TAY
+A22B  B9 06 A2 LDA dev_ops,Y
+A22E  85 A6    STA $A6
+A230  B9 07 A2 LDA $A207,Y
+A233  85 A7    STA $A7
+A235  68       PLA
+A236  18       CLC
+A237  65 A6    ADC $A6
+A239  85 A6    STA $A6
+A23B  90 02    BCC LA23F
+A23D  E6 A7    INC $A7
+
+LA23F:
+A23F  A0 00    LDY #$00
+A241  B1 A6    LDA ($A6),Y
+A243  48       PHA
+A244  C8       INY
+A245  B1 A6    LDA ($A6),Y
+A247  85 A7    STA $A7
+A249  68       PLA
+A24A  85 A6    STA $A6
+A24C  FA       PLX
+A24D  18       CLC
+A24E  60       RTS
+
+console_ops:
+A24F  69 A2    ADC #$A2
+A251  C4 A2    CPY $A2
+A253  C7 A2    SMB4 $A2
+A255  CB       WAI
+A256  A2 A9    LDX #$A9
+A258  01 8D    ORA ($8D,X)
+A25A  95 B0    STA $B0,X
+A25C  9C 12 B0 STZ $B012
+A25F  18       CLC
+A260  60       RTS
+
+console_monitor_exit:
+A261  9C 12 B0 STZ $B012
+A264  9C 95 B0 STZ monitor_active
+A267  18       CLC
+A268  60       RTS
+
+console_read:
+A269  8D 99 B3 STA console_read_len_lo
+A26C  8E 9A B3 STX console_read_len_hi
+
+@retry:
+A26F  AD 93 B0 LDA sched_lock
+A272  D0 3D    BNE @monitor_path
+A274  AE 3D B0 LDX active_pid
+A277  BD 7B B0 LDA proc_flags,X
+A27A  29 08    AND #$08
+A27C  F0 0E    BEQ @normal_process
+A27E  BD 8B B0 LDA proc_signal_pending,X
+A281  C9 02    CMP #$02
+A283  D0 07    BNE @normal_process
+A285  9E 8B B0 STZ proc_signal_pending,X
+A288  A0 04    LDY #$04
+A28A  38       SEC
+A28B  60       RTS
+
+@normal_process:
+A28C  AD 94 B0 LDA console_owner_pid
+A28F  C9 FF    CMP #$FF
+A291  D0 0C    BNE @owner_known
+A293  AD 3D B0 LDA active_pid
+A296  C9 00    CMP #$00
+A298  F0 25    BEQ @zero_read
+A29A  8D 94 B0 STA console_owner_pid
+A29D  80 09    BRA @owner_ok
+
+@owner_known:
+A29F  CD 3D B0 CMP active_pid
+A2A2  F0 04    BEQ @owner_ok
+A2A4  A0 0C    LDY #$0C
+A2A6  38       SEC
+A2A7  60       RTS
+
+@owner_ok:
+A2A8  AD 12 B0 LDA $B012
+A2AB  D0 09    BNE @has_data
+A2AD  A0 0C    LDY #$0C
+A2AF  38       SEC
+A2B0  60       RTS
+
+@monitor_path:
+A2B1  AD 12 B0 LDA $B012
+A2B4  F0 09    BEQ @zero_read
+
+@has_data:
+A2B6  AD 99 B3 LDA console_read_len_lo
+A2B9  AE 9A B3 LDX console_read_len_hi
+A2BC  4C 1F A3 JMP rp_console_read
+
+@zero_read:
+A2BF  A9 00    LDA #$00
+A2C1  AA       TAX
+A2C2  18       CLC
+A2C3  60       RTS
+
+console_write:
+A2C4  4C 24 A3 JMP rp_console_write
+
+console_ioctl:
+A2C7  A0 0B    LDY #$0B
+A2C9  38       SEC
+A2CA  60       RTS
+
+console_close:
+A2CB  18       CLC
+A2CC  60       RTS
+
+rp_console_fill_request:
+A2CD  48       PHA
+A2CE  DA       PHX
+A2CF  5A       PHY
+A2D0  20 08 A4 JSR rp_mailbox_clear_request
+A2D3  A9 01    LDA #$01
+A2D5  8D 00 B0 STA $B000
+A2D8  7A       PLY
+A2D9  8C 01 B0 STY $B001
+A2DC  FA       PLX
+A2DD  68       PLA
+A2DE  8D 08 B0 STA $B008
+A2E1  8E 09 B0 STX $B009
+A2E4  A5 A2    LDA $A2
+A2E6  8D 06 B0 STA $B006
+A2E9  A5 A3    LDA $A3
+A2EB  8D 07 B0 STA $B007
+A2EE  60       RTS
+
+rp_console_transfer:
+A2EF  48       PHA
+A2F0  DA       PHX
+A2F1  5A       PHY
+A2F2  20 D4 A3 JSR rp_acquire_lock
+A2F5  7A       PLY
+A2F6  FA       PLX
+A2F7  68       PLA
+A2F8  20 CD A2 JSR rp_console_fill_request
+A2FB  20 36 A4 JSR rp_mailbox_trigger
+A2FE  20 F4 A3 JSR rp_wait_done
+A301  B0 12    BCS @fail
+A303  AD 0C B0 LDA $B00C
+A306  AE 0D B0 LDX $B00D
+A309  48       PHA
+A30A  DA       PHX
+A30B  20 44 A4 JSR rp_mailbox_mark_idle
+A30E  20 E4 A3 JSR rp_release_lock
+A311  FA       PLX
+A312  68       PLA
+A313  18       CLC
+A314  60       RTS
+
+@fail:
+A315  5A       PHY
+A316  20 44 A4 JSR rp_mailbox_mark_idle
+A319  20 E4 A3 JSR rp_release_lock
+A31C  7A       PLY
+A31D  38       SEC
+A31E  60       RTS
+
+rp_console_read:
+A31F  A0 02    LDY #$02
+A321  4C EF A2 JMP rp_console_transfer
+
+rp_console_write:
+A324  A0 01    LDY #$01
+A326  4C EF A2 JMP rp_console_transfer
+
+rp_fs_exec:
+A329  48       PHA
+A32A  DA       PHX
+A32B  5A       PHY
+A32C  AD 26 B0 LDA file_io_gate_owner
+A32F  CD 3D B0 CMP active_pid
+A332  F0 03    BEQ @owner_ok
+A334  4C C1 A3 JMP @invariant_fail
+
+@owner_ok:
+A337  AD 02 B0 LDA $B002
+A33A  C9 00    CMP #$00
+A33C  F0 03    BEQ @mailbox_idle
+A33E  4C C1 A3 JMP @invariant_fail
+
+@mailbox_idle:
+A341  20 08 A4 JSR rp_mailbox_clear_request
+A344  A9 02    LDA #$02
+A346  8D 00 B0 STA $B000
+A349  A9 11    LDA #$11
+A34B  8D 01 B0 STA $B001
+A34E  A5 A2    LDA $A2
+A350  8D 06 B0 STA $B006
+A353  A5 A3    LDA $A3
+A355  8D 07 B0 STA $B007
+A358  7A       PLY
+A359  FA       PLX
+A35A  68       PLA
+A35B  8D 05 B0 STA $B005
+A35E  8E 0A B0 STX $B00A
+A361  8C 0B B0 STY $B00B
+A364  AE 3D B0 LDX active_pid
+A367  8E 08 B0 STX $B008
+A36A  BD 47 B0 LDA proc_context,X
+A36D  8D 09 B0 STA $B009
+A370  E0 00    CPX #$00
+A372  F0 1A    BEQ @poll
+A374  08       PHP
+A375  78       SEI
+A376  A9 08    LDA #$08
+A378  AC 05 B0 LDY $B005
+A37B  20 1C 87 JSR proc_set_wait
+A37E  A9 01    LDA #$01
+A380  8D 02 B0 STA $B002
+A383  A9 01    LDA #$01
+A385  8D 10 E0 STA $E010
+A388  68       PLA
+A389  20 8E 89 JSR sched_yield
+A38C  80 06    BRA @collect
+
+@poll:
+A38E  20 36 A4 JSR rp_mailbox_trigger
+A391  20 F4 A3 JSR rp_wait_done
+
+@collect:
+A394  AD 02 B0 LDA $B002
+A397  C9 02    CMP #$02
+A399  F0 08    BEQ @done
+A39B  C9 03    CMP #$03
+A39D  F0 18    BEQ @error
+A39F  A0 03    LDY #$03
+A3A1  80 17    BRA @error_with_y
+
+@done:
+A3A3  AD 0C B0 LDA $B00C
+A3A6  AE 0D B0 LDX $B00D
+A3A9  AC 04 B0 LDY $B004
+A3AC  48       PHA
+A3AD  DA       PHX
+A3AE  5A       PHY
+A3AF  20 44 A4 JSR rp_mailbox_mark_idle
+A3B2  7A       PLY
+A3B3  FA       PLX
+A3B4  68       PLA
+A3B5  18       CLC
+A3B6  60       RTS
+
+@error:
+A3B7  AC 03 B0 LDY $B003
+
+@error_with_y:
+A3BA  5A       PHY
+A3BB  20 44 A4 JSR rp_mailbox_mark_idle
+A3BE  7A       PLY
+A3BF  38       SEC
+A3C0  60       RTS
+
+@invariant_fail:
+A3C1  7A       PLY
+A3C2  FA       PLX
+A3C3  68       PLA
+A3C4  A0 03    LDY #$03
+A3C6  38       SEC
+A3C7  60       RTS
+
+rp_try_acquire_lock:
+A3C8  A9 01    LDA #$01
+A3CA  0C 24 B0 TSB rp_lock
+A3CD  F0 03    BEQ LA3D2
+A3CF  18       CLC
+A3D0  80 01    BRA LA3D3
+
+LA3D2:
+A3D2  38       SEC
+
+LA3D3:
+A3D3  60       RTS
+
+rp_acquire_lock:
+A3D4  20 C8 A3 JSR rp_try_acquire_lock
+A3D7  90 FB    BCC rp_acquire_lock
+A3D9  AD 02 B0 LDA $B002
+A3DC  C9 00    CMP #$00
+A3DE  F0 02    BEQ @ok
+
+@bad:
+A3E0  80 FE    BRA @bad
+
+@ok:
+A3E2  38       SEC
+A3E3  60       RTS
+
+rp_release_lock:
+A3E4  AD 02 B0 LDA $B002
+A3E7  C9 00    CMP #$00
+A3E9  F0 02    BEQ @release
+
+@bad:
+A3EB  80 FE    BRA @bad
+
+@release:
+A3ED  A9 01    LDA #$01
+A3EF  1C 24 B0 TRB rp_lock
+A3F2  38       SEC
+A3F3  60       RTS
+
+rp_wait_done:
+A3F4  AD 02 B0 LDA $B002
+A3F7  C9 02    CMP #$02
+A3F9  F0 06    BEQ @done
+A3FB  C9 03    CMP #$03
+A3FD  F0 04    BEQ @error
+A3FF  80 F3    BRA rp_wait_done
+
+@done:
+A401  18       CLC
+A402  60       RTS
+
+@error:
+A403  AC 03 B0 LDY $B003
+A406  38       SEC
+A407  60       RTS
+
+rp_mailbox_clear_request:
+A408  9C 00 B0 STZ $B000
+A40B  9C 01 B0 STZ $B001
+A40E  9C 03 B0 STZ $B003
+A411  9C 04 B0 STZ $B004
+A414  9C 05 B0 STZ $B005
+A417  9C 06 B0 STZ $B006
+A41A  9C 07 B0 STZ $B007
+A41D  9C 08 B0 STZ $B008
+A420  9C 09 B0 STZ $B009
+A423  9C 0A B0 STZ $B00A
+A426  9C 0B B0 STZ $B00B
+A429  9C 0C B0 STZ $B00C
+A42C  9C 0D B0 STZ $B00D
+A42F  9C 0E B0 STZ $B00E
+A432  9C 0F B0 STZ $B00F
+A435  60       RTS
+
+rp_mailbox_trigger:
+A436  08       PHP
+A437  78       SEI
+A438  A9 01    LDA #$01
+A43A  8D 02 B0 STA $B002
+A43D  A9 01    LDA #$01
+A43F  8D 10 E0 STA $E010
+A442  28       PLP
+A443  60       RTS
+
+rp_mailbox_mark_idle:
+A444  A9 00    LDA #$00
+A446  8D 02 B0 STA $B002
+A449  60       RTS
+
+tasks_init:
+A44A  AD 00 10 LDA $1000
+A44D  C9 4E    CMP #$4E
+A44F  D0 6D    BNE @bad_user_image
+A451  AD 01 10 LDA $1001
+A454  C9 58    CMP #$58
+A456  D0 66    BNE @bad_user_image
+A458  AD 02 10 LDA $1002
+A45B  C9 01    CMP #$01
+A45D  D0 5F    BNE @bad_user_image
+A45F  AD 03 10 LDA $1003
+A462  F0 58    BEQ @done
+A464  8D 9B B3 STA init_task_count
+A467  A9 04    LDA #$04
+A469  8D 9C B3 STA init_task_ptr
+A46C  A9 10    LDA #$10
+A46E  8D 9D B3 STA $B39D
+
+@loop:
+A471  AE 9C B3 LDX init_task_ptr
+A474  AC 9D B3 LDY $B39D
+A477  20 EE 8B JSR proc_create
+A47A  90 02    BCC @task_created
+
+@task_create_failed:
+A47C  80 FE    BRA @task_create_failed
+
+@task_created:
+A47E  18       CLC
+A47F  AD 9C B3 LDA init_task_ptr
+A482  69 04    ADC #$04
+A484  8D 9C B3 STA init_task_ptr
+A487  AD 9D B3 LDA $B39D
+A48A  69 00    ADC #$00
+A48C  8D 9D B3 STA $B39D
+A48F  CE 9B B3 DEC init_task_count
+A492  D0 DD    BNE @loop
+A494  AD 03 10 LDA $1003
+A497  C9 02    CMP #$02
+A499  90 21    BCC @done
+A49B  AD 03 10 LDA $1003
+A49E  C9 02    CMP #$02
+A4A0  90 1A    BCC @done
+A4A2  A9 02    LDA #$02
+A4A4  A2 01    LDX #$01
+A4A6  A0 03    LDY #$03
+A4A8  20 27 80 JSR L8027
+A4AB  90 02    BCC LA4AF
+
+@pipe_a_setup_failed:
+A4AD  80 FE    BRA @pipe_a_setup_failed
+
+LA4AF:
+A4AF  A9 01    LDA #$01
+A4B1  A2 02    LDX #$02
+A4B3  A0 04    LDY #$04
+A4B5  20 27 80 JSR L8027
+A4B8  90 02    BCC @done
+
+@pipe_b_setup_failed:
+A4BA  80 FE    BRA @pipe_b_setup_failed
+
+@done:
+A4BC  18       CLC
+A4BD  60       RTS
+
+@bad_user_image:
+A4BE  80 FE    BRA @bad_user_image

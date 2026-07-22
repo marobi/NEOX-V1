@@ -49,6 +49,7 @@
 .include "mailbox.inc"
 .include "process.inc"
 .include "scheduler_defs.inc"
+.include "signal.inc"
 
 .export irq_entry
 .export nmi_entry
@@ -61,6 +62,8 @@
 .import sched_context_switch
 .import sched_lock
 .import monitor_active
+.import console_owner_pid
+.import proc_signal_pending
 
 .import rp_lock
 
@@ -111,28 +114,75 @@
     tsx
     lda $0104,x
     and #$10
-    bne brk_entry				; BREAK
+    beq :+
+    jmp brk_entry                  ; BREAK
+:
 
     lda RP_IRQ_SOURCE
-	jsr BIOS_ACK_IRQ			; ack IRQ
-	
-	cmp #RP_IRQ_SRC_NONE		; non IRQ
-	beq irq_restore
+    jsr BIOS_ACK_IRQ               ; ack IRQ
 
-    cmp #RP_IRQ_SRC_TIMER		; TIMER IRQ
-    beq @timer
+    cmp #RP_IRQ_SRC_NONE           ; non IRQ
+    bne :+
+    jmp irq_restore
+:
 
-    cmp #RP_IRQ_SRC_MONITOR		; MONITOR IRQ
-    beq @monitor
+    cmp #RP_IRQ_SRC_TIMER          ; TIMER IRQ
+    bne :+
+    jmp @timer
+:
+
+    cmp #RP_IRQ_SRC_MONITOR        ; MONITOR IRQ
+    bne :+
+    jmp @monitor
+:
 
     cmp #RP_IRQ_SRC_FS_DONE        ; RP filesystem completion
-    beq @fs_done
+    bne :+
+    jmp @fs_done
+:
 
-    ; unknown → just return
-    bra irq_restore
+    cmp #RP_IRQ_SRC_CONSOLE_BREAK  ; foreground console interrupt
+    bne :+
+    jmp @console_break
+:
+
+    ; unknown -> just return
+    jmp irq_restore
 
 @monitor:
     jmp supervisor_enter_from_irq	; must be JMP
+
+@console_break:
+    ; MICMON is a freeze-style supervisor and is explicitly excluded from
+    ; NEOX foreground process interruption.
+    lda monitor_active
+    bne irq_restore
+
+    ; The current RP console focus is synchronized into console_owner_pid by
+    ; the scheduler. Only normal live process PIDs may receive SIG_INT.
+    ldx console_owner_pid
+    cpx #FIRST_TASK_PID
+    bcc irq_restore
+    cpx #MAX_PROCS
+    bcs irq_restore
+
+    lda proc_state,x
+    cmp #PROC_EMPTY
+    beq irq_restore
+    cmp #PROC_ZOMBIE
+    beq irq_restore
+
+    lda #SIG_INT
+    sta proc_signal_pending,x
+
+    ; Do not enter the scheduler through an already active handoff or short
+    ; RP critical section. The pending signal remains recorded and will be
+    ; applied at the next safe scheduler pass.
+    lda sched_lock
+    ora rp_lock
+    bne irq_restore
+
+    jmp sched_context_switch
 
 @fs_done:
     ; The FILE_IO gate owner is the sole possible generic filesystem

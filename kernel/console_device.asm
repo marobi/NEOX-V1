@@ -7,10 +7,11 @@
 ;
 ; Read policy:
 ;   - console_read uses console_owner_pid only
-;   - normal owner with no data blocks
+;   - a normal non-owner returns EAGAIN to the syscall layer and blocks
+;     in WAIT_CONSOLE
+;   - a normal owner with no data also blocks in WAIT_CONSOLE
 ;   - monitor/supervisor path polls and never blocks
-;   - If no character is ready, read returns 0 bytes.
-;   - The actual RP mailbox read is only started when input is ready.
+;   - the actual RP mailbox read is only started when input is ready
 ;
 ; Write policy:
 ;   - Console write is currently allowed for all tasks with a writable FD.
@@ -20,6 +21,7 @@
 .setcpu "65C02"
 
 .include "process.inc"
+.include "signal.inc"
 .include "syscall.inc"
 .include "mailbox.inc"
 .include "scheduler_defs.inc"
@@ -32,6 +34,8 @@
 .import active_pid
 .import sched_lock
 .import console_owner_pid
+.import proc_flags
+.import proc_signal_pending
 
 .import monitor_active
 
@@ -132,6 +136,24 @@ console_ops:
     lda sched_lock
     bne @monitor_path
 
+    ; A process configured for interruptible SIG_INT handling consumes the
+    ; pending signal at its console-read boundary. This cancels the current
+    ; line without terminating the process.
+    ldx active_pid
+    lda proc_flags,x
+    and #PROC_FLAG_SIGINT_INTERRUPT
+    beq @normal_process
+
+    lda proc_signal_pending,x
+    cmp #SIG_INT
+    bne @normal_process
+
+    stz proc_signal_pending,x
+    ldy #EINTR
+    sec
+    rts
+
+@normal_process:
     ; --------------------------------------------------------
     ; Normal process path
     ;
@@ -152,7 +174,15 @@ console_ops:
 
 @owner_known:
     cmp active_pid
-    bne @zero_read
+    beq @owner_ok
+
+    ; A normal process that does not own the console must sleep rather than
+    ; observe a false EOF/empty read. ksys_read translates EAGAIN for a console
+    ; descriptor into WAIT_CONSOLE, releases FILE_IO, yields, and retries after
+    ; the process is woken.
+    ldy #EAGAIN
+    sec
+    rts
 
 @owner_ok:
     lda RP_CONSOLE_RDY
@@ -180,7 +210,8 @@ console_ops:
     jmp rp_console_read
 	
 ; ------------------------------------------------------------
-; Return 0 bytes (no data or not owner)
+; Return 0 bytes for monitor/supervisor polling with no data.
+; Normal processes never use this as a no-owner result.
 ; ------------------------------------------------------------
 @zero_read:
     lda #0

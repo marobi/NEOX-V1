@@ -1,0 +1,1453 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/shared_state.asm
+Current file: kernel/shared_state.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; shared_state.asm
+000000r 1               ; NEOX - shared kernel-visible writable state
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Defines all writable state that must be visible identically
+000000r 1               ;   in every MMU context.
+000000r 1               ;
+000000r 1               ; Notes:
+000000r 1               ;   This file owns:
+000000r 1               ;     - real shared kernel state
+000000r 1               ;     - RP/monitor-visible process tables
+000000r 1               ;     - RP/monitor-visible lock and gate state
+000000r 1               ;
+000000r 1               ;   The RP monitor reads this shared kernel state directly.
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "scheduler_defs.inc"
+000000r 2               ; ============================================================
+000000r 2               ; scheduler_defs.inc
+000000r 2               ; NEOX - scheduler constants
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SCHEDULER_DEFS_INC__
+000000r 2               __SCHEDULER_DEFS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               IDLE_PID        = 0
+000000r 2               FIRST_TASK_PID  = 1
+000000r 2               
+000000r 2               .struct proc_create_args
+000000r 2                   flags       .byte
+000000r 2                   reserved    .byte
+000000r 2                   entry       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROC_CREATE_ARGS_SIZE = .sizeof(proc_create_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "process.inc"
+000000r 2               .ifndef __PROCESS_INC__
+000000r 2               __PROCESS_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process states
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_EMPTY      = $00
+000000r 2               PROC_NEW        = $01
+000000r 2               PROC_READY      = $02
+000000r 2               PROC_RUNNING    = $03
+000000r 2               PROC_BLOCKED    = $04
+000000r 2               PROC_STOPPED    = $05
+000000r 2               PROC_ZOMBIE     = $06
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Flags byte bit definitions
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_FLAG_NONE              = $00
+000000r 2               PROC_FLAG_IDLE              = $01
+000000r 2               PROC_FLAG_ATTACHED_CON      = $02
+000000r 2               PROC_FLAG_FOREGROUND        = $04
+000000r 2               PROC_FLAG_SIGINT_INTERRUPT  = $08
+000000r 2               
+000000r 2               ; Flags that may be supplied as initial process characteristics by a
+000000r 2               ; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+000000r 2               ; kernel-owned and cannot be requested through these creation interfaces.
+000000r 2               PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process frame format
+000000r 2               ;
+000000r 2               ; All saved runnable process stacks use the IRQ-compatible
+000000r 2               ; extended RTI frame:
+000000r 2               ;     Y, X, A, P, PCL, PCH
+000000r 2               ; The scheduler has no per-process resume mode; normal task
+000000r 2               ; resume is always RTI.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process wait reasons
+000000r 2               ;
+000000r 2               ; WAIT_NONE means the process is not blocked on a known wait object.
+000000r 2               ; Other values describe why a PROC_BLOCKED process is blocked.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               WAIT_NONE       = $00
+000000r 2               WAIT_CONSOLE    = $01
+000000r 2               WAIT_DEVICE     = $02
+000000r 2               WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+000000r 2               WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
+000000r 2               WAIT_TIMER      = $04
+000000r 2               WAIT_PROC       = $05
+000000r 2               
+000000r 2               ; Generic sleepable gate wait.
+000000r 2               ;
+000000r 2               ; wait_object identifies the gate object:
+000000r 2               ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+000000r 2               ;   LOCK_ID_PROC    = future process-management syscall gate
+000000r 2               WAIT_LOCK       = $06
+000000r 2               
+000000r 2               ; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+000000r 2               ; readers and writers can be woken by the correct readiness event.
+000000r 2               WAIT_PIPE_WRITE = $07
+000000r 2               
+000000r 2               ; Blocked while retaining FILE_IO ownership until the RP2350 completes
+000000r 2               ; the single active generic filesystem request. wait_object contains the
+000000r 2               ; filesystem operation code.
+000000r 2               WAIT_RP         = $08
+000000r 2               
+000000r 2               LOCK_ID_FILE_IO = $00
+000000r 2               LOCK_ID_PROC    = $01
+000000r 2               
+000000r 2               ; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+000000r 2               PROC_HOLD_NONE     = $00
+000000r 2               PROC_HOLD_FILE_IO  = $01
+000000r 2               PROC_HOLD_PROC     = $02
+000000r 2               
+000000r 2               ; Sentinel used for free gate owners and empty gate wait queues.
+000000r 2               GATE_OWNER_NONE = $FF
+000000r 2               
+000000r 2               EXIT_OK         = $00
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "fd.inc"
+000000r 2               ; ============================================================
+000000r 2               ; fd.inc
+000000r 2               ; NEOX - file descriptor and open object definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   devices/files.
+000000r 2               ;   This forms the FD/open-object/device layer
+000000r 2               ;   used by read/write/close/dup/dup2.;
+000000r 2               ; Model:
+000000r 2               ;   process fd table → open object table → device/file backend
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __FD_INC__
+000000r 2               __FD_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; FD values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               FD_NONE     = $FF        ; invalid / unused descriptor
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; FD flags (per process)
+000000r 2               ;
+000000r 2               ; These describe how the process uses the descriptor.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               FD_FLAG_READ    = $01
+000000r 2               FD_FLAG_WRITE   = $02
+000000r 2               FD_FLAG_CLOEXEC = $80    ; reserved for later exec() support
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Open object types (system-wide)
+000000r 2               ;
+000000r 2               ; Each open object represents a shared resource. Multiple
+000000r 2               ; processes may reference the same object.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               OBJ_NONE    = $00
+000000r 2               OBJ_DEVICE  = $01        ; console for now
+000000r 2               OBJ_FILE    = $02        ; RP filesystem file handle
+000000r 2               OBJ_PIPE    = $03        ; reserved
+000000r 2               OBJ_DIR     = $04        ; RP filesystem directory handle
+000000r 2               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; FD clone argument block
+000000r 2               ;
+000000r 2               ; Used by kernel-internal cross-process descriptor cloning.
+000000r 2               ; The source descriptor is resolved in source_pid/source_fd and
+000000r 2               ; attached to target_pid/target_fd with the same per-FD flags.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               .struct fd_clone_args
+000000r 2                   source_pid      .byte
+000000r 2                   source_fd       .byte
+000000r 2                   target_pid      .byte
+000000r 2                   target_fd       .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               FD_CLONE_ARGS_SIZE = .sizeof(fd_clone_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Device identifiers
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               DEV_NONE        = $00
+000000r 2               DEV_CONSOLE     = $01
+000000r 2               
+000000r 2               DEV_MAX         = $02
+000000r 2               
+000000r 2               ; Each dev_ops entry is one 16-bit operation-table pointer.
+000000r 2               DEV_OPS_ENTRY_SIZE = 2
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Device operation offsets
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               DEVOP_READ      = 0
+000000r 2               DEVOP_WRITE     = 2
+000000r 2               DEVOP_IOCTL     = 4
+000000r 2               DEVOP_CLOSE     = 6
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "timer.inc"
+000000r 2               ; ============================================================
+000000r 2               ; timer.inc
+000000r 2               ; NEOX - scheduler timer wait definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Defines the timer wait subsystem used by sys_sleep and
+000000r 2               ;   future timeout-based waits.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __TIMER_INC__
+000000r 2               __TIMER_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Special values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               TIMER_NONE     = $FF
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Timer range
+000000r 2               ;
+000000r 2               ; Expiry uses signed 16-bit tick difference:
+000000r 2               ;
+000000r 2               ;   expired if signed(system_ticks - target_tick) >= 0
+000000r 2               ;
+000000r 2               ; Therefore one sleep interval must be less than $8000 ticks.
+000000r 2               ;
+000000r 2               ; At 50 Hz:
+000000r 2               ;   $8000 ticks = about 10.9 minutes
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               TIMER_MAX_DELTA = $7F
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "pipe.inc"
+000000r 2               ; ============================================================
+000000r 2               ; pipe.inc
+000000r 2               ; NEOX - pipe constants
+000000r 2               ; ca65 / W65C02
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef NEOX_PIPE_INC
+000000r 2               NEOX_PIPE_INC = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               PIPE_NONE       = $FF
+000000r 2               
+000000r 2               PIPE_STATE_FREE        = $00
+000000r 2               PIPE_STATE_READ_OPEN   = $01
+000000r 2               PIPE_STATE_WRITE_OPEN  = $02
+000000r 2               PIPE_STATE_USED        = PIPE_STATE_READ_OPEN | PIPE_STATE_WRITE_OPEN
+000000r 2               
+000000r 2               PIPE_END_READ          = $01
+000000r 2               PIPE_END_WRITE         = $02
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "context.inc"
+000000r 2               .ifndef __CONTEXT_INC__
+000000r 2               __CONTEXT_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; MMU context slot states
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ;
+000000r 2               ; These states describe kernel ownership of RP-created/preloaded
+000000r 2               ; MMU contexts.  They do not create contexts and they do not load
+000000r 2               ; images; RP/boot configuration still owns physical context setup.
+000000r 2               ;
+000000r 2               ; Current development configuration preloads neox_user.rom into
+000000r 2               ; contexts 1..9.  Keep MAX_CONTEXTS aligned with the RP-side
+000000r 2               ; configuration and monitor/debug_neox.cpp if mirrored there.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               MAX_CONTEXTS       = 10
+000000r 2               
+000000r 2               CTX_INVALID        = $00    ; context does not exist / not usable
+000000r 2               CTX_RESERVED       = $01    ; BIOS/kernel/monitor/supervisor-owned
+000000r 2               CTX_PRELOADED_FREE = $02    ; resident neox_user image present and available
+000000r 2               CTX_EMPTY_FREE     = $03    ; available, but no guaranteed resident image
+000000r 2               CTX_IN_USE         = $04    ; owned by a process
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "spawn.inc"
+000000r 2               ; ============================================================
+000000r 2               ; spawn.inc
+000000r 2               ; NEOX - unified resident spawn ABI
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SPAWN_INC__
+000000r 2               __SPAWN_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               .include "process.inc"
+000000r 3               .ifndef __PROCESS_INC__
+000000r 3               __PROCESS_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Process states
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               PROC_EMPTY      = $00
+000000r 3               PROC_NEW        = $01
+000000r 3               PROC_READY      = $02
+000000r 3               PROC_RUNNING    = $03
+000000r 3               PROC_BLOCKED    = $04
+000000r 3               PROC_STOPPED    = $05
+000000r 3               PROC_ZOMBIE     = $06
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Flags byte bit definitions
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               PROC_FLAG_NONE              = $00
+000000r 3               PROC_FLAG_IDLE              = $01
+000000r 3               PROC_FLAG_ATTACHED_CON      = $02
+000000r 3               PROC_FLAG_FOREGROUND        = $04
+000000r 3               PROC_FLAG_SIGINT_INTERRUPT  = $08
+000000r 3               
+000000r 3               ; Flags that may be supplied as initial process characteristics by a
+000000r 3               ; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+000000r 3               ; kernel-owned and cannot be requested through these creation interfaces.
+000000r 3               PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Process frame format
+000000r 3               ;
+000000r 3               ; All saved runnable process stacks use the IRQ-compatible
+000000r 3               ; extended RTI frame:
+000000r 3               ;     Y, X, A, P, PCL, PCH
+000000r 3               ; The scheduler has no per-process resume mode; normal task
+000000r 3               ; resume is always RTI.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Process wait reasons
+000000r 3               ;
+000000r 3               ; WAIT_NONE means the process is not blocked on a known wait object.
+000000r 3               ; Other values describe why a PROC_BLOCKED process is blocked.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               WAIT_NONE       = $00
+000000r 3               WAIT_CONSOLE    = $01
+000000r 3               WAIT_DEVICE     = $02
+000000r 3               WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+000000r 3               WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
+000000r 3               WAIT_TIMER      = $04
+000000r 3               WAIT_PROC       = $05
+000000r 3               
+000000r 3               ; Generic sleepable gate wait.
+000000r 3               ;
+000000r 3               ; wait_object identifies the gate object:
+000000r 3               ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+000000r 3               ;   LOCK_ID_PROC    = future process-management syscall gate
+000000r 3               WAIT_LOCK       = $06
+000000r 3               
+000000r 3               ; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+000000r 3               ; readers and writers can be woken by the correct readiness event.
+000000r 3               WAIT_PIPE_WRITE = $07
+000000r 3               
+000000r 3               ; Blocked while retaining FILE_IO ownership until the RP2350 completes
+000000r 3               ; the single active generic filesystem request. wait_object contains the
+000000r 3               ; filesystem operation code.
+000000r 3               WAIT_RP         = $08
+000000r 3               
+000000r 3               LOCK_ID_FILE_IO = $00
+000000r 3               LOCK_ID_PROC    = $01
+000000r 3               
+000000r 3               ; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+000000r 3               PROC_HOLD_NONE     = $00
+000000r 3               PROC_HOLD_FILE_IO  = $01
+000000r 3               PROC_HOLD_PROC     = $02
+000000r 3               
+000000r 3               ; Sentinel used for free gate owners and empty gate wait queues.
+000000r 3               GATE_OWNER_NONE = $FF
+000000r 3               
+000000r 3               EXIT_OK         = $00
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               SPAWN_FLAGS_NONE = PROC_FLAG_NONE
+000000r 2               SPAWN_FLAGS_VALID = PROC_FLAGS_CREATE_MASK
+000000r 2               SPAWN_LAUNCH_NONE = $FF
+000000r 2               SPAWN_FD_CLOSED = $FF
+000000r 2               
+000000r 2               ; Maximum process-private launch-line storage including its terminating NUL.
+000000r 2               ; The public length excludes the NUL and must be less than SPAWN_LINE_MAX.
+000000r 2               SPAWN_LINE_MAX = 64
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; spawn_resident_args
+000000r 2               ;
+000000r 2               ; The parent transfers one opaque argument line to the child. The kernel
+000000r 2               ; does not tokenize, count, quote, or otherwise interpret argument bytes.
+000000r 2               ; arg_line_len excludes the terminating NUL.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               .struct spawn_resident_args
+000000r 2                   entry           .word
+000000r 2                   launch_id       .byte
+000000r 2                   arg_line_ptr    .word
+000000r 2                   arg_line_len    .byte
+000000r 2                   stdin_fd        .byte
+000000r 2                   stdout_fd       .byte
+000000r 2                   stderr_fd       .byte
+000000r 2                   flags           .byte   ; initial child proc_flags
+000000r 2                   result_pid      .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               SPAWN_RESIDENT_ARGS_SIZE = .sizeof(spawn_resident_args)
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; spawn_get_line_args
+000000r 2               ;
+000000r 2               ; Child-side retrieval of the opaque launch argument line.
+000000r 2               ; buffer_size includes space for the terminating NUL.
+000000r 2               ; result_len excludes the terminating NUL.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               .struct spawn_get_line_args
+000000r 2                   buffer_ptr      .word
+000000r 2                   buffer_size     .byte
+000000r 2                   result_len      .byte
+000000r 2               .endstruct
+000000r 2               
+000000r 2               SPAWN_GET_LINE_ARGS_SIZE = .sizeof(spawn_get_line_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .segment "KERN_BSS"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; Kernel metadata
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .export kernel_version
+000000r 1               .export brk_vector
+000000r 1               
+000000r 1               kernel_version:
+000000r 1  xx xx            .res 2
+000002r 1               
+000002r 1               brk_vector:
+000002r 1  xx xx            .res 2
+000004r 1               
+000004r 1               ; ------------------------------------------------------------
+000004r 1               ; RP2350 mailbox serialization lock
+000004r 1               ;
+000004r 1               ; Purpose:
+000004r 1               ;   Ensures only one kernel-side mailbox transaction is active
+000004r 1               ;   at a time.
+000004r 1               ;
+000004r 1               ; Notes:
+000004r 1               ;   This is shared state because the mailbox hardware and request
+000004r 1               ;   block are global resources, not per-process resources.
+000004r 1               ; ------------------------------------------------------------
+000004r 1               
+000004r 1               .export rp_lock
+000004r 1               
+000004r 1               rp_lock:
+000004r 1  xx               .res 1
+000005r 1               
+000005r 1               ; ------------------------------------------------------------
+000005r 1               ; File I/O syscall serialization gate
+000005r 1               ;
+000005r 1               ; Purpose:
+000005r 1               ;   Serializes FD/open-object/pipe/console syscall paths:
+000005r 1               ;     read, write, close, pipe, dup, dup2.
+000005r 1               ;
+000005r 1               ; Policy:
+000005r 1               ;   This is a sleepable PID-owned gate, not an IRQ-preemption blocker.
+000005r 1               ;   Timer scheduling may continue while the gate is owned. A process that
+000005r 1               ;   cannot acquire it blocks on WAIT_LOCK / LOCK_ID_FILE_IO. Normal console
+000005r 1               ;   and pipe waits release the gate before yielding; the planned generic RP
+000005r 1               ;   transaction may retain it while the owner blocks on WAIT_RP.
+000005r 1               ;
+000005r 1               ; FIFO queue:
+000005r 1               ;   file_io_gate_wait_head / tail hold waiting PIDs or $FF.
+000005r 1               ;   file_io_gate_next[pid] links waiting PIDs.
+000005r 1               ; ------------------------------------------------------------
+000005r 1               
+000005r 1               .export file_io_gate
+000005r 1               .export file_io_gate_owner
+000005r 1               .export file_io_gate_wait_head
+000005r 1               .export file_io_gate_wait_tail
+000005r 1               .export file_io_gate_next
+000005r 1               
+000005r 1               .export proc_gate
+000005r 1               .export proc_gate_owner
+000005r 1               .export proc_gate_wait_head
+000005r 1               .export proc_gate_wait_tail
+000005r 1               .export proc_gate_next
+000005r 1               
+000005r 1               file_io_gate:
+000005r 1  xx               .res 1
+000006r 1               
+000006r 1               file_io_gate_owner:
+000006r 1  xx               .res 1
+000007r 1               
+000007r 1               file_io_gate_wait_head:
+000007r 1  xx               .res 1
+000008r 1               
+000008r 1               file_io_gate_wait_tail:
+000008r 1  xx               .res 1
+000009r 1               
+000009r 1               file_io_gate_next:
+000009r 1  xx xx xx xx      .res MAX_PROCS
+00000Dr 1  xx xx xx xx  
+000011r 1               
+000011r 1               ; Future process-management syscall gate.
+000011r 1               ; The state is present now so the same generated gate primitive can
+000011r 1               ; be build-tested before process syscalls are routed through it.
+000011r 1               
+000011r 1               proc_gate:
+000011r 1  xx               .res 1
+000012r 1               
+000012r 1               proc_gate_owner:
+000012r 1  xx               .res 1
+000013r 1               
+000013r 1               proc_gate_wait_head:
+000013r 1  xx               .res 1
+000014r 1               
+000014r 1               proc_gate_wait_tail:
+000014r 1  xx               .res 1
+000015r 1               
+000015r 1               proc_gate_next:
+000015r 1  xx xx xx xx      .res MAX_PROCS
+000019r 1  xx xx xx xx  
+00001Dr 1               
+00001Dr 1               ; ------------------------------------------------------------
+00001Dr 1               ; Scheduler core state
+00001Dr 1               ;
+00001Dr 1               ; active_pid:
+00001Dr 1               ;   PID whose CPU/MMU context is actually executing.
+00001Dr 1               ;
+00001Dr 1               ; sched_cursor_pid:
+00001Dr 1               ;   Scheduler-local round-robin cursor / last selected PID.
+00001Dr 1               ;   It must not be used as caller identity.
+00001Dr 1               ;
+00001Dr 1               ; proc_state[pid]:
+00001Dr 1               ;   Process lifecycle / scheduler state:
+00001Dr 1               ;     PROC_EMPTY
+00001Dr 1               ;     PROC_NEW
+00001Dr 1               ;     PROC_READY
+00001Dr 1               ;     PROC_RUNNING
+00001Dr 1               ;     PROC_BLOCKED
+00001Dr 1               ;
+00001Dr 1               ; proc_context[pid]:
+00001Dr 1               ;   MMU context number associated with each process.
+00001Dr 1               ;
+00001Dr 1               ; proc_sp[pid]:
+00001Dr 1               ;   Saved stack pointer for processes that have already executed
+00001Dr 1               ;   and have been preempted/yielded at least once.
+00001Dr 1               ;
+00001Dr 1               ; proc_entryL/H[pid]:
+00001Dr 1               ;   First-entry address for PROC_NEW tasks.
+00001Dr 1               ;
+00001Dr 1               ; proc_flags[pid]:
+00001Dr 1               ;   Process characteristics flags.
+00001Dr 1               ;
+00001Dr 1               ; proc_parent_pid[pid]:
+00001Dr 1               ;   PID of creator/owner process.
+00001Dr 1               ;   $FF = no parent / kernel-owned.
+00001Dr 1               ; ------------------------------------------------------------
+00001Dr 1               
+00001Dr 1               .export active_pid
+00001Dr 1               .export sched_cursor_pid
+00001Dr 1               .export proc_state
+00001Dr 1               .export proc_context
+00001Dr 1               .export proc_sp
+00001Dr 1               .export proc_entryL
+00001Dr 1               .export proc_entryH
+00001Dr 1               .export proc_flags
+00001Dr 1               .export proc_parent_pid
+00001Dr 1               .export proc_signal_pending
+00001Dr 1               
+00001Dr 1               active_pid:
+00001Dr 1  xx               .res 1
+00001Er 1               
+00001Er 1               sched_cursor_pid:
+00001Er 1  xx               .res 1
+00001Fr 1               
+00001Fr 1               proc_state:
+00001Fr 1  xx xx xx xx      .res MAX_PROCS
+000023r 1  xx xx xx xx  
+000027r 1               
+000027r 1               proc_context:
+000027r 1  xx xx xx xx      .res MAX_PROCS
+00002Br 1  xx xx xx xx  
+00002Fr 1               
+00002Fr 1               ; ------------------------------------------------------------
+00002Fr 1               ; MMU context slot ownership state
+00002Fr 1               ;
+00002Fr 1               ; context_state[ctx]:
+00002Fr 1               ;   CTX_INVALID, CTX_RESERVED, CTX_PRELOADED_FREE,
+00002Fr 1               ;   CTX_EMPTY_FREE, CTX_IN_USE.
+00002Fr 1               ;
+00002Fr 1               ; context_owner_pid[ctx]:
+00002Fr 1               ;   owning PID or $FF when not process-owned.
+00002Fr 1               ;
+00002Fr 1               ; Notes:
+00002Fr 1               ;   proc_context[pid] maps PID -> MMU context.
+00002Fr 1               ;   context_owner_pid[ctx] is the inverse ownership map used by
+00002Fr 1               ;   the future spawn/context allocator.
+00002Fr 1               ; ------------------------------------------------------------
+00002Fr 1               
+00002Fr 1               .export context_state
+00002Fr 1               .export context_owner_pid
+00002Fr 1               
+00002Fr 1               context_state:
+00002Fr 1  xx xx xx xx      .res MAX_CONTEXTS
+000033r 1  xx xx xx xx  
+000037r 1  xx xx        
+000039r 1               
+000039r 1               context_owner_pid:
+000039r 1  xx xx xx xx      .res MAX_CONTEXTS
+00003Dr 1  xx xx xx xx  
+000041r 1  xx xx        
+000043r 1               
+000043r 1               proc_sp:
+000043r 1  xx xx xx xx      .res MAX_PROCS
+000047r 1  xx xx xx xx  
+00004Br 1               
+00004Br 1               proc_entryL:
+00004Br 1  xx xx xx xx      .res MAX_PROCS
+00004Fr 1  xx xx xx xx  
+000053r 1               
+000053r 1               proc_entryH:
+000053r 1  xx xx xx xx      .res MAX_PROCS
+000057r 1  xx xx xx xx  
+00005Br 1               
+00005Br 1               proc_flags:
+00005Br 1  xx xx xx xx      .res MAX_PROCS
+00005Fr 1  xx xx xx xx  
+000063r 1               
+000063r 1               proc_parent_pid:
+000063r 1  xx xx xx xx      .res MAX_PROCS
+000067r 1  xx xx xx xx  
+00006Br 1               
+00006Br 1               proc_signal_pending:
+00006Br 1  xx xx xx xx      .res MAX_PROCS
+00006Fr 1  xx xx xx xx  
+000073r 1               
+000073r 1               ; ------------------------------------------------------------
+000073r 1               ; Scheduler / monitor state
+000073r 1               ;
+000073r 1               ; sched_lock:
+000073r 1               ;   Non-sleeping scheduler preemption guard. Bit 0 is acquired with
+000073r 1               ;   W65C02 TSB by sched_lock_try_enter and cleared with TRB by
+000073r 1               ;   sched_lock_leave.  Try-enter returns C clear only when this caller
+000073r 1               ;   acquired the bit; callers must not enter scheduler-critical code
+000073r 1               ;   or call leave when C is set.  This is not a FIFO gate and must
+000073r 1               ;   never block or yield.  It is deliberately non-recursive.
+000073r 1               ;
+000073r 1               ; console_owner_pid:
+000073r 1               ;   Identifies which process currently owns console input.
+000073r 1               ;   $FF = none / monitor-side default.
+000073r 1               ;
+000073r 1               ; monitor_active:
+000073r 1               ;   Nonzero while monitor mode is active.
+000073r 1               ;
+000073r 1               ; active_context:
+000073r 1               ;   Actual MMU context currently executing on the 6502.
+000073r 1               ;   This is paired with active_pid and changes only at the
+000073r 1               ;   final scheduler/context handoff boundary.
+000073r 1               ; ------------------------------------------------------------
+000073r 1               
+000073r 1               .export sched_lock
+000073r 1               .export console_owner_pid
+000073r 1               .export monitor_active
+000073r 1               .export active_context
+000073r 1               
+000073r 1               sched_lock:
+000073r 1  xx               .res 1
+000074r 1               
+000074r 1               console_owner_pid:
+000074r 1  xx               .res 1
+000075r 1               
+000075r 1               monitor_active:
+000075r 1  xx               .res 1
+000076r 1               
+000076r 1               active_context:
+000076r 1  xx           	.res 1
+000077r 1               
+000077r 1               ; ------------------------------------------------------------
+000077r 1               ; Per-process file descriptor tables
+000077r 1               ;
+000077r 1               ; Each process owns a fixed FD table.
+000077r 1               ;
+000077r 1               ; Layout:
+000077r 1               ;   proc_fd_obj[pid * MAX_FDS + fd]
+000077r 1               ;   proc_fd_flags[pid * MAX_FDS + fd]
+000077r 1               ; ------------------------------------------------------------
+000077r 1               
+000077r 1               .export proc_fd_obj
+000077r 1               .export proc_fd_flags
+000077r 1               
+000077r 1               proc_fd_obj:
+000077r 1  xx xx xx xx      .res MAX_PROCS * MAX_FDS
+00007Br 1  xx xx xx xx  
+00007Fr 1  xx xx xx xx  
+0000A7r 1               
+0000A7r 1               proc_fd_flags:
+0000A7r 1  xx xx xx xx      .res MAX_PROCS * MAX_FDS
+0000ABr 1  xx xx xx xx  
+0000AFr 1  xx xx xx xx  
+0000D7r 1               
+0000D7r 1               ; ------------------------------------------------------------
+0000D7r 1               ; System-wide open object table
+0000D7r 1               ;
+0000D7r 1               ; Each entry represents a shared open resource.
+0000D7r 1               ;
+0000D7r 1               ; Fields:
+0000D7r 1               ;   open_type   - object type
+0000D7r 1               ;   open_refcnt - number of FDs referencing this object
+0000D7r 1               ;   open_flags  - object-level flags
+0000D7r 1               ;   open_dev    - backend device id for device objects, FS device for files
+0000D7r 1               ;   open_file_handle - RP filesystem handle for OBJ_FILE objects
+0000D7r 1               ; ------------------------------------------------------------
+0000D7r 1               
+0000D7r 1               .export open_type
+0000D7r 1               .export open_refcnt
+0000D7r 1               .export open_flags
+0000D7r 1               .export open_dev
+0000D7r 1               .export open_file_handle
+0000D7r 1               
+0000D7r 1               open_type:
+0000D7r 1  xx xx xx xx      .res OPEN_MAX
+0000DBr 1  xx xx xx xx  
+0000DFr 1  xx xx xx xx  
+0000E7r 1               
+0000E7r 1               open_refcnt:
+0000E7r 1  xx xx xx xx      .res OPEN_MAX
+0000EBr 1  xx xx xx xx  
+0000EFr 1  xx xx xx xx  
+0000F7r 1               
+0000F7r 1               open_flags:
+0000F7r 1  xx xx xx xx      .res OPEN_MAX
+0000FBr 1  xx xx xx xx  
+0000FFr 1  xx xx xx xx  
+000107r 1               
+000107r 1               open_dev:
+000107r 1  xx xx xx xx      .res OPEN_MAX
+00010Br 1  xx xx xx xx  
+00010Fr 1  xx xx xx xx  
+000117r 1               
+000117r 1               open_file_handle:
+000117r 1  xx xx xx xx      .res OPEN_MAX
+00011Br 1  xx xx xx xx  
+00011Fr 1  xx xx xx xx  
+000127r 1               
+000127r 1               ; ------------------------------------------------------------
+000127r 1               ; Per-process wait state
+000127r 1               ;
+000127r 1               ; wait_reason[pid]:
+000127r 1               ;   WAIT_NONE, WAIT_CONSOLE, WAIT_DEVICE, WAIT_PIPE_READ,
+000127r 1               ;   WAIT_TIMER, WAIT_PROC, WAIT_LOCK, WAIT_PIPE_WRITE, WAIT_RP, ...
+000127r 1               ;   WAIT_PIPE remains a compatibility alias for WAIT_PIPE_READ.
+000127r 1               ;
+000127r 1               ; wait_object[pid]:
+000127r 1               ;   reason-specific object id. For WAIT_LOCK this is one of
+000127r 1               ;   LOCK_ID_FILE_IO / LOCK_ID_PROC.
+000127r 1               ; ------------------------------------------------------------
+000127r 1               
+000127r 1               .export wait_reason
+000127r 1               .export wait_object
+000127r 1               
+000127r 1               wait_reason:
+000127r 1  xx xx xx xx      .res MAX_PROCS
+00012Br 1  xx xx xx xx  
+00012Fr 1               
+00012Fr 1               wait_object:
+00012Fr 1  xx xx xx xx      .res MAX_PROCS
+000133r 1  xx xx xx xx  
+000137r 1               
+000137r 1               ; ------------------------------------------------------------
+000137r 1               ; Per-process exit codes
+000137r 1               ; ------------------------------------------------------------
+000137r 1               
+000137r 1               .export proc_exit_code
+000137r 1               
+000137r 1               proc_exit_code:
+000137r 1  xx xx xx xx      .res MAX_PROCS
+00013Br 1  xx xx xx xx  
+00013Fr 1               
+00013Fr 1               
+00013Fr 1               ; ------------------------------------------------------------
+00013Fr 1               ; Per-process resident launch state
+00013Fr 1               ;
+00013Fr 1               ; proc_launch_id[pid]:
+00013Fr 1               ;   Userland-defined resident launch selector.
+00013Fr 1               ;
+00013Fr 1               ; proc_launch_line_len[pid]:
+00013Fr 1               ;   Byte length of the opaque argument line, excluding NUL.
+00013Fr 1               ;
+00013Fr 1               ; proc_launch_line:
+00013Fr 1               ;   One fixed bounded line slot per process. The kernel copies bytes
+00013Fr 1               ;   without interpreting them.
+00013Fr 1               ; ------------------------------------------------------------
+00013Fr 1               
+00013Fr 1               .export proc_launch_id
+00013Fr 1               .export proc_launch_line_len
+00013Fr 1               .export proc_launch_line
+00013Fr 1               
+00013Fr 1               proc_launch_id:
+00013Fr 1  xx xx xx xx      .res MAX_PROCS
+000143r 1  xx xx xx xx  
+000147r 1               
+000147r 1               proc_launch_line_len:
+000147r 1  xx xx xx xx      .res MAX_PROCS
+00014Br 1  xx xx xx xx  
+00014Fr 1               
+00014Fr 1               proc_launch_line:
+00014Fr 1  xx xx xx xx      .res MAX_PROCS * SPAWN_LINE_MAX
+000153r 1  xx xx xx xx  
+000157r 1  xx xx xx xx  
+00034Fr 1               
+00034Fr 1               ; ------------------------------------------------------------
+00034Fr 1               ; Global scheduler tick counter
+00034Fr 1               ;
+00034Fr 1               ; Incremented once per timer IRQ.
+00034Fr 1               ;
+00034Fr 1               ; 16-bit:
+00034Fr 1               ;   naturally wraps.
+00034Fr 1               ; ------------------------------------------------------------
+00034Fr 1               
+00034Fr 1               .export system_ticks_lo
+00034Fr 1               .export system_ticks_hi
+00034Fr 1               
+00034Fr 1               system_ticks_lo:
+00034Fr 1  xx               .res 1
+000350r 1               
+000350r 1               system_ticks_hi:
+000350r 1  xx               .res 1
+000351r 1               
+000351r 1               ; ------------------------------------------------------------
+000351r 1               ; Active timer wait table
+000351r 1               ;
+000351r 1               ; timer_pid[slot]:
+000351r 1               ;   PID waiting on this timer slot.
+000351r 1               ;   TIMER_NONE = unused slot.
+000351r 1               ;
+000351r 1               ; timer_until_lo/hi[slot]:
+000351r 1               ;   Absolute wake tick.
+000351r 1               ;
+000351r 1               ; Notes:
+000351r 1               ;   wait_object[pid] stores the timer slot index while the
+000351r 1               ;   process is blocked on WAIT_TIMER.
+000351r 1               ; ------------------------------------------------------------
+000351r 1               
+000351r 1               .export timer_pid
+000351r 1               .export timer_until_lo
+000351r 1               .export timer_until_hi
+000351r 1               
+000351r 1               timer_pid:
+000351r 1  xx xx xx xx      .res MAX_TIMER
+000355r 1  xx xx xx xx  
+000359r 1               
+000359r 1               timer_until_lo:
+000359r 1  xx xx xx xx      .res MAX_TIMER
+00035Dr 1  xx xx xx xx  
+000361r 1               
+000361r 1               timer_until_hi:
+000361r 1  xx xx xx xx      .res MAX_TIMER
+000365r 1  xx xx xx xx  
+000369r 1               
+000369r 1               ; ------------------------------------------------------------
+000369r 1               ; Process runtime accounting
+000369r 1               ;
+000369r 1               ; Updated from timer IRQ context.
+000369r 1               ;
+000369r 1               ; proc_ticks_*:
+000369r 1               ;   Per-process scheduled runtime in timer ticks.
+000369r 1               ;
+000369r 1               ; Counters are 16-bit and naturally wrap.
+000369r 1               ; ------------------------------------------------------------
+000369r 1               
+000369r 1               .export proc_ticks_lo
+000369r 1               .export proc_ticks_hi
+000369r 1               
+000369r 1               proc_ticks_lo:
+000369r 1  xx xx xx xx      .res MAX_PROCS
+00036Dr 1  xx xx xx xx  
+000371r 1               
+000371r 1               proc_ticks_hi:
+000371r 1  xx xx xx xx      .res MAX_PROCS
+000375r 1  xx xx xx xx  
+000379r 1               
+000379r 1               ; ------------------------------------------------------------
+000379r 1               ; Console read state
+000379r 1               ; ------------------------------------------------------------
+000379r 1               
+000379r 1               .export console_read_len_lo
+000379r 1               .export console_read_len_hi
+000379r 1               
+000379r 1               console_read_len_lo:
+000379r 1  xx               .res 1
+00037Ar 1               
+00037Ar 1               console_read_len_hi:
+00037Ar 1  xx               .res 1
+00037Br 1               
+00037Br 1               ; ------------------------------------------------------------
+00037Br 1               ; Init task table state
+00037Br 1               ; ------------------------------------------------------------
+00037Br 1               
+00037Br 1               .export init_task_count
+00037Br 1               .export init_task_ptr
+00037Br 1               
+00037Br 1               init_task_count:
+00037Br 1  xx               .res 1
+00037Cr 1               
+00037Cr 1               init_task_ptr:
+00037Cr 1  xx xx            .res 2
+00037Er 1               
+00037Er 1               ; ------------------------------------------------------------
+00037Er 1               ; Pipe state
+00037Er 1               ;
+00037Er 1               ; pipe_state/head/tail/count:
+00037Er 1               ;   Pipe metadata indexed by pipe id.
+00037Er 1               ;   pipe_state contains PIPE_STATE_READ_OPEN and
+00037Er 1               ;   PIPE_STATE_WRITE_OPEN endpoint-presence bits.
+00037Er 1               ;
+00037Er 1               ; pipe_buf:
+00037Er 1               ;   Pipe storage:
+00037Er 1               ;     MAX_PIPES * PIPE_BUF_SIZE
+00037Er 1               ;
+00037Er 1               ; open_pipe/open_pipe_mode:
+00037Er 1               ;   Per-open-object pipe endpoint metadata.
+00037Er 1               ;   Indexed by open object number.
+00037Er 1               ; ------------------------------------------------------------
+00037Er 1               
+00037Er 1               .export pipe_state
+00037Er 1               .export pipe_head
+00037Er 1               .export pipe_tail
+00037Er 1               .export pipe_count
+00037Er 1               .export pipe_buf
+00037Er 1               
+00037Er 1               .export open_pipe
+00037Er 1               .export open_pipe_mode
+00037Er 1               
+00037Er 1               pipe_state:
+00037Er 1  xx xx xx xx      .res MAX_PIPES
+000382r 1  xx xx xx xx  
+000386r 1               
+000386r 1               pipe_head:
+000386r 1  xx xx xx xx      .res MAX_PIPES
+00038Ar 1  xx xx xx xx  
+00038Er 1               
+00038Er 1               pipe_tail:
+00038Er 1  xx xx xx xx      .res MAX_PIPES
+000392r 1  xx xx xx xx  
+000396r 1               
+000396r 1               pipe_count:
+000396r 1  xx xx xx xx      .res MAX_PIPES
+00039Ar 1  xx xx xx xx  
+00039Er 1               
+00039Er 1               pipe_buf:
+00039Er 1  xx xx xx xx      .res MAX_PIPES * PIPE_BUF_SIZE
+0003A2r 1  xx xx xx xx  
+0003A6r 1  xx xx xx xx  
+00059Er 1               
+00059Er 1               open_pipe:
+00059Er 1  xx xx xx xx      .res OPEN_MAX
+0005A2r 1  xx xx xx xx  
+0005A6r 1  xx xx xx xx  
+0005AEr 1               
+0005AEr 1               open_pipe_mode:
+0005AEr 1  xx xx xx xx      .res OPEN_MAX
+0005B2r 1  xx xx xx xx  
+0005B6r 1  xx xx xx xx  
+0005BEr 1               
+0005BEr 1               ; ------------------------------------------------------------
+0005BEr 1               ; RP console route/focus state
+0005BEr 1               ;
+0005BEr 1               ; console_focus_pid:
+0005BEr 1               ;   Last validated RP_CONSOLE_PID route.
+0005BEr 1               ;   $FF = no normal process route / monitor route.
+0005BEr 1               ;
+0005BEr 1               ; This field is deliberately appended after the established shared layout so
+0005BEr 1               ; existing shared-state offsets remain unchanged.
+0005BEr 1               ; ------------------------------------------------------------
+0005BEr 1               
+0005BEr 1               .export console_focus_pid
+0005BEr 1               
+0005BEr 1               console_focus_pid:
+0005BEr 1  xx               .res 1
+0005BFr 1               
+0005BFr 1               

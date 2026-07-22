@@ -64,7 +64,7 @@ SYS_RMDIR           = $19
 SYS_GETPROCINFO      = $1A
 SYS_WAITPID           = $1B
 SYS_GET_LAUNCH_ID     = $1C
-SYS_GET_LAUNCH_ARGS2  = $1D
+SYS_GET_LAUNCH_LINE   = $1D
 SYS_SPAWN_RESIDENT    = $1E
 
 ; ------------------------------------------------------------
@@ -100,7 +100,7 @@ sys_rmdir           = SYSCALL_BASE + (SYS_RMDIR * SYSCALL_ENTRY_SIZE)
 sys_getprocinfo      = SYSCALL_BASE + (SYS_GETPROCINFO * SYSCALL_ENTRY_SIZE)
 sys_waitpid          = SYSCALL_BASE + (SYS_WAITPID * SYSCALL_ENTRY_SIZE)
 sys_get_launch_id    = SYSCALL_BASE + (SYS_GET_LAUNCH_ID * SYSCALL_ENTRY_SIZE)
-sys_get_launch_args2 = SYSCALL_BASE + (SYS_GET_LAUNCH_ARGS2 * SYSCALL_ENTRY_SIZE)
+sys_get_launch_line  = SYSCALL_BASE + (SYS_GET_LAUNCH_LINE * SYSCALL_ENTRY_SIZE)
 sys_spawn_resident   = SYSCALL_BASE + (SYS_SPAWN_RESIDENT * SYSCALL_ENTRY_SIZE)
 
 ; ------------------------------------------------------------
@@ -114,6 +114,7 @@ EMFILE              = 8        ; too many open file descriptors
 EBADF               = 9
 ENODEV              = 10
 ENOSYS              = 11
+EINTR               = 4        ; interrupted system call
 EAGAIN              = 12       ; operation would block / try again
 ENOMEM              = 13       ; no free kernel memory/object/table slot
 EPIPE               = 14       ; write on pipe with no readers

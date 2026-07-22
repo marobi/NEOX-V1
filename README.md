@@ -9,7 +9,9 @@ README.md
 
 docs/
   architecture.md
+  libneox_cc65.md
   validation.md
+  user_tasks.md
 
   interface/
     mailbox_abi.md
@@ -60,7 +62,7 @@ NEOX is split into four major documentation domains:
 The documented shell command set is:
 
 ```text
-HELP PWD CD LS CAT RM MV MKDIR RMDIR CP PS
+PWD CD LS CAT ECHO RM MV MKDIR RMDIR CP PS KILL
 ```
 
 Diagnostic spawn test applets are intentionally omitted from normal documentation. The spawn/wait infrastructure remains part of the system architecture.
@@ -72,5 +74,6 @@ Build numbers and generated ZIP names are release artifacts. Do not hard-code th
 
 ## Build 128 address-map migration
 
-See `docs/memory_layout_build128.md` for the final 32/32 virtual-memory map.
-The BIOS cartridge now includes the public syscall table; there is no separate syscall cartridge.
+The BIOS remains at `$F000-$F0FF`; the public syscall cartridge remains separate at `$F100-$F1FF`.
+
+- `docs/user_tasks.md`: boot-task roles, diagnostics, Task 5 disable state, and Task 6 shell bootstrap.

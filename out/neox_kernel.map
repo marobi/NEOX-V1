@@ -1,0 +1,1070 @@
+Modules list:
+-------------
+zero_page.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000010  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+shared_state.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=000000  Size=0005BF  Align=00001  Fill=0000
+context.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005BF  Size=000001  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000000  Size=000088  Align=00001  Fill=0000
+gate.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000088  Size=0001F3  Align=00001  Fill=0000
+entry_table.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERNEL_ENTRY      Offs=000000  Size=000100  Align=00001  Fill=0000
+main.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=00027B  Size=000191  Align=00001  Fill=0000
+irq.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=00040C  Size=0000B0  Align=00001  Fill=0000
+klog.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=0004BC  Size=00008D  Align=00001  Fill=0000
+math8.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000549  Size=000020  Align=00001  Fill=0000
+sched_lock.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000569  Size=000021  Align=00001  Fill=0000
+scheduler.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005C0  Size=000008  Align=00001  Fill=0000
+    KERN_TEXT         Offs=00058A  Size=0003D2  Align=00001  Fill=0000
+supervisor.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005C8  Size=000004  Align=00001  Fill=0000
+    KERN_TEXT         Offs=00095C  Size=0000DA  Align=00001  Fill=0000
+idle_task.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000A36  Size=000006  Align=00001  Fill=0000
+process_control.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005CC  Size=000004  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000A3C  Size=000353  Align=00001  Fill=0000
+fd.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005D0  Size=00000C  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000D8F  Size=000646  Align=00001  Fill=0000
+spawn.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000013  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=0013D5  Size=0002D8  Align=00001  Fill=0000
+pipe.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000013  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005DC  Size=000006  Align=00001  Fill=0000
+    KERN_TEXT         Offs=0016AD  Size=0003D8  Align=00001  Fill=0000
+timer.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000013  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005E2  Size=000002  Align=00001  Fill=0000
+    KERN_TEXT         Offs=001A85  Size=0000DB  Align=00001  Fill=0000
+ksys_io.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000013  Size=000002  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005E4  Size=000007  Align=00001  Fill=0000
+    KERN_TEXT         Offs=001B60  Size=0001E9  Align=00001  Fill=0000
+ksys_fs.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000015  Size=000002  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005EB  Size=000004  Align=00001  Fill=0000
+    KERN_TEXT         Offs=001D49  Size=000236  Align=00001  Fill=0000
+ksys_proc.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=0005EF  Size=000001  Align=00001  Fill=0000
+    KERN_TEXT         Offs=001F7F  Size=00017A  Align=00001  Fill=0000
+ksys_time.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=0020F9  Size=00000D  Align=00001  Fill=0000
+device.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=002106  Size=000049  Align=00001  Fill=0000
+console_device.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=00214F  Size=00007E  Align=00001  Fill=0000
+rp_console_io.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=0021CD  Size=00005C  Align=00001  Fill=0000
+rp_fs_io.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=002229  Size=00009F  Align=00001  Fill=0000
+mailbox.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=0022C8  Size=000082  Align=00001  Fill=0000
+init_tasks.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000017  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_TEXT         Offs=00234A  Size=000076  Align=00001  Fill=0000
+
+
+Segment list:
+-------------
+Name                   Start     End    Size  Align
+----------------------------------------------------
+CODE                  000000  000000  000000  00001
+DATA                  000000  000000  000000  00001
+NULL                  000000  000000  000000  00001
+ZEROPAGE              0000A0  0000AF  000010  00001
+BSS                   000280  000296  000017  00001
+KERNEL_ENTRY          008000  0080FF  000100  00001
+KERN_TEXT             008100  00A4BF  0023C0  00001
+RODATA                00A4C0  00A4C0  000000  00001
+KERN_BSS              00B020  00B60F  0005F0  00001
+
+
+Exports list by name:
+---------------------
+__BSS_LOAD__              000280  LA    __BSS_RUN__               000280  LA    
+__BSS_SIZE__              000017  EA    __KERN_BSS_LOAD__         00B020  LA    
+__KERN_BSS_RUN__          00B020  LA    __KERN_BSS_SIZE__         0005F0  EA    
+__PRIVRAM_FILEOFFS__      000000  EA    __PRIVRAM_LAST__          000297  LA    
+__PRIVRAM_SIZE__          001D80  EA    __PRIVRAM_START__         000280  LA    
+__SHARED_FILEOFFS__       000000  EA    __SHARED_LAST__           00B610  LA    
+__SHARED_SIZE__           000FE0  EA    __SHARED_START__          00B020  LA    
+__ZP_FILEOFFS__           000000  EA    __ZP_LAST__               0000B0  LA    
+__ZP_SIZE__               000020  EA    __ZP_START__              0000A0  LA    
+active_context            00B096 RLA    active_pid                00B03D RLA    
+brk_vector                00B022 RLA    console_focus_pid         00B5DE RLA    
+console_monitor_enter     00A257 RLA    console_monitor_exit      00A261 RLA    
+console_ops               00A24F RLA    console_owner_pid         00B094 RLA    
+console_read_len_hi       00B39A RLA    console_read_len_lo       00B399 RLA    
+context_owner_pid         00B059 RLA    context_state             00B04F RLA    
+ctx_alloc_preloaded_for_pid 008130 RLA    ctx_free_for_pid          008159 RLA    
+ctx_init_table            008100 RLA    dev_ptr                   0000A6 RLZ    
+dev_resolve_op            00A216 RLA    enter_monitor             008A9B RLA    
+factor1                   0000A0 RLZ    factor2                   0000A1 RLZ    
+fd_alloc_fd_current       009461 RLA    fd_alloc_open             008E9B RLA    
+fd_attach_current         008ED7 RLA    fd_attach_pid_fd_read     008F1F RLA    
+fd_attach_pid_fd_write    008F29 RLA    fd_check_free_pid_fd      008EE1 RLA    
+fd_clear_process_slots    009227 RLA    fd_clone_between          00909E RLA    
+fd_close                  009221 RLA    fd_close_pid              009156  LA    
+fd_close_process          0092E5 RLA    fd_detach_current         008FCF RLA    
+fd_dup                    009464 RLA    fd_dup2                   00948D RLA    
+fd_free_open              008EB4 RLA    fd_init_open              008EC5 RLA    
+fd_init_process           009271 RLA    fd_init_tables            008FD2 RLA    
+fd_ptr                    0000A8 RLZ    fd_read                   009388 RLA    
+fd_resolve_dir            009370 RLA    fd_resolve_file           009358 RLA    
+fd_resolve_read           00932F RLA    fd_resolve_write          009333 RLA    
+fd_write                  0093D2 RLA    file_io_gate              00B025 RLA    
+file_io_gate_acquire      008205 RLA    file_io_gate_cancel_wait  00825A RLA    
+file_io_gate_init         0081B5 RLA    file_io_gate_next         00B029 RLA    
+file_io_gate_owner        00B026 RLA    file_io_gate_release      008235 RLA    
+file_io_gate_wait_head    00B027 RLA    file_io_gate_wait_tail    00B028 RLA    
+first_run_entry           008A41  LA    idle_loop                 008B36 RLA    
+init_task_count           00B39B RLA    init_task_ptr             00B39C RLA    
+io_ptr                    0000A2 RLZ    irq_entry                 00850C  LA    
+irq_restore               0085B4 RLA    kernel_entry_table        008000  LA    
+kernel_main               00837B RLA    kernel_version            00B020 RLA    
+klog_boot                 0085DA RLA    klog_clear                0085C4 RLA    
+klog_crlf                 0085BF  LA    klog_fail                 008614  LA    
+klog_ok                   0085F7 RLA    klog_ptr                  0000AE RLZ    
+klog_putc                 0085BC  LA    klog_puts                 0085C9  LA    
+ksys_chdir                00A06B RLA    ksys_close                009DDD RLA    
+ksys_closedir             00A050 RLA    ksys_delete               009FAE RLA    
+ksys_dup                  009DF8 RLA    ksys_dup2                 009E13 RLA    
+ksys_exit                 00A07F RLA    ksys_get_launch_id        00971E RLA    
+ksys_get_launch_line      009736 RLA    ksys_getcwd               00A07A RLA    
+ksys_getprocinfo          00A17A RLA    ksys_io_init              009C60 RLA    
+ksys_load_file_to_memory  009F9A RLA    ksys_mkdir                00A070 RLA    
+ksys_open                 009EF3 RLA    ksys_opendir              009FB8 RLA    
+ksys_pipe                 009E31 RLA    ksys_read                 009C70 RLA    
+ksys_readdir              00A034 RLA    ksys_rename               009FB3 RLA    
+ksys_rmdir                00A075 RLA    ksys_save_memory_to_file  009F9F RLA    
+ksys_seek                 009FA4 RLA    ksys_signal               00A09C RLA    
+ksys_sleep                00A088 RLA    ksys_spawn_resident       0095C0 RLA    
+ksys_tell                 009FA9 RLA    ksys_ticks                00A1F9 RLA    
+ksys_waitpid              00A0F4 RLA    ksys_write                009D2C RLA    
+ksys_yield                00A085 RLA    leave_monitor             008AD7 RLA    
+monitor_active            00B095 RLA    mul8u                     00865D RLA    
+nmi_entry                 0085BB  LA    open_dev                  00B127 RLA    
+open_file_handle          00B137 RLA    open_flags                00B117 RLA    
+open_pipe                 00B5BE RLA    open_pipe_mode            00B5CE RLA    
+open_refcnt               00B107 RLA    open_type                 00B0F7 RLA    
+pipe_buf                  00B3BE RLA    pipe_buf_ptr              0000AC RLZ    
+pipe_close_endpoint       009A1D RLA    pipe_count                00B3B6 RLA    
+pipe_create               00986E RLA    pipe_create_between_fd    009902 RLA    
+pipe_head                 00B3A6 RLA    pipe_init_tables          0097C0 RLA    
+pipe_ptr                  0000AA RLZ    pipe_read                 009A82 RLA    
+pipe_state                00B39E RLA    pipe_tail                 00B3AE RLA    
+pipe_write                009B00 RLA    proc_alloc_preloaded      008B55  LA    
+proc_alloc_preloaded_unpublished 008B59 RLA    proc_apply_scheduler_signal 008E10 RLA    
+proc_clear_launch_state   008B4C RLA    proc_clear_wait           00872D RLA    
+proc_context              00B047 RLA    proc_create               008BEE RLA    
+proc_entryH               00B073 RLA    proc_entryL               00B06B RLA    
+proc_exit_code            00B157 RLA    proc_exit_current         008736 RLA    
+proc_exit_lifecycle       008C44 RLA    proc_fd_flags             00B0C7 RLA    
+proc_fd_obj               00B097 RLA    proc_find_free_pid        008B3C  LA    
+proc_flags                00B07B RLA    proc_gate                 00B031 RLA    
+proc_gate_acquire         0082E8 RLA    proc_gate_cancel_wait     00833D RLA    
+proc_gate_init            008298 RLA    proc_gate_next            00B035 RLA    
+proc_gate_owner           00B032 RLA    proc_gate_release         008318 RLA    
+proc_gate_wait_head       00B033 RLA    proc_gate_wait_tail       00B034 RLA    
+proc_launch_id            00B15F RLA    proc_launch_line          00B16F RLA    
+proc_launch_line_len      00B167 RLA    proc_mark_zombie          008D44  LA    
+proc_parent_pid           00B083 RLA    proc_reap_waited_child    008C9D RLA    
+proc_reap_zombies         008DBA RLA    proc_send_signal          008D0C RLA    
+proc_set_ready            00869D  LA    proc_set_running          0086A2  LA    
+proc_set_state            008699 RLA    proc_set_wait             00871C RLA    
+proc_signal_pending       00B08B RLA    proc_sp                   00B063 RLA    
+proc_state                00B03F RLA    proc_terminate            008CB8  LA    
+proc_ticks_hi             00B391 RLA    proc_ticks_lo             00B389 RLA    
+proc_wake                 0086C9 RLA    rp_acquire_lock           00A3D4 RLA    
+rp_console_read           00A31F RLA    rp_console_write          00A324 RLA    
+rp_fs_exec                00A329 RLA    rp_lock                   00B024 RLA    
+rp_mailbox_clear_request  00A408 RLA    rp_mailbox_mark_idle      00A444 RLA    
+rp_mailbox_trigger        00A436 RLA    rp_release_lock           00A3E4 RLA    
+rp_try_acquire_lock       00A3C8  LA    rp_wait_done              00A3F4 RLA    
+sched_block_current       0089D4 RLA    sched_context_switch      00895C RLA    
+sched_cursor_pid          00B03E RLA    sched_lock                00B093 RLA    
+sched_lock_leave          008678 RLA    sched_lock_try_enter      008669 RLA    
+sched_pick_next           008849  LA    sched_ptr                 0000A4 RLZ    
+sched_switch_context      00889C  LA    sched_yield               00898E RLA    
+scheduler_init            0087E1 RLA    scheduler_irq_tick        008693 RLA    
+scheduler_set_current_context 008842 RLA    scheduler_wake_console_input 0087BB  LA    
+scheduler_wake_console_owner 00879A RLA    scheduler_wake_one        0086D7 RLA    
+scheduler_wake_timers     009C03 RLA    set_brk_vector            008505 RLA    
+supervisor_enter_from_irq 008A5C RLA    system_ticks_hi           00B370 RLA    
+system_ticks_lo           00B36F RLA    tasks_init                00A44A RLA    
+timer_alloc               009B98  LA    timer_commit_current      009BDF RLA    
+timer_free                009BAC RLA    timer_init                009B85 RLA    
+timer_pid                 00B371 RLA    timer_start_current       009BB8 RLA    
+timer_until_hi            00B381 RLA    timer_until_lo            00B379 RLA    
+wait_object               00B14F RLA    wait_reason               00B147 RLA    
+
+
+
+Exports list by value:
+----------------------
+__SHARED_FILEOFFS__       000000  EA    __PRIVRAM_FILEOFFS__      000000  EA    
+__ZP_FILEOFFS__           000000  EA    __BSS_SIZE__              000017  EA    
+__ZP_SIZE__               000020  EA    factor1                   0000A0 RLZ    
+__ZP_START__              0000A0  LA    factor2                   0000A1 RLZ    
+io_ptr                    0000A2 RLZ    sched_ptr                 0000A4 RLZ    
+dev_ptr                   0000A6 RLZ    fd_ptr                    0000A8 RLZ    
+pipe_ptr                  0000AA RLZ    pipe_buf_ptr              0000AC RLZ    
+klog_ptr                  0000AE RLZ    __ZP_LAST__               0000B0  LA    
+__BSS_RUN__               000280  LA    __PRIVRAM_START__         000280  LA    
+__BSS_LOAD__              000280  LA    __PRIVRAM_LAST__          000297  LA    
+__KERN_BSS_SIZE__         0005F0  EA    __SHARED_SIZE__           000FE0  EA    
+__PRIVRAM_SIZE__          001D80  EA    kernel_entry_table        008000  LA    
+ctx_init_table            008100 RLA    ctx_alloc_preloaded_for_pid 008130 RLA    
+ctx_free_for_pid          008159 RLA    file_io_gate_init         0081B5 RLA    
+file_io_gate_acquire      008205 RLA    file_io_gate_release      008235 RLA    
+file_io_gate_cancel_wait  00825A RLA    proc_gate_init            008298 RLA    
+proc_gate_acquire         0082E8 RLA    proc_gate_release         008318 RLA    
+proc_gate_cancel_wait     00833D RLA    kernel_main               00837B RLA    
+set_brk_vector            008505 RLA    irq_entry                 00850C  LA    
+irq_restore               0085B4 RLA    nmi_entry                 0085BB  LA    
+klog_putc                 0085BC  LA    klog_crlf                 0085BF  LA    
+klog_clear                0085C4 RLA    klog_puts                 0085C9  LA    
+klog_boot                 0085DA RLA    klog_ok                   0085F7 RLA    
+klog_fail                 008614  LA    mul8u                     00865D RLA    
+sched_lock_try_enter      008669 RLA    sched_lock_leave          008678 RLA    
+scheduler_irq_tick        008693 RLA    proc_set_state            008699 RLA    
+proc_set_ready            00869D  LA    proc_set_running          0086A2  LA    
+proc_wake                 0086C9 RLA    scheduler_wake_one        0086D7 RLA    
+proc_set_wait             00871C RLA    proc_clear_wait           00872D RLA    
+proc_exit_current         008736 RLA    scheduler_wake_console_owner 00879A RLA    
+scheduler_wake_console_input 0087BB  LA    scheduler_init            0087E1 RLA    
+scheduler_set_current_context 008842 RLA    sched_pick_next           008849  LA    
+sched_switch_context      00889C  LA    sched_context_switch      00895C RLA    
+sched_yield               00898E RLA    sched_block_current       0089D4 RLA    
+first_run_entry           008A41  LA    supervisor_enter_from_irq 008A5C RLA    
+enter_monitor             008A9B RLA    leave_monitor             008AD7 RLA    
+idle_loop                 008B36 RLA    proc_find_free_pid        008B3C  LA    
+proc_clear_launch_state   008B4C RLA    proc_alloc_preloaded      008B55  LA    
+proc_alloc_preloaded_unpublished 008B59 RLA    proc_create               008BEE RLA    
+proc_exit_lifecycle       008C44 RLA    proc_reap_waited_child    008C9D RLA    
+proc_terminate            008CB8  LA    proc_send_signal          008D0C RLA    
+proc_mark_zombie          008D44  LA    proc_reap_zombies         008DBA RLA    
+proc_apply_scheduler_signal 008E10 RLA    fd_alloc_open             008E9B RLA    
+fd_free_open              008EB4 RLA    fd_init_open              008EC5 RLA    
+fd_attach_current         008ED7 RLA    fd_check_free_pid_fd      008EE1 RLA    
+fd_attach_pid_fd_read     008F1F RLA    fd_attach_pid_fd_write    008F29 RLA    
+fd_detach_current         008FCF RLA    fd_init_tables            008FD2 RLA    
+fd_clone_between          00909E RLA    fd_close_pid              009156  LA    
+fd_close                  009221 RLA    fd_clear_process_slots    009227 RLA    
+fd_init_process           009271 RLA    fd_close_process          0092E5 RLA    
+fd_resolve_read           00932F RLA    fd_resolve_write          009333 RLA    
+fd_resolve_file           009358 RLA    fd_resolve_dir            009370 RLA    
+fd_read                   009388 RLA    fd_write                  0093D2 RLA    
+fd_alloc_fd_current       009461 RLA    fd_dup                    009464 RLA    
+fd_dup2                   00948D RLA    ksys_spawn_resident       0095C0 RLA    
+ksys_get_launch_id        00971E RLA    ksys_get_launch_line      009736 RLA    
+pipe_init_tables          0097C0 RLA    pipe_create               00986E RLA    
+pipe_create_between_fd    009902 RLA    pipe_close_endpoint       009A1D RLA    
+pipe_read                 009A82 RLA    pipe_write                009B00 RLA    
+timer_init                009B85 RLA    timer_alloc               009B98  LA    
+timer_free                009BAC RLA    timer_start_current       009BB8 RLA    
+timer_commit_current      009BDF RLA    scheduler_wake_timers     009C03 RLA    
+ksys_io_init              009C60 RLA    ksys_read                 009C70 RLA    
+ksys_write                009D2C RLA    ksys_close                009DDD RLA    
+ksys_dup                  009DF8 RLA    ksys_dup2                 009E13 RLA    
+ksys_pipe                 009E31 RLA    ksys_open                 009EF3 RLA    
+ksys_load_file_to_memory  009F9A RLA    ksys_save_memory_to_file  009F9F RLA    
+ksys_seek                 009FA4 RLA    ksys_tell                 009FA9 RLA    
+ksys_delete               009FAE RLA    ksys_rename               009FB3 RLA    
+ksys_opendir              009FB8 RLA    ksys_readdir              00A034 RLA    
+ksys_closedir             00A050 RLA    ksys_chdir                00A06B RLA    
+ksys_mkdir                00A070 RLA    ksys_rmdir                00A075 RLA    
+ksys_getcwd               00A07A RLA    ksys_exit                 00A07F RLA    
+ksys_yield                00A085 RLA    ksys_sleep                00A088 RLA    
+ksys_signal               00A09C RLA    ksys_waitpid              00A0F4 RLA    
+ksys_getprocinfo          00A17A RLA    ksys_ticks                00A1F9 RLA    
+dev_resolve_op            00A216 RLA    console_ops               00A24F RLA    
+console_monitor_enter     00A257 RLA    console_monitor_exit      00A261 RLA    
+rp_console_read           00A31F RLA    rp_console_write          00A324 RLA    
+rp_fs_exec                00A329 RLA    rp_try_acquire_lock       00A3C8  LA    
+rp_acquire_lock           00A3D4 RLA    rp_release_lock           00A3E4 RLA    
+rp_wait_done              00A3F4 RLA    rp_mailbox_clear_request  00A408 RLA    
+rp_mailbox_trigger        00A436 RLA    rp_mailbox_mark_idle      00A444 RLA    
+tasks_init                00A44A RLA    __KERN_BSS_RUN__          00B020  LA    
+__KERN_BSS_LOAD__         00B020  LA    __SHARED_START__          00B020  LA    
+kernel_version            00B020 RLA    brk_vector                00B022 RLA    
+rp_lock                   00B024 RLA    file_io_gate              00B025 RLA    
+file_io_gate_owner        00B026 RLA    file_io_gate_wait_head    00B027 RLA    
+file_io_gate_wait_tail    00B028 RLA    file_io_gate_next         00B029 RLA    
+proc_gate                 00B031 RLA    proc_gate_owner           00B032 RLA    
+proc_gate_wait_head       00B033 RLA    proc_gate_wait_tail       00B034 RLA    
+proc_gate_next            00B035 RLA    active_pid                00B03D RLA    
+sched_cursor_pid          00B03E RLA    proc_state                00B03F RLA    
+proc_context              00B047 RLA    context_state             00B04F RLA    
+context_owner_pid         00B059 RLA    proc_sp                   00B063 RLA    
+proc_entryL               00B06B RLA    proc_entryH               00B073 RLA    
+proc_flags                00B07B RLA    proc_parent_pid           00B083 RLA    
+proc_signal_pending       00B08B RLA    sched_lock                00B093 RLA    
+console_owner_pid         00B094 RLA    monitor_active            00B095 RLA    
+active_context            00B096 RLA    proc_fd_obj               00B097 RLA    
+proc_fd_flags             00B0C7 RLA    open_type                 00B0F7 RLA    
+open_refcnt               00B107 RLA    open_flags                00B117 RLA    
+open_dev                  00B127 RLA    open_file_handle          00B137 RLA    
+wait_reason               00B147 RLA    wait_object               00B14F RLA    
+proc_exit_code            00B157 RLA    proc_launch_id            00B15F RLA    
+proc_launch_line_len      00B167 RLA    proc_launch_line          00B16F RLA    
+system_ticks_lo           00B36F RLA    system_ticks_hi           00B370 RLA    
+timer_pid                 00B371 RLA    timer_until_lo            00B379 RLA    
+timer_until_hi            00B381 RLA    proc_ticks_lo             00B389 RLA    
+proc_ticks_hi             00B391 RLA    console_read_len_lo       00B399 RLA    
+console_read_len_hi       00B39A RLA    init_task_count           00B39B RLA    
+init_task_ptr             00B39C RLA    pipe_state                00B39E RLA    
+pipe_head                 00B3A6 RLA    pipe_tail                 00B3AE RLA    
+pipe_count                00B3B6 RLA    pipe_buf                  00B3BE RLA    
+open_pipe                 00B5BE RLA    open_pipe_mode            00B5CE RLA    
+console_focus_pid         00B5DE RLA    __SHARED_LAST__           00B610  LA    
+
+
+
+Imports list:
+-------------
+__BSS_LOAD__ ([linker generated]):
+__BSS_RUN__ ([linker generated]):
+__BSS_SIZE__ ([linker generated]):
+__KERN_BSS_LOAD__ ([linker generated]):
+__KERN_BSS_RUN__ ([linker generated]):
+__KERN_BSS_SIZE__ ([linker generated]):
+__PRIVRAM_FILEOFFS__ ([linker generated]):
+__PRIVRAM_LAST__ ([linker generated]):
+__PRIVRAM_SIZE__ ([linker generated]):
+__PRIVRAM_START__ ([linker generated]):
+__SHARED_FILEOFFS__ ([linker generated]):
+__SHARED_LAST__ ([linker generated]):
+__SHARED_SIZE__ ([linker generated]):
+__SHARED_START__ ([linker generated]):
+__ZP_FILEOFFS__ ([linker generated]):
+__ZP_LAST__ ([linker generated]):
+__ZP_SIZE__ ([linker generated]):
+__ZP_START__ ([linker generated]):
+active_context (shared_state.o):
+    supervisor.o              kernel/supervisor.asm:26
+    scheduler.o               kernel/scheduler.asm:72
+active_pid (shared_state.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:30
+    console_device.o          kernel/console_device.asm:34
+    ksys_proc.o               kernel/ksys_proc.asm:35
+    timer.o                   kernel/timer.asm:35
+    spawn.o                   kernel/spawn.asm:35
+    fd.o                      kernel/fd.asm:57
+    process_control.o         kernel/process_control.asm:42
+    supervisor.o              kernel/supervisor.asm:25
+    scheduler.o               kernel/scheduler.asm:58
+    main.o                    kernel/main.asm:57
+    gate.o                    kernel/gate.asm:36
+brk_vector (shared_state.o):
+    irq.o                     kernel/irq.asm:57
+    main.o                    kernel/main.asm:41
+console_focus_pid (shared_state.o):
+    scheduler.o               kernel/scheduler.asm:70
+console_monitor_enter (console_device.o):
+    supervisor.o              kernel/supervisor.asm:28
+console_monitor_exit (console_device.o):
+    supervisor.o              kernel/supervisor.asm:29
+console_ops (console_device.o):
+    device.o                  kernel/device.asm:14
+console_owner_pid (shared_state.o):
+    console_device.o          kernel/console_device.asm:36
+    ksys_proc.o               kernel/ksys_proc.asm:36
+    spawn.o                   kernel/spawn.asm:36
+    scheduler.o               kernel/scheduler.asm:69
+    irq.o                     kernel/irq.asm:65
+    main.o                    kernel/main.asm:59
+console_read_len_hi (shared_state.o):
+    console_device.o          kernel/console_device.asm:46
+console_read_len_lo (shared_state.o):
+    console_device.o          kernel/console_device.asm:45
+context_owner_pid (shared_state.o):
+    context.o                 kernel/context.asm:31
+context_state (shared_state.o):
+    context.o                 kernel/context.asm:30
+ctx_alloc_preloaded_for_pid (context.o):
+    process_control.o         kernel/process_control.asm:62
+ctx_free_for_pid (context.o):
+    spawn.o                   kernel/spawn.asm:30
+    process_control.o         kernel/process_control.asm:63
+ctx_init_table (context.o):
+    main.o                    kernel/main.asm:47
+dev_ptr (zero_page.o):
+    device.o                  kernel/device.asm:17
+    ksys_fs.o                 kernel/ksys_fs.asm:58
+    spawn.o                   kernel/spawn.asm:55
+    fd.o                      kernel/fd.asm:75
+dev_resolve_op (device.o):
+    fd.o                      kernel/fd.asm:70
+enter_monitor (supervisor.o):
+    entry_table.o             kernel/entry_table.asm:25
+factor1 (zero_page.o):
+    math8.o                   kernel/math8.asm:5
+factor2 (zero_page.o):
+    math8.o                   kernel/math8.asm:6
+fd_alloc_fd_current (fd.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:44
+    pipe.o                    kernel/pipe.asm:33
+fd_alloc_open (fd.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:42
+    pipe.o                    kernel/pipe.asm:31
+fd_attach_current (fd.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:45
+    pipe.o                    kernel/pipe.asm:34
+fd_attach_pid_fd_read (fd.o):
+    pipe.o                    kernel/pipe.asm:38
+fd_attach_pid_fd_write (fd.o):
+    pipe.o                    kernel/pipe.asm:39
+fd_check_free_pid_fd (fd.o):
+    pipe.o                    kernel/pipe.asm:37
+fd_clear_process_slots (fd.o):
+    process_control.o         kernel/process_control.asm:34
+fd_clone_between (fd.o):
+    spawn.o                   kernel/spawn.asm:32
+fd_close (fd.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:48
+    ksys_io.o                 kernel/ksys_io.asm:61
+fd_close_pid (fd.o):
+fd_close_process (fd.o):
+    spawn.o                   kernel/spawn.asm:33
+    process_control.o         kernel/process_control.asm:35
+fd_detach_current (fd.o):
+    pipe.o                    kernel/pipe.asm:35
+fd_dup (fd.o):
+    ksys_io.o                 kernel/ksys_io.asm:63
+fd_dup2 (fd.o):
+    ksys_io.o                 kernel/ksys_io.asm:64
+fd_free_open (fd.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:43
+    pipe.o                    kernel/pipe.asm:32
+fd_init_open (fd.o):
+    pipe.o                    kernel/pipe.asm:36
+fd_init_process (fd.o):
+    process_control.o         kernel/process_control.asm:33
+    main.o                    kernel/main.asm:50
+fd_init_tables (fd.o):
+    main.o                    kernel/main.asm:49
+fd_ptr (zero_page.o):
+    fd.o                      kernel/fd.asm:72
+fd_read (fd.o):
+    ksys_io.o                 kernel/ksys_io.asm:59
+fd_resolve_dir (fd.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:47
+fd_resolve_file (fd.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:46
+fd_resolve_read (fd.o):
+    ksys_io.o                 kernel/ksys_io.asm:57
+fd_resolve_write (fd.o):
+    ksys_io.o                 kernel/ksys_io.asm:58
+fd_write (fd.o):
+    ksys_io.o                 kernel/ksys_io.asm:60
+file_io_gate (shared_state.o):
+    process_control.o         kernel/process_control.asm:39
+    gate.o                    kernel/gate.asm:43
+file_io_gate_acquire (gate.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:39
+    ksys_io.o                 kernel/ksys_io.asm:52
+    pipe.o                    kernel/pipe.asm:53
+    spawn.o                   kernel/spawn.asm:22
+    process_control.o         kernel/process_control.asm:36
+file_io_gate_cancel_wait (gate.o):
+    process_control.o         kernel/process_control.asm:38
+file_io_gate_init (gate.o):
+    ksys_io.o                 kernel/ksys_io.asm:50
+file_io_gate_next (shared_state.o):
+    gate.o                    kernel/gate.asm:47
+file_io_gate_owner (shared_state.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:34
+    ksys_proc.o               kernel/ksys_proc.asm:44
+    process_control.o         kernel/process_control.asm:40
+    irq.o                     kernel/irq.asm:70
+    gate.o                    kernel/gate.asm:44
+file_io_gate_release (gate.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:40
+    ksys_io.o                 kernel/ksys_io.asm:53
+    pipe.o                    kernel/pipe.asm:54
+    spawn.o                   kernel/spawn.asm:23
+    process_control.o         kernel/process_control.asm:37
+file_io_gate_wait_head (shared_state.o):
+    gate.o                    kernel/gate.asm:45
+file_io_gate_wait_tail (shared_state.o):
+    gate.o                    kernel/gate.asm:46
+first_run_entry (scheduler.o):
+idle_loop (idle_task.o):
+    ksys_proc.o               kernel/ksys_proc.asm:24
+    scheduler.o               kernel/scheduler.asm:55
+    main.o                    kernel/main.asm:55
+init_task_count (shared_state.o):
+    init_tasks.o              kernel/init_tasks.asm:27
+init_task_ptr (shared_state.o):
+    init_tasks.o              kernel/init_tasks.asm:28
+io_ptr (zero_page.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:23
+    rp_console_io.o           kernel/rp_console_io.asm:17
+    ksys_proc.o               kernel/ksys_proc.asm:38
+    ksys_fs.o                 kernel/ksys_fs.asm:57
+    ksys_io.o                 kernel/ksys_io.asm:70
+    spawn.o                   kernel/spawn.asm:54
+    fd.o                      kernel/fd.asm:59
+irq_entry (irq.o):
+irq_restore (irq.o):
+    supervisor.o              kernel/supervisor.asm:31
+    scheduler.o               kernel/scheduler.asm:100
+    main.o                    kernel/main.asm:42
+kernel_entry_table (entry_table.o):
+kernel_main (main.o):
+    entry_table.o             kernel/entry_table.asm:23
+kernel_version (shared_state.o):
+    main.o                    kernel/main.asm:38
+klog_boot (klog.o):
+    main.o                    include/klog.inc:21
+klog_clear (klog.o):
+    main.o                    include/klog.inc:20
+klog_crlf (klog.o):
+klog_fail (klog.o):
+klog_ok (klog.o):
+    main.o                    include/klog.inc:22
+klog_ptr (zero_page.o):
+    klog.o                    kernel/klog.asm:31
+    main.o                    include/klog.inc:15
+klog_putc (klog.o):
+klog_puts (klog.o):
+ksys_chdir (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:49
+ksys_close (ksys_io.o):
+    entry_table.o             kernel/entry_table.asm:32
+ksys_closedir (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:48
+ksys_delete (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:44
+ksys_dup (ksys_io.o):
+    entry_table.o             kernel/entry_table.asm:33
+ksys_dup2 (ksys_io.o):
+    entry_table.o             kernel/entry_table.asm:34
+ksys_exit (ksys_proc.o):
+    entry_table.o             kernel/entry_table.asm:29
+ksys_get_launch_id (spawn.o):
+    entry_table.o             kernel/entry_table.asm:55
+ksys_get_launch_line (spawn.o):
+    entry_table.o             kernel/entry_table.asm:56
+ksys_getcwd (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:50
+ksys_getprocinfo (ksys_proc.o):
+    entry_table.o             kernel/entry_table.asm:53
+ksys_io_init (ksys_io.o):
+    main.o                    kernel/main.asm:64
+ksys_load_file_to_memory (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:40
+ksys_mkdir (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:51
+ksys_open (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:39
+ksys_opendir (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:46
+ksys_pipe (ksys_io.o):
+    entry_table.o             kernel/entry_table.asm:35
+ksys_read (ksys_io.o):
+    entry_table.o             kernel/entry_table.asm:27
+ksys_readdir (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:47
+ksys_rename (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:45
+ksys_rmdir (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:52
+ksys_save_memory_to_file (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:41
+ksys_seek (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:42
+ksys_signal (ksys_proc.o):
+    entry_table.o             kernel/entry_table.asm:38
+ksys_sleep (ksys_proc.o):
+    entry_table.o             kernel/entry_table.asm:31
+ksys_spawn_resident (spawn.o):
+    entry_table.o             kernel/entry_table.asm:57
+ksys_tell (ksys_fs.o):
+    entry_table.o             kernel/entry_table.asm:43
+ksys_ticks (ksys_time.o):
+    entry_table.o             kernel/entry_table.asm:37
+ksys_waitpid (ksys_proc.o):
+    entry_table.o             kernel/entry_table.asm:54
+ksys_write (ksys_io.o):
+    entry_table.o             kernel/entry_table.asm:28
+ksys_yield (ksys_proc.o):
+    entry_table.o             kernel/entry_table.asm:30
+leave_monitor (supervisor.o):
+    entry_table.o             kernel/entry_table.asm:26
+monitor_active (shared_state.o):
+    console_device.o          kernel/console_device.asm:40
+    scheduler.o               kernel/scheduler.asm:98
+    irq.o                     kernel/irq.asm:64
+mul8u (math8.o):
+    device.o                  kernel/device.asm:15
+    pipe.o                    kernel/pipe.asm:56
+    spawn.o                   kernel/spawn.asm:25
+    fd.o                      include/math8.inc:6
+nmi_entry (irq.o):
+open_dev (shared_state.o):
+    device.o                  kernel/device.asm:13
+    ksys_fs.o                 kernel/ksys_fs.asm:52
+    fd.o                      kernel/fd.asm:67
+open_file_handle (shared_state.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:53
+    ksys_io.o                 kernel/ksys_io.asm:66
+    fd.o                      kernel/fd.asm:68
+open_flags (shared_state.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:51
+    fd.o                      kernel/fd.asm:66
+open_pipe (shared_state.o):
+    ksys_io.o                 kernel/ksys_io.asm:62
+    pipe.o                    kernel/pipe.asm:47
+open_pipe_mode (shared_state.o):
+    pipe.o                    kernel/pipe.asm:48
+open_refcnt (shared_state.o):
+    fd.o                      kernel/fd.asm:65
+open_type (shared_state.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:50
+    fd.o                      kernel/fd.asm:64
+pipe_buf (shared_state.o):
+    pipe.o                    kernel/pipe.asm:45
+pipe_buf_ptr (zero_page.o):
+    pipe.o                    kernel/pipe.asm:51
+pipe_close_endpoint (pipe.o):
+    fd.o                      kernel/fd.asm:80
+pipe_count (shared_state.o):
+    pipe.o                    kernel/pipe.asm:44
+pipe_create (pipe.o):
+    ksys_io.o                 kernel/ksys_io.asm:65
+pipe_create_between_fd (pipe.o):
+    entry_table.o             kernel/entry_table.asm:36
+pipe_head (shared_state.o):
+    pipe.o                    kernel/pipe.asm:42
+pipe_init_tables (pipe.o):
+    main.o                    kernel/main.asm:52
+pipe_ptr (zero_page.o):
+    pipe.o                    kernel/pipe.asm:50
+    fd.o                      kernel/fd.asm:77
+pipe_read (pipe.o):
+    fd.o                      kernel/fd.asm:78
+pipe_state (shared_state.o):
+    pipe.o                    kernel/pipe.asm:41
+pipe_tail (shared_state.o):
+    pipe.o                    kernel/pipe.asm:43
+pipe_write (pipe.o):
+    fd.o                      kernel/fd.asm:79
+proc_alloc_preloaded (process_control.o):
+proc_alloc_preloaded_unpublished (process_control.o):
+    spawn.o                   kernel/spawn.asm:27
+proc_apply_scheduler_signal (process_control.o):
+    scheduler.o               kernel/scheduler.asm:79
+proc_clear_launch_state (process_control.o):
+    spawn.o                   kernel/spawn.asm:29
+proc_clear_wait (scheduler.o):
+    process_control.o         kernel/process_control.asm:60
+proc_context (shared_state.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:31
+    spawn.o                   kernel/spawn.asm:39
+    process_control.o         kernel/process_control.asm:44
+    scheduler.o               kernel/scheduler.asm:61
+proc_create (process_control.o):
+    init_tasks.o              kernel/init_tasks.asm:25
+proc_entryH (shared_state.o):
+    spawn.o                   kernel/spawn.asm:42
+    process_control.o         kernel/process_control.asm:47
+    scheduler.o               kernel/scheduler.asm:64
+proc_entryL (shared_state.o):
+    spawn.o                   kernel/spawn.asm:41
+    process_control.o         kernel/process_control.asm:46
+    scheduler.o               kernel/scheduler.asm:63
+proc_exit_code (shared_state.o):
+    spawn.o                   kernel/spawn.asm:45
+    process_control.o         kernel/process_control.asm:51
+    scheduler.o               kernel/scheduler.asm:85
+proc_exit_current (scheduler.o):
+    ksys_proc.o               kernel/ksys_proc.asm:25
+proc_exit_lifecycle (process_control.o):
+    scheduler.o               kernel/scheduler.asm:81
+proc_fd_flags (shared_state.o):
+    fd.o                      kernel/fd.asm:62
+proc_fd_obj (shared_state.o):
+    fd.o                      kernel/fd.asm:61
+proc_find_free_pid (process_control.o):
+proc_flags (shared_state.o):
+    console_device.o          kernel/console_device.asm:37
+    spawn.o                   kernel/spawn.asm:43
+    process_control.o         kernel/process_control.asm:48
+    scheduler.o               kernel/scheduler.asm:65
+    gate.o                    kernel/gate.asm:41
+proc_gate (shared_state.o):
+    process_control.o         kernel/process_control.asm:31
+    gate.o                    kernel/gate.asm:49
+proc_gate_acquire (gate.o):
+    ksys_proc.o               kernel/ksys_proc.asm:33
+    spawn.o                   kernel/spawn.asm:20
+    process_control.o         kernel/process_control.asm:28
+    scheduler.o               kernel/scheduler.asm:82
+proc_gate_cancel_wait (gate.o):
+    process_control.o         kernel/process_control.asm:30
+proc_gate_init (gate.o):
+    ksys_io.o                 kernel/ksys_io.asm:51
+proc_gate_next (shared_state.o):
+    gate.o                    kernel/gate.asm:53
+proc_gate_owner (shared_state.o):
+    ksys_proc.o               kernel/ksys_proc.asm:45
+    process_control.o         kernel/process_control.asm:32
+    gate.o                    kernel/gate.asm:50
+proc_gate_release (gate.o):
+    ksys_proc.o               kernel/ksys_proc.asm:34
+    spawn.o                   kernel/spawn.asm:21
+    process_control.o         kernel/process_control.asm:29
+    scheduler.o               kernel/scheduler.asm:83
+proc_gate_wait_head (shared_state.o):
+    gate.o                    kernel/gate.asm:51
+proc_gate_wait_tail (shared_state.o):
+    gate.o                    kernel/gate.asm:52
+proc_launch_id (shared_state.o):
+    spawn.o                   kernel/spawn.asm:46
+    process_control.o         kernel/process_control.asm:52
+proc_launch_line (shared_state.o):
+    spawn.o                   kernel/spawn.asm:48
+proc_launch_line_len (shared_state.o):
+    spawn.o                   kernel/spawn.asm:47
+    process_control.o         kernel/process_control.asm:53
+proc_mark_zombie (process_control.o):
+proc_parent_pid (shared_state.o):
+    ksys_proc.o               kernel/ksys_proc.asm:40
+    spawn.o                   kernel/spawn.asm:38
+    process_control.o         kernel/process_control.asm:49
+    scheduler.o               kernel/scheduler.asm:66
+proc_reap_waited_child (process_control.o):
+    ksys_proc.o               kernel/ksys_proc.asm:32
+proc_reap_zombies (process_control.o):
+    idle_task.o               kernel/idle_task.asm:18
+proc_send_signal (process_control.o):
+    ksys_proc.o               kernel/ksys_proc.asm:31
+proc_set_ready (scheduler.o):
+proc_set_running (scheduler.o):
+proc_set_state (scheduler.o):
+    spawn.o                   kernel/spawn.asm:28
+    process_control.o         kernel/process_control.asm:59
+proc_set_wait (scheduler.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:32
+    ksys_proc.o               kernel/ksys_proc.asm:28
+    gate.o                    kernel/gate.asm:37
+proc_signal_pending (shared_state.o):
+    console_device.o          kernel/console_device.asm:38
+    ksys_proc.o               kernel/ksys_proc.asm:41
+    spawn.o                   kernel/spawn.asm:44
+    process_control.o         kernel/process_control.asm:50
+    scheduler.o               kernel/scheduler.asm:67
+    irq.o                     kernel/irq.asm:66
+    gate.o                    kernel/gate.asm:40
+proc_sp (shared_state.o):
+    spawn.o                   kernel/spawn.asm:40
+    process_control.o         kernel/process_control.asm:45
+    scheduler.o               kernel/scheduler.asm:62
+proc_state (shared_state.o):
+    ksys_proc.o               kernel/ksys_proc.asm:39
+    timer.o                   kernel/timer.asm:36
+    process_control.o         kernel/process_control.asm:43
+    scheduler.o               kernel/scheduler.asm:60
+    irq.o                     kernel/irq.asm:71
+    main.o                    kernel/main.asm:60
+proc_terminate (process_control.o):
+proc_ticks_hi (shared_state.o):
+    scheduler.o               kernel/scheduler.asm:96
+proc_ticks_lo (shared_state.o):
+    scheduler.o               kernel/scheduler.asm:95
+proc_wake (scheduler.o):
+    timer.o                   kernel/timer.asm:45
+    process_control.o         kernel/process_control.asm:61
+    irq.o                     kernel/irq.asm:73
+    gate.o                    kernel/gate.asm:38
+rp_acquire_lock (mailbox.o):
+    rp_console_io.o           kernel/rp_console_io.asm:19
+rp_console_read (rp_console_io.o):
+    console_device.o          kernel/console_device.asm:42
+rp_console_write (rp_console_io.o):
+    console_device.o          kernel/console_device.asm:43
+rp_fs_exec (rp_fs_io.o):
+    ksys_fs.o                 kernel/ksys_fs.asm:55
+    ksys_io.o                 kernel/ksys_io.asm:55
+    spawn.o                   kernel/spawn.asm:24
+    fd.o                      kernel/fd.asm:82
+rp_lock (shared_state.o):
+    mailbox.o                 kernel/mailbox.asm:36
+    irq.o                     kernel/irq.asm:68
+    main.o                    kernel/main.asm:62
+rp_mailbox_clear_request (mailbox.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:26
+    rp_console_io.o           kernel/rp_console_io.asm:22
+rp_mailbox_mark_idle (mailbox.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:28
+    rp_console_io.o           kernel/rp_console_io.asm:24
+rp_mailbox_trigger (mailbox.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:27
+    rp_console_io.o           kernel/rp_console_io.asm:23
+rp_release_lock (mailbox.o):
+    rp_console_io.o           kernel/rp_console_io.asm:20
+rp_try_acquire_lock (mailbox.o):
+rp_wait_done (mailbox.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:25
+    rp_console_io.o           kernel/rp_console_io.asm:21
+sched_block_current (scheduler.o):
+    ksys_proc.o               kernel/ksys_proc.asm:27
+    ksys_io.o                 kernel/ksys_io.asm:68
+sched_context_switch (scheduler.o):
+    irq.o                     kernel/irq.asm:62
+sched_cursor_pid (shared_state.o):
+    scheduler.o               kernel/scheduler.asm:59
+    main.o                    kernel/main.asm:58
+sched_lock (shared_state.o):
+    console_device.o          kernel/console_device.asm:35
+    scheduler.o               include/sched_lock.inc:19
+    sched_lock.o              kernel/sched_lock.asm:35
+    irq.o                     kernel/irq.asm:63
+sched_lock_leave (sched_lock.o):
+    supervisor.o              include/sched_lock.inc:17
+    scheduler.o               include/sched_lock.inc:17
+sched_lock_try_enter (sched_lock.o):
+    supervisor.o              include/sched_lock.inc:16
+    scheduler.o               include/sched_lock.inc:16
+sched_pick_next (scheduler.o):
+sched_ptr (zero_page.o):
+    spawn.o                   kernel/spawn.asm:53
+    fd.o                      kernel/fd.asm:73
+    process_control.o         kernel/process_control.asm:65
+    scheduler.o               kernel/scheduler.asm:74
+sched_switch_context (scheduler.o):
+sched_yield (scheduler.o):
+    rp_fs_io.o                kernel/rp_fs_io.asm:33
+    ksys_proc.o               kernel/ksys_proc.asm:26
+    gate.o                    kernel/gate.asm:39
+scheduler_init (scheduler.o):
+    main.o                    kernel/main.asm:45
+scheduler_irq_tick (scheduler.o):
+    irq.o                     kernel/irq.asm:61
+scheduler_set_current_context (scheduler.o):
+    main.o                    kernel/main.asm:46
+scheduler_wake_console_input (scheduler.o):
+scheduler_wake_console_owner (scheduler.o):
+    ksys_proc.o               kernel/ksys_proc.asm:37
+    spawn.o                   kernel/spawn.asm:37
+scheduler_wake_one (scheduler.o):
+    pipe.o                    kernel/pipe.asm:55
+scheduler_wake_timers (timer.o):
+    scheduler.o               kernel/scheduler.asm:90
+set_brk_vector (main.o):
+    entry_table.o             kernel/entry_table.asm:24
+supervisor_enter_from_irq (supervisor.o):
+    irq.o                     kernel/irq.asm:59
+system_ticks_hi (shared_state.o):
+    ksys_time.o               kernel/ksys_time.asm:11
+    timer.o                   kernel/timer.asm:48
+    scheduler.o               kernel/scheduler.asm:93
+system_ticks_lo (shared_state.o):
+    ksys_time.o               kernel/ksys_time.asm:10
+    timer.o                   kernel/timer.asm:47
+    scheduler.o               kernel/scheduler.asm:92
+tasks_init (init_tasks.o):
+    main.o                    kernel/main.asm:54
+timer_alloc (timer.o):
+timer_commit_current (timer.o):
+    scheduler.o               kernel/scheduler.asm:88
+timer_free (timer.o):
+    process_control.o         kernel/process_control.asm:54
+    scheduler.o               kernel/scheduler.asm:89
+timer_init (timer.o):
+    scheduler.o               kernel/scheduler.asm:87
+timer_pid (shared_state.o):
+    timer.o                   kernel/timer.asm:41
+timer_start_current (timer.o):
+    ksys_proc.o               kernel/ksys_proc.asm:30
+timer_until_hi (shared_state.o):
+    timer.o                   kernel/timer.asm:43
+timer_until_lo (shared_state.o):
+    timer.o                   kernel/timer.asm:42
+wait_object (shared_state.o):
+    ksys_proc.o               kernel/ksys_proc.asm:43
+    timer.o                   kernel/timer.asm:38
+    spawn.o                   kernel/spawn.asm:50
+    process_control.o         kernel/process_control.asm:57
+    scheduler.o               kernel/scheduler.asm:77
+wait_reason (shared_state.o):
+    ksys_proc.o               kernel/ksys_proc.asm:42
+    timer.o                   kernel/timer.asm:37
+    spawn.o                   kernel/spawn.asm:49
+    process_control.o         kernel/process_control.asm:56
+    scheduler.o               kernel/scheduler.asm:76
+    irq.o                     kernel/irq.asm:72
+

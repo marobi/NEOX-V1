@@ -1,39 +1,69 @@
 # NEOX Software Signalling
 
-This document covers process-level software signalling inside the 6502 kernel. It does not cover RP-side physical 6502 control signals.
+This document covers process-level software signalling inside the 6502 kernel.
+It does not cover RP-side physical 6502 control signals.
 
-## Terminology
+## Signal numbers
+
+NEOX uses the corresponding Linux signal numbers for every currently
+implemented process signal:
 
 ```text
-NEOX signal
-  software/process signal inside the 6502 kernel
-
-RP 6502 control signal
-  physical/debug control from the RP side, such as IRQ, reset, halt, or clocking
+2   SIG_INT
+9   SIG_KILL
+18  SIG_CONT
+19  SIG_STOP
 ```
 
-These are different subsystems.
+The public C definitions are `NEOX_SIG_INT`, `NEOX_SIG_KILL`,
+`NEOX_SIG_CONT`, and `NEOX_SIG_STOP`.
 
-## Current model
+`SIG_HALT` remains only as an assembly source-compatibility alias for
+`SIG_STOP`.
 
-The process table contains compact signal-related state such as pending signal information. Signal state is visible in process diagnostics.
+## Current actions
 
-Signal delivery must obey the scheduler/preemption model. It must not corrupt process state, fd state, pipe state, or mailbox state.
+```text
+SIG_INT
+    default: terminate with exit status $FE
+    PROC_FLAG_SIGINT_INTERRUPT: interrupt console read with EINTR
 
-## Rules
+SIG_KILL
+    force target into ZOMBIE state
+    cannot be caught or converted into EINTR
 
-- Signal handling must not use filesystem/mailbox paths from IRQ context.
-- Signal delivery must respect process ownership and lifecycle state.
-- Signal state must interact cleanly with `PROC_ZOMBIE` and exit handling.
-- A process that has already exited should not be treated as a normal signal target.
+SIG_STOP
+    stop a runnable process after it releases sleepable gates
 
-## Future work
+SIG_CONT
+    resume a stopped process
+```
 
-The intended model should later define:
+Signal delivery is serialized by `proc_gate`. A signal is never allowed to
+strand a process while it owns `FILE_IO` or `PROC`. Default-action `SIG_INT`
+uses the post-gate scheduler checkpoint so a verbose process cannot immediately
+start another syscall after releasing its final gate.
 
-- available signal numbers
-- default signal actions
-- signal masks if needed
-- signal delivery points
-- interaction with blocking syscalls
-- process group or child signalling policy if required
+## Public syscall boundary
+
+```c
+neox_status_t neox_signal(
+    neox_pid_t pid,
+    uint8_t signal);
+```
+
+The syscall accepts only signal numbers 2, 9, 18, and 19. PID 0, empty process
+slots, zombies, and out-of-range PIDs are rejected.
+
+## Shell command
+
+The parent-mode `kill` applet accepts numeric signal syntax only:
+
+```text
+kill -2 PID
+kill -9 PID
+kill -18 PID
+kill -19 PID
+```
+
+Named forms such as `-KILL` or `-STOP` are intentionally not implemented.

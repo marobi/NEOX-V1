@@ -1,0 +1,52 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : libneox/cc65/zeropage.asm
+Current file: libneox/cc65/zeropage.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; zeropage.asm
+000000r 1               ; NEOX libneox - cc65 runtime zero-page storage
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Provides the zero-page symbols expected by cc65-generated code.
+000000r 1               ;   The complete block is process-private because zero page belongs
+000000r 1               ;   to the active MMU context.
+000000r 1               ;
+000000r 1               ; Allocation:
+000000r 1               ;   26 bytes in the C_ZEROPAGE segment, linked inside $20-$7F.
+000000r 1               ;
+000000r 1               ; Notes:
+000000r 1               ;   - These symbols must not overlap the NEOX kernel ZP workspace.
+000000r 1               ;   - Keep the order compatible with the cc65 V2.19 runtime layout.
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .exportzp c_sp
+000000r 1               .exportzp sreg
+000000r 1               .exportzp regsave
+000000r 1               .exportzp ptr1
+000000r 1               .exportzp ptr2
+000000r 1               .exportzp ptr3
+000000r 1               .exportzp ptr4
+000000r 1               .exportzp tmp1
+000000r 1               .exportzp tmp2
+000000r 1               .exportzp tmp3
+000000r 1               .exportzp tmp4
+000000r 1               .exportzp regbank
+000000r 1               
+000000r 1               .segment "C_ZEROPAGE": zeropage
+000000r 1               
+000000r 1  xx xx        c_sp:       .res 2
+000002r 1  xx xx        sreg:       .res 2
+000004r 1  xx xx xx xx  regsave:    .res 4
+000008r 1  xx xx        ptr1:       .res 2
+00000Ar 1  xx xx        ptr2:       .res 2
+00000Cr 1  xx xx        ptr3:       .res 2
+00000Er 1  xx xx        ptr4:       .res 2
+000010r 1  xx           tmp1:       .res 1
+000011r 1  xx           tmp2:       .res 1
+000012r 1  xx           tmp3:       .res 1
+000013r 1  xx           tmp4:       .res 1
+000014r 1  xx xx xx xx  regbank:    .res 6
+000018r 1  xx xx        
+000014r 1               

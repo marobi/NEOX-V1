@@ -1,0 +1,129 @@
+
+syscall_table:
+F100  4C 5D F1 JMP k_exit
+F103  4C 60 F1 JMP k_open
+F106  4C 63 F1 JMP k_close
+F109  4C 66 F1 JMP k_read
+F10C  4C 69 F1 JMP k_write
+F10F  4C 6C F1 JMP k_monitor
+F112  4C 6F F1 JMP k_load_file_to_memory
+F115  4C 72 F1 JMP k_save_memory_to_file
+F118  4C 75 F1 JMP k_seek
+F11B  4C 78 F1 JMP k_tell
+F11E  4C 7B F1 JMP k_pipe
+F121  4C 7E F1 JMP k_yield
+F124  4C 84 F1 JMP k_delete
+F127  4C 87 F1 JMP k_rename
+F12A  4C 8A F1 JMP k_sleep
+F12D  4C 8D F1 JMP k_dup
+F130  4C 90 F1 JMP k_dup2
+F133  4C 93 F1 JMP k_ticks
+F136  4C 96 F1 JMP k_signal
+F139  4C 99 F1 JMP k_opendir
+F13C  4C 9C F1 JMP k_readdir
+F13F  4C 9F F1 JMP k_closedir
+F142  4C A2 F1 JMP k_chdir
+F145  4C A5 F1 JMP k_getcwd
+F148  4C A8 F1 JMP k_mkdir
+F14B  4C AB F1 JMP k_rmdir
+F14E  4C AE F1 JMP k_getprocinfo
+F151  4C B1 F1 JMP k_waitpid
+F154  4C B4 F1 JMP k_get_launch_id
+F157  4C B7 F1 JMP k_get_launch_line
+F15A  4C BA F1 JMP k_spawn_resident
+
+k_exit:
+F15D  4C 12 80 JMP L8012
+
+k_open:
+F160  4C 30 80 JMP L8030
+
+k_close:
+F163  4C 1B 80 JMP L801B
+
+k_read:
+F166  4C 0C 80 JMP L800C
+
+k_write:
+F169  4C 0F 80 JMP L800F
+
+k_monitor:
+F16C  4C 03 80 JMP L8003
+
+k_load_file_to_memory:
+F16F  4C 33 80 JMP L8033
+
+k_save_memory_to_file:
+F172  4C 36 80 JMP L8036
+
+k_seek:
+F175  4C 39 80 JMP L8039
+
+k_tell:
+F178  4C 3C 80 JMP L803C
+
+k_pipe:
+F17B  4C 24 80 JMP L8024
+
+k_yield:
+F17E  78       SEI
+F17F  20 15 80 JSR L8015
+F182  18       CLC
+F183  60       RTS
+
+k_delete:
+F184  4C 3F 80 JMP L803F
+
+k_rename:
+F187  4C 42 80 JMP L8042
+
+k_sleep:
+F18A  4C 18 80 JMP L8018
+
+k_dup:
+F18D  4C 1E 80 JMP L801E
+
+k_dup2:
+F190  4C 21 80 JMP L8021
+
+k_ticks:
+F193  4C 2A 80 JMP L802A
+
+k_signal:
+F196  4C 2D 80 JMP L802D
+
+k_opendir:
+F199  4C 45 80 JMP L8045
+
+k_readdir:
+F19C  4C 48 80 JMP L8048
+
+k_closedir:
+F19F  4C 4B 80 JMP L804B
+
+k_chdir:
+F1A2  4C 4E 80 JMP L804E
+
+k_getcwd:
+F1A5  4C 51 80 JMP L8051
+
+k_mkdir:
+F1A8  4C 54 80 JMP L8054
+
+k_rmdir:
+F1AB  4C 57 80 JMP L8057
+
+k_getprocinfo:
+F1AE  4C 5A 80 JMP L805A
+
+k_waitpid:
+F1B1  4C 5D 80 JMP L805D
+
+k_get_launch_id:
+F1B4  4C 60 80 JMP L8060
+
+k_get_launch_line:
+F1B7  4C 63 80 JMP L8063
+
+k_spawn_resident:
+F1BA  4C 66 80 JMP L8066

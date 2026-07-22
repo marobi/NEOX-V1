@@ -3,7 +3,7 @@
 ; NEOX - signal test controller task
 ;
 ; Temporary signal test image:
-;   PID 1 sends SIG_HALT/SIG_CONT/SIG_KILL through sys_signal.
+;   PID 1 sends SIG_STOP/SIG_CONT/SIG_KILL through sys_signal.
 ;   PID 2 is the runnable/yield target.
 ;   PID 3 is the timer-blocked target.
 ;
@@ -27,13 +27,13 @@ t1_msg_start:
     .byte "T1 SIGCTL START", 13
 
 t1_msg_halt_t2:
-    .byte "T1 HALT PID2", 13
+    .byte "T1 STOP PID2", 13
 
 t1_msg_cont_t2:
     .byte "T1 CONT PID2", 13
 
 t1_msg_halt_t3:
-    .byte "T1 HALT PID3 WHILE TIM", 13
+    .byte "T1 STOP PID3 WHILE TIM", 13
 
 t1_msg_cont_t3:
     .byte "T1 CONT PID3", 13
@@ -170,7 +170,7 @@ t1_wr_stdout_args:
     jsr t1_sleep
 
     jsr t1_print_halt_t2
-    lda #SIG_HALT
+    lda #SIG_STOP
     ldx #T1_TARGET_RUN
     jsr t1_send_signal
     bcs @fail
@@ -190,16 +190,16 @@ t1_wr_stdout_args:
 
     ; PID 3 should still be blocked on its long timer here.
     jsr t1_print_halt_t3
-    lda #SIG_HALT
+    lda #SIG_STOP
     ldx #T1_TARGET_SLEEP
     jsr t1_send_signal
     bcs @fail
 
     ; Wait long enough for PID 3 timer expiry.  This must exceed
-    ; PID 3's remaining timer interval after SIG_HALT is queued.
+    ; PID 3's remaining timer interval after SIG_STOP is queued.
     ; Expected behavior:
     ;   scheduler_wake_timers wakes PID 3, then the scheduler signal
-    ;   phase applies SIG_HALT and leaves PID 3 stopped.
+    ;   phase applies SIG_STOP and leaves PID 3 stopped.
     lda #$FF
     jsr t1_sleep
 

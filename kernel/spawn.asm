@@ -13,7 +13,7 @@
 .include "mailbox.inc"
 
 .export ksys_get_launch_id
-.export ksys_get_launch_args2
+.export ksys_get_launch_line
 .export ksys_spawn_resident
 
 
@@ -33,6 +33,8 @@
 .import fd_close_process
 
 .import active_pid
+.import console_owner_pid
+.import scheduler_wake_console_owner
 .import proc_parent_pid
 .import proc_context
 .import proc_sp
@@ -42,11 +44,8 @@
 .import proc_signal_pending
 .import proc_exit_code
 .import proc_launch_id
-.import proc_launch_argc
-.import proc_launch_arg0_len
-.import proc_launch_arg1_len
-.import proc_launch_arg0
-.import proc_launch_arg1
+.import proc_launch_line_len
+.import proc_launch_line
 .import wait_reason
 .import wait_object
 
@@ -75,25 +74,13 @@ spawn_child_pid:
 spawn_launch_id_arg:
     .res 1
 
-spawn_argc:
+spawn_line_ptrL:
     .res 1
 
-spawn_arg0_ptrL:
+spawn_line_ptrH:
     .res 1
 
-spawn_arg0_ptrH:
-    .res 1
-
-spawn_arg1_ptrL:
-    .res 1
-
-spawn_arg1_ptrH:
-    .res 1
-
-spawn_arg0_len:
-    .res 1
-
-spawn_arg1_len:
+spawn_line_len:
     .res 1
 
 spawn_copy_len:
@@ -108,6 +95,9 @@ spawn_stdout_fd:
 spawn_stderr_fd:
     .res 1
 
+spawn_flags:
+    .res 1
+
 spawn_errno:
     .res 1
 
@@ -117,77 +107,48 @@ spawn_fd_clone_args:
 .segment "KERN_TEXT"
 
 ; ------------------------------------------------------------
-; Shared launch-slot pointer helper.
+; spawn_set_launch_line_dev_ptr
 ;
 ; Input:
 ;   X = PID
-;   Y = slot selector:
-;         0 = arg0
-;         1 = arg1
 ;
 ; Output:
-;   dev_ptr = selected launch slot
-;
-; Layout:
-;   proc_launch_arg0 and proc_launch_arg1 are consecutive tables.
-;   The combined slot index is:
-;
-;       PID + (slot * MAX_PROCS)
-;
-;   The byte offset is then calculated with mul8u using the configured
-;   SPAWN_ARG_MAX value.
+;   dev_ptr = selected process launch-line slot
 ; ------------------------------------------------------------
-
-SPAWN_SLOT_ARG0 = 0
-SPAWN_SLOT_ARG1 = 1
-
-.assert MAX_PROCS <= 128, error, "combined launch-slot index exceeds 8 bits"
-
-.proc spawn_set_launch_dev_ptr
+.proc spawn_set_launch_line_dev_ptr
     txa
-    cpy #SPAWN_SLOT_ARG0
-    beq @index_ready
-
-    clc
-    adc #MAX_PROCS
-
-@index_ready:
-    ldx #SPAWN_ARG_MAX
+    ldx #SPAWN_LINE_MAX
     jsr mul8u
 
     clc
-    adc #<proc_launch_arg0
+    adc #<proc_launch_line
     sta dev_ptr
 
     txa
-    adc #>proc_launch_arg0
+    adc #>proc_launch_line
     sta dev_ptr+1
     rts
 .endproc
 
-
 ; ------------------------------------------------------------
-; spawn_copy_parent_to_launch_slot
+; spawn_copy_parent_to_launch_line
 ;
 ; Input:
-;   io_ptr   -> source bytes in active parent context
-;   dev_ptr  -> shared destination launch slot
-;   spawn_copy_len = byte count excluding NUL
-;
-; Return:
-;   C clear = copied with NUL terminator
+;   io_ptr         -> source bytes in active parent context
+;   dev_ptr        -> shared destination launch-line slot
+;   spawn_line_len = byte count excluding NUL
 ; ------------------------------------------------------------
-.proc spawn_copy_parent_to_launch_slot
+.proc spawn_copy_parent_to_launch_line
     ldy #0
-    lda spawn_copy_len
-    beq @zero
 @loop:
+    cpy spawn_line_len
+    beq @terminate
     lda (io_ptr),y
     sta (dev_ptr),y
     iny
-    cpy spawn_copy_len
-    bne @loop
-@zero:
+    bra @loop
+
+@terminate:
     lda #0
     sta (dev_ptr),y
     clc
@@ -195,27 +156,24 @@ SPAWN_SLOT_ARG1 = 1
 .endproc
 
 ; ------------------------------------------------------------
-; spawn_copy_launch_slot_to_child
+; spawn_copy_launch_line_to_child
 ;
 ; Input:
-;   dev_ptr  -> shared source launch slot
-;   io_ptr   -> destination buffer in active child context
-;   spawn_copy_len = byte count excluding NUL
-;
-; Return:
-;   C clear = copied with NUL terminator
+;   dev_ptr        -> shared source launch-line slot
+;   io_ptr         -> destination buffer in active child context
+;   spawn_line_len = byte count excluding NUL
 ; ------------------------------------------------------------
-.proc spawn_copy_launch_slot_to_child
+.proc spawn_copy_launch_line_to_child
     ldy #0
-    lda spawn_copy_len
-    beq @zero
 @loop:
+    cpy spawn_line_len
+    beq @terminate
     lda (dev_ptr),y
     sta (io_ptr),y
     iny
-    cpy spawn_copy_len
-    bne @loop
-@zero:
+    bra @loop
+
+@terminate:
     lda #0
     sta (io_ptr),y
     clc
@@ -389,27 +347,35 @@ SPAWN_SLOT_ARG1 = 1
 ;   C set   = failure, Y = errno
 ;
 ; Locking:
-;   One transaction using PROC -> FILE_IO. Shared spawn scratch is not
-;   touched until proc_gate is owned. Any pre-publication failure uses
-;   one rollback path.
+;   One transaction using PROC -> FILE_IO. The caller argument pointer
+;   remains on the current process stack while proc_gate_acquire may
+;   block/yield. Shared spawn scratch is not touched until proc_gate is
+;   owned. Any pre-publication failure uses one rollback path.
 ; ------------------------------------------------------------
 .proc ksys_spawn_resident
-    stx sched_ptr
-    sty sched_ptr+1
+    ; proc_gate_acquire may block/yield. Preserve the process-private
+    ; syscall argument pointer on the current process hardware stack.
+    txa
+    pha
+    tya
+    pha
 
     jsr proc_gate_acquire
     bcs @proc_locked
 
+    pla
+    pla
     ldy #EAGAIN
     sec
     rts
 
 @proc_locked:
-    ; Preserve caller argument pointer only after shared spawn state is locked.
-    lda sched_ptr
-    sta spawn_arg_ptrL
-    lda sched_ptr+1
+    pla
     sta spawn_arg_ptrH
+    sta sched_ptr+1
+    pla
+    sta spawn_arg_ptrL
+    sta sched_ptr
 
     ldy #spawn_resident_args::entry
     lda (sched_ptr),y
@@ -422,43 +388,22 @@ SPAWN_SLOT_ARG1 = 1
     lda (sched_ptr),y
     sta spawn_launch_id_arg
 
-    ldy #spawn_resident_args::argc
+    ldy #spawn_resident_args::arg_line_ptr
     lda (sched_ptr),y
-    sta spawn_argc
-    cmp #3
+    sta spawn_line_ptrL
+    iny
+    lda (sched_ptr),y
+    sta spawn_line_ptrH
+
+    ldy #spawn_resident_args::arg_line_len
+    lda (sched_ptr),y
+    sta spawn_line_len
+    cmp #SPAWN_LINE_MAX
     bcc :+
     ldy #EINVAL
     jmp @fail_proc
 :
-    ldy #spawn_resident_args::arg0_ptr
-    lda (sched_ptr),y
-    sta spawn_arg0_ptrL
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg0_ptrH
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg0_len
-    cmp #SPAWN_ARG_MAX
-    bcc :+
-    ldy #EINVAL
-    jmp @fail_proc
-:
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg1_ptrL
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg1_ptrH
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg1_len
-    cmp #SPAWN_ARG_MAX
-    bcc :+
-    ldy #EINVAL
-    jmp @fail_proc
-:
-    iny
+    ldy #spawn_resident_args::stdin_fd
     lda (sched_ptr),y
     sta spawn_stdin_fd
     jsr spawn_validate_mapped_fd
@@ -481,11 +426,12 @@ SPAWN_SLOT_ARG1 = 1
 :
     ldy #spawn_resident_args::flags
     lda (sched_ptr),y
+    sta spawn_flags
+    and #($FF ^ SPAWN_FLAGS_VALID)
     beq :+
     ldy #EINVAL
     jmp @fail_proc
 :
-    ; Allocate the unpublished child while proc_gate remains owned.
     lda active_pid
     ldx spawn_entryL
     ldy spawn_entryH
@@ -499,43 +445,25 @@ SPAWN_SLOT_ARG1 = 1
     sta spawn_child_pid
     tax
 
+    ; The existing spawn flags byte is the child's explicit initial
+    ; proc_flags value. There is no implicit inheritance from the parent.
+    lda spawn_flags
+    sta proc_flags,x
+
     jsr proc_clear_launch_state
     lda spawn_launch_id_arg
     sta proc_launch_id,x
-    lda spawn_argc
-    sta proc_launch_argc,x
+    lda spawn_line_len
+    sta proc_launch_line_len,x
 
-    lda spawn_argc
-    beq @launch_ready
-
-    lda spawn_arg0_len
-    sta proc_launch_arg0_len,x
-    sta spawn_copy_len
-    lda spawn_arg0_ptrL
+    lda spawn_line_ptrL
     sta io_ptr
-    lda spawn_arg0_ptrH
+    lda spawn_line_ptrH
     sta io_ptr+1
-    ldy #SPAWN_SLOT_ARG0
-    jsr spawn_set_launch_dev_ptr
-    jsr spawn_copy_parent_to_launch_slot
-
-    lda spawn_argc
-    cmp #2
-    bne @launch_ready
-
     ldx spawn_child_pid
-    lda spawn_arg1_len
-    sta proc_launch_arg1_len,x
-    sta spawn_copy_len
-    lda spawn_arg1_ptrL
-    sta io_ptr
-    lda spawn_arg1_ptrH
-    sta io_ptr+1
-    ldy #SPAWN_SLOT_ARG1
-    jsr spawn_set_launch_dev_ptr
-    jsr spawn_copy_parent_to_launch_slot
+    jsr spawn_set_launch_line_dev_ptr
+    jsr spawn_copy_parent_to_launch_line
 
-@launch_ready:
     jsr file_io_gate_acquire
     bcs @file_locked
 
@@ -564,7 +492,6 @@ SPAWN_SLOT_ARG1 = 1
     bcc :+
     jmp @rollback
 :
-    ; Clone RP-owned cwd before publishing the child.
     stz io_ptr
     stz io_ptr+1
     lda #RP_FS_OP_CWD_CLONE
@@ -584,6 +511,20 @@ SPAWN_SLOT_ARG1 = 1
     lda #PROC_NEW
     jsr proc_set_state
 
+    ; A synchronous foreground spawn transfers console ownership only when
+    ; the spawning parent currently owns that routed console.
+    lda spawn_flags
+    and #PROC_FLAG_FOREGROUND
+    beq :+
+
+    lda console_owner_pid
+    cmp active_pid
+    bne :+
+
+    lda spawn_child_pid
+    sta console_owner_pid
+    jsr scheduler_wake_console_owner
+:
     lda spawn_arg_ptrL
     sta sched_ptr
     lda spawn_arg_ptrH
@@ -646,30 +587,39 @@ SPAWN_SLOT_ARG1 = 1
 
 
 ; ------------------------------------------------------------
-; ksys_get_launch_args2
+; ksys_get_launch_line
 ;
 ; Input:
-;   X/Y -> spawn_get_args2_args
+;   X/Y -> spawn_get_line_args in the active child context
 ;
-; Purpose:
-;   Copy the active child process launch arguments into caller-provided
-;   context-local buffers.
+; Return:
+;   C clear = copied and NUL-terminated
+;   C set   = failure, Y = errno
+;
+; The launch line remains opaque to the kernel.
 ; ------------------------------------------------------------
-.proc ksys_get_launch_args2
-    stx sched_ptr
-    sty sched_ptr+1
+.proc ksys_get_launch_line
+    txa
+    pha
+    tya
+    pha
 
     jsr proc_gate_acquire
     bcs @proc_locked
+
+    pla
+    pla
     ldy #EAGAIN
     sec
     rts
 
 @proc_locked:
-    lda sched_ptr
-    sta spawn_arg_ptrL
-    lda sched_ptr+1
+    pla
     sta spawn_arg_ptrH
+    sta sched_ptr+1
+    pla
+    sta spawn_arg_ptrL
+    sta sched_ptr
 
     ldx active_pid
     cpx #MAX_PROCS
@@ -677,72 +627,45 @@ SPAWN_SLOT_ARG1 = 1
     ldy #EINVAL
     jmp spawn_release_proc_error
 :
-    ldy #spawn_get_args2_args::arg0_ptr
+    ldy #spawn_get_line_args::buffer_ptr
     lda (sched_ptr),y
-    sta spawn_arg0_ptrL
+    sta spawn_line_ptrL
     iny
     lda (sched_ptr),y
-    sta spawn_arg0_ptrH
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg0_len
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg1_ptrL
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg1_ptrH
-    iny
-    lda (sched_ptr),y
-    sta spawn_arg1_len
+    sta spawn_line_ptrH
 
-    lda proc_launch_arg0_len,x
-    cmp spawn_arg0_len
-    bcc :+
-    ldy #EINVAL
-    jmp spawn_release_proc_error
-:
-    lda proc_launch_arg1_len,x
-    cmp spawn_arg1_len
-    bcc :+
-    ldy #EINVAL
-    jmp spawn_release_proc_error
-:
-    lda proc_launch_arg0_len,x
+    ldy #spawn_get_line_args::buffer_size
+    lda (sched_ptr),y
+    beq @invalid
     sta spawn_copy_len
-    lda spawn_arg0_ptrL
-    sta io_ptr
-    lda spawn_arg0_ptrH
-    sta io_ptr+1
-    ldy #SPAWN_SLOT_ARG0
-    jsr spawn_set_launch_dev_ptr
-    jsr spawn_copy_launch_slot_to_child
 
     ldx active_pid
-    lda proc_launch_arg1_len,x
-    sta spawn_copy_len
-    lda spawn_arg1_ptrL
+    lda proc_launch_line_len,x
+    cmp spawn_copy_len
+    bcc @size_ok
+
+@invalid:
+    ldy #EINVAL
+    jmp spawn_release_proc_error
+
+@size_ok:
+    sta spawn_line_len
+    lda spawn_line_ptrL
     sta io_ptr
-    lda spawn_arg1_ptrH
+    lda spawn_line_ptrH
     sta io_ptr+1
-    ldy #SPAWN_SLOT_ARG1
-    jsr spawn_set_launch_dev_ptr
-    jsr spawn_copy_launch_slot_to_child
+
+    ldx active_pid
+    jsr spawn_set_launch_line_dev_ptr
+    jsr spawn_copy_launch_line_to_child
 
     lda spawn_arg_ptrL
     sta sched_ptr
     lda spawn_arg_ptrH
     sta sched_ptr+1
 
-    ldx active_pid
-    ldy #spawn_get_args2_args::argc_out
-    lda proc_launch_argc,x
-    sta (sched_ptr),y
-    iny
-    lda proc_launch_arg0_len,x
-    sta (sched_ptr),y
-    iny
-    lda proc_launch_arg1_len,x
+    ldy #spawn_get_line_args::result_len
+    lda spawn_line_len
     sta (sched_ptr),y
 
     jmp spawn_release_proc_success

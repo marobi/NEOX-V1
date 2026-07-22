@@ -9,7 +9,7 @@
 - prompt-prefix stripping
 - command resolution
 - parent/direct versus child/spawned execution policy
-- future redirection and pipe setup
+- redirection setup and future pipe setup
 - child spawn/commit/wait orchestration
 
 The RP VDU/console layer owns the screen and transparent line editing. `neosh` consumes the completed edited line delivered through stdin.
@@ -61,3 +61,35 @@ echo MORE >> TMP.OUT
 The current command ABI supplies at most two arguments. `echo` joins
 them with one space and always writes a trailing CR. It does not yet
 implement quoting, escapes, variables, or `-n`.
+
+
+## KILL
+
+`kill` is a parent-mode applet. It accepts only numeric Linux-compatible signal
+numbers:
+
+```text
+kill -2 PID
+kill -9 PID
+kill -18 PID
+kill -19 PID
+```
+
+The applet produces no output when the signal is accepted. It reports usage,
+invalid signal, invalid PID, or syscall failure through inherited stderr.
+
+
+The `ps` `SIG` column displays pending Linux-compatible signal numbers in
+decimal. Single-digit values are right-aligned:
+
+```text
+ 0
+ 2
+ 9
+18
+19
+```
+
+
+The `ps` display no longer includes the transient `HOLD` gate-ownership column.
+Gate ownership remains available through kernel and RP-side diagnostics.

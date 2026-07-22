@@ -93,8 +93,7 @@ fsbulk [dev] [ctx]    bulk save/load diagnostic test
 ```text
 ps                    dump NEOX scheduler/process diagnostic info
 syscfg                enter system configuration menu
-help                  print MicMon help
-```
+help                  print MicMon ```
 
 ## Safety boundaries
 

@@ -1,0 +1,253 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/context.asm
+Current file: kernel/context.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; context.asm
+000000r 1               ; NEOX - MMU context slot ownership table
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Tracks kernel ownership of RP-created/preloaded MMU contexts.
+000000r 1               ;
+000000r 1               ; Model:
+000000r 1               ;   - The RP/boot configuration creates the physical contexts.
+000000r 1               ;   - The RP/boot configuration currently preloads neox_user.rom
+000000r 1               ;     into contexts 1..9.
+000000r 1               ;   - NEOX tracks which context slots are reserved, free, or in use.
+000000r 1               ;   - This module does not create contexts and does not load images.
+000000r 1               ;
+000000r 1               ; Concurrency:
+000000r 1               ;   - ctx_init_table is called during kernel bootstrap.
+000000r 1               ;   - allocation/free helpers are process-lifecycle helpers and
+000000r 1               ;     must be called while the PROC gate is held, or before scheduling
+000000r 1               ;     starts during bootstrap.
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "context.inc"
+000000r 2               .ifndef __CONTEXT_INC__
+000000r 2               __CONTEXT_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; MMU context slot states
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ;
+000000r 2               ; These states describe kernel ownership of RP-created/preloaded
+000000r 2               ; MMU contexts.  They do not create contexts and they do not load
+000000r 2               ; images; RP/boot configuration still owns physical context setup.
+000000r 2               ;
+000000r 2               ; Current development configuration preloads neox_user.rom into
+000000r 2               ; contexts 1..9.  Keep MAX_CONTEXTS aligned with the RP-side
+000000r 2               ; configuration and monitor/debug_neox.cpp if mirrored there.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               MAX_CONTEXTS       = 10
+000000r 2               
+000000r 2               CTX_INVALID        = $00    ; context does not exist / not usable
+000000r 2               CTX_RESERVED       = $01    ; BIOS/kernel/monitor/supervisor-owned
+000000r 2               CTX_PRELOADED_FREE = $02    ; resident neox_user image present and available
+000000r 2               CTX_EMPTY_FREE     = $03    ; available, but no guaranteed resident image
+000000r 2               CTX_IN_USE         = $04    ; owned by a process
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export ctx_init_table
+000000r 1               .export ctx_alloc_preloaded_for_pid
+000000r 1               .export ctx_free_for_pid
+000000r 1               
+000000r 1               .import context_state
+000000r 1               .import context_owner_pid
+000000r 1               
+000000r 1               .segment "KERN_BSS"
+000000r 1               
+000000r 1               ctx_tmp_pid:
+000000r 1  xx               .res 1
+000001r 1               
+000001r 1               
+000001r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; ctx_init_table
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Initialize kernel-owned context slot state for the current RP
+000000r 1               ;   preload model.
+000000r 1               ;
+000000r 1               ; Policy:
+000000r 1               ;   - Context 0 is reserved for supervisor/BIOS/monitor/kernel use.
+000000r 1               ;   - Contexts 1..MAX_CONTEXTS-1 are assumed to contain the
+000000r 1               ;     preloaded resident neox_user image and start as
+000000r 1               ;     CTX_PRELOADED_FREE.
+000000r 1               ;
+000000r 1               ; Return:
+000000r 1               ;   C clear
+000000r 1               ;
+000000r 1               ; Clobbers:
+000000r 1               ;   A, X
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc ctx_init_table
+000000r 1  A2 00            ldx #$00
+000002r 1               
+000002r 1               @clear_all:
+000002r 1  A9 00            lda #CTX_INVALID
+000004r 1  9D rr rr         sta context_state,x
+000007r 1               
+000007r 1  A9 FF            lda #$FF
+000009r 1  9D rr rr         sta context_owner_pid,x
+00000Cr 1               
+00000Cr 1  E8               inx
+00000Dr 1  E0 0A            cpx #MAX_CONTEXTS
+00000Fr 1  D0 F1            bne @clear_all
+000011r 1               
+000011r 1  A9 01            lda #CTX_RESERVED
+000013r 1  8D rr rr         sta context_state
+000016r 1               
+000016r 1  A9 FF            lda #$FF
+000018r 1  8D rr rr         sta context_owner_pid
+00001Br 1               
+00001Br 1  A2 01            ldx #$01
+00001Dr 1               
+00001Dr 1               @mark_preloaded:
+00001Dr 1  E0 0A            cpx #MAX_CONTEXTS
+00001Fr 1  F0 0D            beq @done
+000021r 1               
+000021r 1  A9 02            lda #CTX_PRELOADED_FREE
+000023r 1  9D rr rr         sta context_state,x
+000026r 1               
+000026r 1  A9 FF            lda #$FF
+000028r 1  9D rr rr         sta context_owner_pid,x
+00002Br 1               
+00002Br 1  E8               inx
+00002Cr 1  80 EF            bra @mark_preloaded
+00002Er 1               
+00002Er 1               @done:
+00002Er 1  18               clc
+00002Fr 1  60               rts
+000030r 1               .endproc
+000030r 1               
+000030r 1               
+000030r 1               ; ------------------------------------------------------------
+000030r 1               ; ctx_alloc_preloaded_for_pid
+000030r 1               ;
+000030r 1               ; Purpose:
+000030r 1               ;   Allocate a free preloaded context for a process.
+000030r 1               ;
+000030r 1               ; Uses:
+000030r 1               ;   - static boot task creation
+000030r 1               ;   - future resident nbox child spawn
+000030r 1               ;
+000030r 1               ; Inputs:
+000030r 1               ;   X = owning PID
+000030r 1               ;
+000030r 1               ; Return:
+000030r 1               ;   C clear = allocated
+000030r 1               ;             A = context id
+000030r 1               ;             X = owning PID
+000030r 1               ;   C set   = no CTX_PRELOADED_FREE context available
+000030r 1               ;             X = owning PID
+000030r 1               ;
+000030r 1               ; Clobbers:
+000030r 1               ;   A
+000030r 1               ; ------------------------------------------------------------
+000030r 1               
+000030r 1               .proc ctx_alloc_preloaded_for_pid
+000030r 1  8E rr rr         stx ctx_tmp_pid
+000033r 1  A2 01            ldx #$01
+000035r 1               
+000035r 1               @scan:
+000035r 1  E0 0A            cpx #MAX_CONTEXTS
+000037r 1  F0 1B            beq @fail
+000039r 1               
+000039r 1  BD rr rr         lda context_state,x
+00003Cr 1  C9 02            cmp #CTX_PRELOADED_FREE
+00003Er 1  F0 03            beq @found
+000040r 1               
+000040r 1  E8               inx
+000041r 1  80 F2            bra @scan
+000043r 1               
+000043r 1               @found:
+000043r 1  A9 04            lda #CTX_IN_USE
+000045r 1  9D rr rr         sta context_state,x
+000048r 1               
+000048r 1  AD rr rr         lda ctx_tmp_pid
+00004Br 1  9D rr rr         sta context_owner_pid,x
+00004Er 1               
+00004Er 1  8A               txa
+00004Fr 1  AE rr rr         ldx ctx_tmp_pid
+000052r 1  18               clc
+000053r 1  60               rts
+000054r 1               
+000054r 1               @fail:
+000054r 1  AE rr rr         ldx ctx_tmp_pid
+000057r 1  38               sec
+000058r 1  60               rts
+000059r 1               .endproc
+000059r 1               
+000059r 1               ; ------------------------------------------------------------
+000059r 1               ; ctx_free_for_pid
+000059r 1               ;
+000059r 1               ; Purpose:
+000059r 1               ;   Release the context owned by a terminating process.
+000059r 1               ;
+000059r 1               ; Inputs:
+000059r 1               ;   X = PID
+000059r 1               ;
+000059r 1               ; Return:
+000059r 1               ;   C clear = context released
+000059r 1               ;             X = PID
+000059r 1               ;   C set   = no owned context found
+000059r 1               ;             X = PID
+000059r 1               ;
+000059r 1               ; Current policy:
+000059r 1               ;   Released contexts return to CTX_PRELOADED_FREE because the current
+000059r 1               ;   implementation only runs resident/preloaded neox_user images.
+000059r 1               ;
+000059r 1               ; Future external executable loading:
+000059r 1               ;   Once a process can overwrite a context with an external program,
+000059r 1               ;   process metadata must distinguish resident-image contexts from
+000059r 1               ;   externally loaded images.  External-image contexts must be released
+000059r 1               ;   as CTX_EMPTY_FREE unless the resident image is restored.
+000059r 1               ;
+000059r 1               ; Clobbers:
+000059r 1               ;   A
+000059r 1               ; ------------------------------------------------------------
+000059r 1               
+000059r 1               .proc ctx_free_for_pid
+000059r 1  8E rr rr         stx ctx_tmp_pid
+00005Cr 1  A2 01            ldx #$01
+00005Er 1               
+00005Er 1               @scan:
+00005Er 1  E0 0A            cpx #MAX_CONTEXTS
+000060r 1  F0 21            beq @not_found
+000062r 1               
+000062r 1  BD rr rr         lda context_owner_pid,x
+000065r 1  CD rr rr         cmp ctx_tmp_pid
+000068r 1  D0 16            bne @next
+00006Ar 1               
+00006Ar 1  BD rr rr         lda context_state,x
+00006Dr 1  C9 04            cmp #CTX_IN_USE
+00006Fr 1  D0 0F            bne @next
+000071r 1               
+000071r 1  A9 02            lda #CTX_PRELOADED_FREE
+000073r 1  9D rr rr         sta context_state,x
+000076r 1               
+000076r 1  A9 FF            lda #$FF
+000078r 1  9D rr rr         sta context_owner_pid,x
+00007Br 1               
+00007Br 1  AE rr rr         ldx ctx_tmp_pid
+00007Er 1  18               clc
+00007Fr 1  60               rts
+000080r 1               
+000080r 1               @next:
+000080r 1  E8               inx
+000081r 1  80 DB            bra @scan
+000083r 1               
+000083r 1               @not_found:
+000083r 1  AE rr rr         ldx ctx_tmp_pid
+000086r 1  38               sec
+000087r 1  60               rts
+000088r 1               .endproc
+000088r 1               

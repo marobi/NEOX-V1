@@ -17,9 +17,16 @@ PROC_ZOMBIE     = $06
 ; Flags byte bit definitions
 ; ------------------------------------------------------------
 
-PROC_FLAG_NONE          = $00
-PROC_FLAG_IDLE          = $01
-PROC_FLAG_ATTACHED_CON  = $02
+PROC_FLAG_NONE              = $00
+PROC_FLAG_IDLE              = $01
+PROC_FLAG_ATTACHED_CON      = $02
+PROC_FLAG_FOREGROUND        = $04
+PROC_FLAG_SIGINT_INTERRUPT  = $08
+
+; Flags that may be supplied as initial process characteristics by a
+; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+; kernel-owned and cannot be requested through these creation interfaces.
+PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
 
 ; ------------------------------------------------------------
 ; Process frame format

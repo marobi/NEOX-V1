@@ -1,0 +1,801 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/main.asm
+Current file: kernel/main.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; main.asm
+000000r 1               ; NEOX - kernel entry point
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Main kernel bootstrap entered from BIOS.
+000000r 1               ;
+000000r 1               ; Architecture:
+000000r 1               ;   - BIOS owns RESET and the hardware vectors
+000000r 1               ;   - BIOS transfers control here after machine-level startup
+000000r 1               ;   - Context 0 is the supervisor/debug context
+000000r 1               ;   - Runnable tasks live in contexts 1..N
+000000r 1               ;
+000000r 1               ; Boot policy:
+000000r 1               ;   - Initialize shared RP2350-side communication state
+000000r 1               ;   - Initialize scheduler tables
+000000r 1               ;   - Associate current execution with supervisor context 0
+000000r 1               ;   - Create initial runnable tasks
+000000r 1               ;   - Stay in supervisor context and wait for first IRQ
+000000r 1               ;
+000000r 1               ; Scheduling model:
+000000r 1               ;   - First task dispatch happens on the first timer IRQ
+000000r 1               ;   - kernel_main does NOT jump directly into scheduler switch code
+000000r 1               ;   - sched_context_switch is entered only from irq_entry
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "process.inc"
+000000r 2               .ifndef __PROCESS_INC__
+000000r 2               __PROCESS_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process states
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_EMPTY      = $00
+000000r 2               PROC_NEW        = $01
+000000r 2               PROC_READY      = $02
+000000r 2               PROC_RUNNING    = $03
+000000r 2               PROC_BLOCKED    = $04
+000000r 2               PROC_STOPPED    = $05
+000000r 2               PROC_ZOMBIE     = $06
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Flags byte bit definitions
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_FLAG_NONE              = $00
+000000r 2               PROC_FLAG_IDLE              = $01
+000000r 2               PROC_FLAG_ATTACHED_CON      = $02
+000000r 2               PROC_FLAG_FOREGROUND        = $04
+000000r 2               PROC_FLAG_SIGINT_INTERRUPT  = $08
+000000r 2               
+000000r 2               ; Flags that may be supplied as initial process characteristics by a
+000000r 2               ; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+000000r 2               ; kernel-owned and cannot be requested through these creation interfaces.
+000000r 2               PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process frame format
+000000r 2               ;
+000000r 2               ; All saved runnable process stacks use the IRQ-compatible
+000000r 2               ; extended RTI frame:
+000000r 2               ;     Y, X, A, P, PCL, PCH
+000000r 2               ; The scheduler has no per-process resume mode; normal task
+000000r 2               ; resume is always RTI.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process wait reasons
+000000r 2               ;
+000000r 2               ; WAIT_NONE means the process is not blocked on a known wait object.
+000000r 2               ; Other values describe why a PROC_BLOCKED process is blocked.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               WAIT_NONE       = $00
+000000r 2               WAIT_CONSOLE    = $01
+000000r 2               WAIT_DEVICE     = $02
+000000r 2               WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+000000r 2               WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
+000000r 2               WAIT_TIMER      = $04
+000000r 2               WAIT_PROC       = $05
+000000r 2               
+000000r 2               ; Generic sleepable gate wait.
+000000r 2               ;
+000000r 2               ; wait_object identifies the gate object:
+000000r 2               ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+000000r 2               ;   LOCK_ID_PROC    = future process-management syscall gate
+000000r 2               WAIT_LOCK       = $06
+000000r 2               
+000000r 2               ; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+000000r 2               ; readers and writers can be woken by the correct readiness event.
+000000r 2               WAIT_PIPE_WRITE = $07
+000000r 2               
+000000r 2               ; Blocked while retaining FILE_IO ownership until the RP2350 completes
+000000r 2               ; the single active generic filesystem request. wait_object contains the
+000000r 2               ; filesystem operation code.
+000000r 2               WAIT_RP         = $08
+000000r 2               
+000000r 2               LOCK_ID_FILE_IO = $00
+000000r 2               LOCK_ID_PROC    = $01
+000000r 2               
+000000r 2               ; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+000000r 2               PROC_HOLD_NONE     = $00
+000000r 2               PROC_HOLD_FILE_IO  = $01
+000000r 2               PROC_HOLD_PROC     = $02
+000000r 2               
+000000r 2               ; Sentinel used for free gate owners and empty gate wait queues.
+000000r 2               GATE_OWNER_NONE = $FF
+000000r 2               
+000000r 2               EXIT_OK         = $00
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "scheduler_defs.inc"
+000000r 2               ; ============================================================
+000000r 2               ; scheduler_defs.inc
+000000r 2               ; NEOX - scheduler constants
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SCHEDULER_DEFS_INC__
+000000r 2               __SCHEDULER_DEFS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               IDLE_PID        = 0
+000000r 2               FIRST_TASK_PID  = 1
+000000r 2               
+000000r 2               .struct proc_create_args
+000000r 2                   flags       .byte
+000000r 2                   reserved    .byte
+000000r 2                   entry       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROC_CREATE_ARGS_SIZE = .sizeof(proc_create_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "mailbox.inc"
+000000r 2               ; ============================================================
+000000r 2               ; mailbox.inc
+000000r 2               ; NEOX - RP2350 mailbox / request block definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Defines the shared ABI v2 request/result block layout used
+000000r 2               ;   for communication between the 6502 kernel/syscall code and
+000000r 2               ;   the RP2350 co-processor.
+000000r 2               ;
+000000r 2               ; Architecture:
+000000r 2               ;   - Logical pages 0..7 are private per context
+000000r 2               ;   - Logical pages 8..F are shared across all contexts; page E is I/O
+000000r 2               ;   - MMIO control registers live in shared I/O page
+000000r 2               ;
+000000r 2               ; ABI v2:
+000000r 2               ;   - RP_REQ_BASE is $B000 in ordinary shared RAM
+000000r 2               ;   - Request block starts with RP_GROUP and RP_CMD
+000000r 2               ;   - RP_DOORBELL is trigger-only; command identity is not
+000000r 2               ;     encoded in the doorbell value anymore.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __MAILBOX_INC__
+000000r 2               __MAILBOX_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Request / result block layout, ABI v2
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_GROUP            = RP_REQ_BASE + 0
+000000r 2               RP_CMD              = RP_REQ_BASE + 1
+000000r 2               RP_STATUS           = RP_REQ_BASE + 2
+000000r 2               RP_ERR              = RP_REQ_BASE + 3
+000000r 2               
+000000r 2               RP_FLAGS            = RP_REQ_BASE + 4
+000000r 2               RP_STATE            = RP_REQ_BASE + 5
+000000r 2               
+000000r 2               RP_ARG0L            = RP_REQ_BASE + 6
+000000r 2               RP_ARG0H            = RP_REQ_BASE + 7
+000000r 2               RP_ARG1L            = RP_REQ_BASE + 8
+000000r 2               RP_ARG1H            = RP_REQ_BASE + 9
+000000r 2               RP_ARG2L            = RP_REQ_BASE + 10
+000000r 2               RP_ARG2H            = RP_REQ_BASE + 11
+000000r 2               
+000000r 2               RP_RES0L            = RP_REQ_BASE + 12
+000000r 2               RP_RES0H            = RP_REQ_BASE + 13
+000000r 2               RP_RES1L            = RP_REQ_BASE + 14
+000000r 2               RP_RES1H            = RP_REQ_BASE + 15
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Other shared RP state bytes
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_IRQ_SOURCE       = RP_REQ_BASE + 16
+000000r 2               RP_CONSOLE_PID      = RP_REQ_BASE + 17
+000000r 2               RP_CONSOLE_RDY      = RP_REQ_BASE + 18
+000000r 2               RP_IRQ_STATE        = RP_REQ_BASE + 19
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_STATUS values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_IDLE             = $00
+000000r 2               RP_BUSY             = $01
+000000r 2               RP_DONE             = $02
+000000r 2               RP_ERROR            = $03
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_GROUP values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_GROUP_NONE       = $00
+000000r 2               RP_GROUP_CONSOLE    = $01
+000000r 2               RP_GROUP_FS         = $02
+000000r 2               RP_GROUP_SYSTEM     = $03
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_CMD values inside RP_GROUP_CONSOLE
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_CON_CMD_NONE     = $00
+000000r 2               RP_CON_CMD_WRITE    = $01
+000000r 2               RP_CON_CMD_READ     = $02
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_CMD values inside RP_GROUP_FS
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_FS_CMD_NONE      = $00
+000000r 2               RP_FS_CMD_EXEC      = $11
+000000r 2               
+000000r 2               ; Generic filesystem operations carried in RP_STATE. Values $01-$10 retain
+000000r 2               ; their established numeric assignments, but are no longer accepted as direct
+000000r 2               ; RP_CMD values.
+000000r 2               RP_FS_OP_STATUS        = $01
+000000r 2               RP_FS_OP_OPEN          = $02
+000000r 2               RP_FS_OP_READ          = $03
+000000r 2               RP_FS_OP_CLOSE         = $04
+000000r 2               RP_FS_OP_WRITE         = $05
+000000r 2               RP_FS_OP_LOAD          = $06
+000000r 2               RP_FS_OP_SAVE          = $07
+000000r 2               RP_FS_OP_SEEK          = $08
+000000r 2               RP_FS_OP_TELL          = $09
+000000r 2               RP_FS_OP_DELETE        = $0A
+000000r 2               RP_FS_OP_RENAME        = $0B
+000000r 2               RP_FS_OP_OPENDIR       = $0C
+000000r 2               RP_FS_OP_READDIR       = $0D
+000000r 2               RP_FS_OP_CLOSEDIR      = $0E
+000000r 2               RP_FS_OP_MKDIR         = $0F
+000000r 2               RP_FS_OP_RMDIR         = $10
+000000r 2               RP_FS_OP_CWD_INIT_ROOT = $12
+000000r 2               RP_FS_OP_CWD_CLONE     = $13
+000000r 2               RP_FS_OP_CHDIR         = $14
+000000r 2               RP_FS_OP_GETCWD        = $15
+000000r 2               
+000000r 2               RP_FS_SEEK_SET      = $00
+000000r 2               RP_FS_SEEK_CUR      = $01
+000000r 2               RP_FS_SEEK_END      = $02
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_DOORBELL trigger value for ABI v2
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_DOORBELL_TRIGGER = $01
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_FLAGS values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_FLAG_NONE        = $00
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP_IRQ_SOURCE values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_IRQ_SRC_NONE     = $00
+000000r 2               RP_IRQ_SRC_TIMER    = $01
+000000r 2               RP_IRQ_SRC_MONITOR  = $02
+000000r 2               RP_IRQ_SRC_FS_DONE  = $03
+000000r 2               RP_IRQ_SRC_CONSOLE_BREAK = $04
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "klog.inc"
+000000r 2               ; ============================================================
+000000r 2               ; klog.inc
+000000r 2               ; NEOX - boot/init logging interface
+000000r 2               ;
+000000r 2               ; Model:
+000000r 2               ;   - BIOS_PUTCHAR-backed character output
+000000r 2               ;   - boot/init use only for now
+000000r 2               ;   - no FD/syscall/RP mailbox dependency
+000000r 2               ;   - uses dedicated zero page pointer klog_ptr
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __KLOG_INC__
+000000r 2               __KLOG_INC__ = 1
+000000r 2               
+000000r 2               .importzp klog_ptr
+000000r 2               
+000000r 2               .import klog_putc
+000000r 2               .import klog_puts
+000000r 2               .import klog_crlf
+000000r 2               .import klog_clear
+000000r 2               .import klog_boot
+000000r 2               .import klog_ok
+000000r 2               .import klog_fail
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; KLOG_LOAD msg
+000000r 2               ;
+000000r 2               ; Load klog_ptr with address of a zero-terminated string.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               .macro KLOG_LOAD msg
+000000r 2                   lda #<msg
+000000r 2                   sta klog_ptr
+000000r 2                   lda #>msg
+000000r 2                   sta klog_ptr+1
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; KLOG_PUTS msg
+000000r 2               ; ------------------------------------------------------------
+000000r 2               .macro KLOG_PUTS msg
+000000r 2                   KLOG_LOAD msg
+000000r 2                   jsr klog_puts
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; KLOG_CLEAR
+000000r 2               ; ------------------------------------------------------------
+000000r 2               .macro KLOG_CLEAR
+000000r 2                   jsr klog_clear
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; KLOG_BOOT msg
+000000r 2               ; KLOG_OK msg
+000000r 2               ; KLOG_FAIL msg
+000000r 2               ; ------------------------------------------------------------
+000000r 2               .macro KLOG_BOOT msg
+000000r 2                   KLOG_LOAD msg
+000000r 2                   jsr klog_boot
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .macro KLOG_OK msg
+000000r 2                   KLOG_LOAD msg
+000000r 2                   jsr klog_ok
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .macro KLOG_FAIL msg
+000000r 2                   KLOG_LOAD msg
+000000r 2                   jsr klog_fail
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "version.inc"
+000000r 2               ; ============================================================
+000000r 2               ; version.inc
+000000r 2               ; NEOX - kernel version constants
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef NEOX_VERSION_INC
+000000r 2               NEOX_VERSION_INC = 1
+000000r 2               
+000000r 2               NEOX_VERSION_MAJOR  = 0
+000000r 2               NEOX_VERSION_MINOR  = 98
+000000r 2               NEOX_VERSION_BUILD  = 156
+000000r 2               
+000000r 2               .macro NEOX_VERSION_BYTES
+000000r 2                   .byte "0.98.156"
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export kernel_main
+000000r 1               .export set_brk_vector
+000000r 1               
+000000r 1               .import kernel_version
+000000r 1               
+000000r 1               .import irq_entry
+000000r 1               .import brk_vector
+000000r 1               .import irq_restore
+000000r 1               
+000000r 1               
+000000r 1               .import scheduler_init
+000000r 1               .import scheduler_set_current_context
+000000r 1               .import ctx_init_table
+000000r 1               
+000000r 1               .import fd_init_tables
+000000r 1               .import fd_init_process
+000000r 1               
+000000r 1               .import pipe_init_tables
+000000r 1               
+000000r 1               .import tasks_init
+000000r 1               .import idle_loop
+000000r 1               
+000000r 1               .import active_pid
+000000r 1               .import sched_cursor_pid
+000000r 1               .import console_owner_pid
+000000r 1               .import proc_state
+000000r 1               
+000000r 1               .import rp_lock
+000000r 1               
+000000r 1               .import ksys_io_init
+000000r 1               
+000000r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; kernel_main
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Perform kernel-side bootstrap after BIOS transfers control.
+000000r 1               ;
+000000r 1               ; Inputs:
+000000r 1               ;   None explicitly.
+000000r 1               ;
+000000r 1               ; Outputs:
+000000r 1               ;   Does not return.
+000000r 1               ;
+000000r 1               ; Clobbers:
+000000r 1               ;   A, X
+000000r 1               ;
+000000r 1               ; Notes:
+000000r 1               ;   - Remains in supervisor context 0 after setup.
+000000r 1               ;   - Normal task execution begins only when timer IRQ arrives.
+000000r 1               ;   - Shared communication/mailbox state is initialized here.
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc kernel_main
+000000r 1                   ; --------------------------------------------------------
+000000r 1                   ; Basic CPU setup for supervisor entry.
+000000r 1                   ; --------------------------------------------------------
+000000r 1  78               sei                     ; no interrupts during bootstrap
+000001r 1  D8               cld
+000002r 1  A2 FF            ldx #$FF
+000004r 1  9A               txs                     ; initialize supervisor stack
+000005r 1               
+000005r 1  20 rr rr         KLOG_CLEAR
+000008r 1  A9 rr 85 rr      KLOG_BOOT msg_klog_start
+00000Cr 1  A9 rr 85 rr  
+000010r 1  20 rr rr     
+000013r 1               
+000013r 1  A9 rr        	lda #<irq_restore
+000015r 1  8D rr rr     	sta brk_vector
+000018r 1  A9 rr        	lda #>irq_restore
+00001Ar 1  8D rr rr     	sta brk_vector+1
+00001Dr 1               
+00001Dr 1  20 rr rr     	jsr rp_init
+000020r 1  A9 rr 85 rr      KLOG_OK msg_klog_rp_init
+000024r 1  A9 rr 85 rr  
+000028r 1  20 rr rr     
+00002Br 1               
+00002Br 1                   ; --------------------------------------------------------
+00002Br 1               	; set the version of the kernel
+00002Br 1                   ; --------------------------------------------------------
+00002Br 1  A9 0B        	lda #$0B				; shared-state ABI 0x020B: Linux-compatible signal numbers
+00002Dr 1  8D rr rr     	sta kernel_version
+000030r 1  A9 02        	Lda #$02				; major
+000032r 1  8D rr rr     	sta kernel_version+1
+000035r 1  A9 rr 85 rr      KLOG_OK msg_klog_version
+000039r 1  A9 rr 85 rr  
+00003Dr 1  20 rr rr     
+000040r 1               
+000040r 1               
+000040r 1                   ; --------------------------------------------------------
+000040r 1                   ; Initialize scheduler tables and mark current execution as
+000040r 1                   ; supervisor context 0.
+000040r 1                   ; --------------------------------------------------------
+000040r 1  20 rr rr         jsr scheduler_init
+000043r 1  A9 rr 85 rr      KLOG_OK msg_klog_scheduler_init
+000047r 1  A9 rr 85 rr  
+00004Br 1  20 rr rr     
+00004Er 1               
+00004Er 1                   ; --------------------------------------------------------
+00004Er 1                   ; Initialize kernel-owned context slot state.
+00004Er 1                   ; RP/boot has already created and preloaded the physical
+00004Er 1                   ; MMU contexts; NEOX only owns allocation status.
+00004Er 1                   ; --------------------------------------------------------
+00004Er 1  20 rr rr         jsr ctx_init_table
+000051r 1  A9 rr 85 rr      KLOG_OK msg_klog_ctx_init
+000055r 1  A9 rr 85 rr  
+000059r 1  20 rr rr     
+00005Cr 1               
+00005Cr 1                   ; --------------------------------------------------------
+00005Cr 1                   ; Initialize ksys/fd/pipe
+00005Cr 1                   ; --------------------------------------------------------
+00005Cr 1  20 rr rr     	jsr ksys_io_init
+00005Fr 1  A9 rr 85 rr      KLOG_OK msg_klog_ksys_io_init
+000063r 1  A9 rr 85 rr  
+000067r 1  20 rr rr     
+00006Ar 1  20 rr rr     	jsr fd_init_tables
+00006Dr 1  A9 rr 85 rr      KLOG_OK msg_klog_fd_init
+000071r 1  A9 rr 85 rr  
+000075r 1  20 rr rr     
+000078r 1  20 rr rr     	jsr pipe_init_tables
+00007Br 1  A9 rr 85 rr      KLOG_OK msg_klog_pipe_init
+00007Fr 1  A9 rr 85 rr  
+000083r 1  20 rr rr     
+000086r 1               
+000086r 1  A2 00        	ldx #IDLE_PID
+000088r 1  20 rr rr     	jsr fd_init_process
+00008Br 1  A9 rr 85 rr      KLOG_OK msg_klog_idle_process_init
+00008Fr 1  A9 rr 85 rr  
+000093r 1  20 rr rr     
+000096r 1               
+000096r 1               	; --------------------------------------------------------
+000096r 1                   ; Create initial runnable tasks.
+000096r 1                   ; tasks_init creates processes from the user entry table.
+000096r 1                   ; proc_create allocates both PID and preloaded context.
+000096r 1                   ; --------------------------------------------------------
+000096r 1  20 rr rr         jsr tasks_init
+000099r 1  A9 rr 85 rr      KLOG_OK msg_klog_tasks_init
+00009Dr 1  A9 rr 85 rr  
+0000A1r 1  20 rr rr     
+0000A4r 1               
+0000A4r 1                   ; --------------------------------------------------------
+0000A4r 1                   ; Mark IDLE_PID execution
+0000A4r 1                   ; --------------------------------------------------------
+0000A4r 1  A2 00            ldx #IDLE_PID
+0000A6r 1  8E rr rr         stx active_pid
+0000A9r 1  8E rr rr         stx sched_cursor_pid
+0000ACr 1               
+0000ACr 1  A9 03            lda #PROC_RUNNING
+0000AEr 1  9D rr rr         sta proc_state,x
+0000B1r 1               
+0000B1r 1  A9 FF        	lda #$FF
+0000B3r 1  8D rr rr         sta console_owner_pid
+0000B6r 1               
+0000B6r 1  A9 00            lda #$00
+0000B8r 1  20 rr rr         jsr scheduler_set_current_context
+0000BBr 1               
+0000BBr 1  A9 rr 85 rr      KLOG_OK msg_klog_ready
+0000BFr 1  A9 rr 85 rr  
+0000C3r 1  20 rr rr     
+0000C6r 1               
+0000C6r 1               	; enable interrupts
+0000C6r 1  58           	cli
+0000C7r 1               
+0000C7r 1  4C rr rr     	jmp idle_loop
+0000CAr 1               .endproc
+0000CAr 1               
+0000CAr 1               msg_klog_start:
+0000CAr 1  4E 45 4F 58      .byte "NEOX kernel "
+0000CEr 1  20 6B 65 72  
+0000D2r 1  6E 65 6C 20  
+0000D6r 1  30 2E 39 38      NEOX_VERSION_BYTES
+0000DAr 1  2E 31 35 36  
+0000DEr 1  20 73 74 61      .byte " start", $00
+0000E2r 1  72 74 00     
+0000E5r 1               msg_klog_rp_init:
+0000E5r 1  72 70 20 69      .byte "rp init", $00
+0000E9r 1  6E 69 74 00  
+0000EDr 1               msg_klog_version:
+0000EDr 1  6B 65 72 6E      .byte "kernel interface version set", $00
+0000F1r 1  65 6C 20 69  
+0000F5r 1  6E 74 65 72  
+00010Ar 1               msg_klog_scheduler_init:
+00010Ar 1  73 63 68 65      .byte "scheduler init", $00
+00010Er 1  64 75 6C 65  
+000112r 1  72 20 69 6E  
+000119r 1               msg_klog_ctx_init:
+000119r 1  63 6F 6E 74      .byte "context table init", $00
+00011Dr 1  65 78 74 20  
+000121r 1  74 61 62 6C  
+00012Cr 1               msg_klog_ksys_io_init:
+00012Cr 1  6B 73 79 73      .byte "ksys io init", $00
+000130r 1  20 69 6F 20  
+000134r 1  69 6E 69 74  
+000139r 1               msg_klog_fd_init:
+000139r 1  66 64 20 69      .byte "fd init", $00
+00013Dr 1  6E 69 74 00  
+000141r 1               msg_klog_pipe_init:
+000141r 1  70 69 70 65      .byte "pipe init", $00
+000145r 1  20 69 6E 69  
+000149r 1  74 00        
+00014Br 1               msg_klog_idle_process_init:
+00014Br 1  69 64 6C 65      .byte "idle process init", $00
+00014Fr 1  20 70 72 6F  
+000153r 1  63 65 73 73  
+00015Dr 1               msg_klog_tasks_init:
+00015Dr 1  74 61 73 6B      .byte "tasks init", $00
+000161r 1  73 20 69 6E  
+000165r 1  69 74 00     
+000168r 1               msg_klog_ready:
+000168r 1  6B 65 72 6E      .byte "kernel boot done", $00
+00016Cr 1  65 6C 20 62  
+000170r 1  6F 6F 74 20  
+000179r 1               
+000179r 1               .proc rp_init
+000179r 1                   ; --------------------------------------------------------
+000179r 1                   ; Initialize shared RP2350 communication state.
+000179r 1                   ;
+000179r 1                   ; These registers/state bytes are shared resources and
+000179r 1                   ; must start from a known idle state before tasks begin.
+000179r 1                   ; --------------------------------------------------------
+000179r 1  9C rr rr         stz rp_lock
+00017Cr 1               
+00017Cr 1  A2 00        	ldx #0
+00017Er 1               @rp_clear:
+00017Er 1  9E 00 B0         stz RP_GROUP,x
+000181r 1  E8           	inx
+000182r 1  E0 14        	cpx #$14
+000184r 1  D0 F8        	bne @rp_clear
+000186r 1               
+000186r 1  9C 10 E0         stz RP_DOORBELL
+000189r 1  60           	rts
+00018Ar 1               .endproc
+00018Ar 1               
+00018Ar 1               ;
+00018Ar 1               ;  provide a vector for BREAK processing
+00018Ar 1               ;
+00018Ar 1               .proc set_brk_vector
+00018Ar 1  8D rr rr     	sta brk_vector
+00018Dr 1  8E rr rr     	stx brk_vector+1
+000190r 1  60           	rts
+000191r 1               .endproc
+000191r 1               

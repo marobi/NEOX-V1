@@ -50,9 +50,7 @@
 .import proc_signal_pending
 .import proc_exit_code
 .import proc_launch_id
-.import proc_launch_argc
-.import proc_launch_arg0_len
-.import proc_launch_arg1_len
+.import proc_launch_line_len
 .import timer_free
 
 .import wait_reason
@@ -127,9 +125,7 @@ proc_alloc_mode:
 .proc proc_clear_launch_state
     lda #SPAWN_LAUNCH_NONE
     sta proc_launch_id,x
-    stz proc_launch_argc,x
-    stz proc_launch_arg0_len,x
-    stz proc_launch_arg1_len,x
+    stz proc_launch_line_len,x
     rts
 .endproc
 
@@ -345,7 +341,17 @@ PROC_ALLOC_MODE_UNPUBLISHED = 1
     rts
 
 @gate_acquired:
+    ; Validate and preserve the requested initial process characteristics.
+    ldy #proc_create_args::flags
+    lda (sched_ptr),y
+    pha
+    and #($FF ^ PROC_FLAGS_CREATE_MASK)
+    beq @flags_valid
 
+    pla
+    bra @fail_release
+
+@flags_valid:
     ; Read first-run entry address from the static task table.
     ldy #proc_create_args::entry
     lda (sched_ptr),y
@@ -359,7 +365,13 @@ PROC_ALLOC_MODE_UNPUBLISHED = 1
     ; during bootstrap.  Today this is PID 0.
     lda active_pid
     jsr proc_alloc_preloaded
-    bcs @fail_release
+    bcs @fail_release_drop_flags
+
+    ; Apply the explicit creation flags to the newly allocated process.
+    tax
+    pla
+    sta proc_flags,x
+    txa
 
     ; proc_gate_release may clobber X while waking a waiter.
     ; Return the allocated PID in A after releasing the gate.
@@ -369,6 +381,9 @@ PROC_ALLOC_MODE_UNPUBLISHED = 1
 
     clc
     rts
+
+@fail_release_drop_flags:
+    pla
 
 @fail_release:
     jsr proc_gate_release
@@ -783,6 +798,33 @@ PROC_ALLOC_MODE_UNPUBLISHED = 1
     lda #PROC_ZOMBIE
     jsr proc_set_state
 
+    ; Wake a live parent blocked in waitpid for exactly this child. This is
+    ; required for out-of-band SIG_INT/SIG_KILL termination, where the child
+    ; does not execute the normal SYS_EXIT lifecycle path.
+    ldy proc_parent_pid,x
+    cpy #FIRST_TASK_PID
+    bcc @already_zombie
+    cpy #MAX_PROCS
+    bcs @already_zombie
+
+    lda proc_state,y
+    cmp #PROC_BLOCKED
+    bne @already_zombie
+
+    lda wait_reason,y
+    cmp #WAIT_PROC
+    bne @already_zombie
+
+    txa
+    cmp wait_object,y
+    bne @already_zombie
+
+    phx
+    tya
+    tax
+    jsr proc_wake
+    plx
+
 @already_zombie:
     clc
     rts
@@ -901,7 +943,7 @@ PROC_ALLOC_MODE_UNPUBLISHED = 1
 ;   phase, before runnable selection.
 ;
 ;   It is intentionally lightweight and scheduler-safe:
-;     - SIG_HALT only stops runnable/non-waiting processes.
+;     - SIG_STOP only stops runnable/non-waiting processes.
 ;     - SIG_CONT resumes stopped processes and clears stale wait state.
 ;     - SIG_KILL is not applied here.  SIG_KILL is converted to
 ;       PROC_ZOMBIE by proc_send_signal / proc_mark_zombie, and final
@@ -915,22 +957,61 @@ PROC_ALLOC_MODE_UNPUBLISHED = 1
     lda proc_signal_pending,x
     beq @none
 
-    cmp #SIG_HALT
+    cmp #SIG_STOP
     beq @halt
 
     cmp #SIG_CONT
     beq @cont
 
+    cmp #SIG_INT
+    beq @interrupt
+
     ; SIG_KILL and unknown signal values are deliberately left alone
-    ; here.  The scheduler signal phase must not terminate processes
-    ; or acquire subsystem gates as a picker side effect.
+    ; here. SIG_INT has an explicit scheduler-safe default action above.
 @none:
     clc
     rts
 
+@interrupt:
+    ; A preempted process that owns a sleepable subsystem gate must resume
+    ; long enough to release it. Keep SIG_INT pending until a later scheduler
+    ; pass rather than stranding protected kernel state.
+    cpx file_io_gate_owner
+    beq @none
+
+    cpx proc_gate_owner
+    beq @none
+
+    lda proc_flags,x
+    and #PROC_FLAG_SIGINT_INTERRUPT
+    beq @interrupt_default
+
+    ; Configured interrupt disposition: preserve SIG_INT until the next
+    ; console read consumes it and returns EINTR. If the process is sleeping
+    ; in WAIT_CONSOLE, wake it now so the blocked read can resume and observe
+    ; the pending signal.
+    lda proc_state,x
+    cmp #PROC_BLOCKED
+    bne @none
+
+    lda wait_reason,x
+    cmp #WAIT_CONSOLE
+    bne @none
+
+    jsr proc_wake
+    sec
+    rts
+
+@interrupt_default:
+    ; Default SIG_INT disposition: terminate with a distinct interrupt status.
+    lda #$FE
+    jsr proc_mark_zombie
+    sec
+    rts
+
 @halt:
     ; A runnable process may have been timer-preempted while owning a
-    ; sleepable gate. Keep SIG_HALT pending until it releases that gate.
+    ; sleepable gate. Keep SIG_STOP pending until it releases that gate.
     ; Otherwise the process could be stopped permanently with protected
     ; subsystem state still owned.
     cpx file_io_gate_owner
@@ -950,7 +1031,7 @@ PROC_ALLOC_MODE_UNPUBLISHED = 1
     beq @halt_runnable
 
     ; Do not stop blocked/empty/stopped processes here.  A blocked
-    ; process keeps SIG_HALT pending until its wait condition wakes it
+    ; process keeps SIG_STOP pending until its wait condition wakes it
     ; and it becomes READY; then the scheduler signal phase can stop it
     ; without corrupting wait_reason/wait_object semantics.
     clc

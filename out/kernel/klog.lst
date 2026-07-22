@@ -1,0 +1,383 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/klog.asm
+Current file: kernel/klog.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; klog.asm
+000000r 1               ; NEOX - boot/init logging helper
+000000r 1               ;
+000000r 1               ; Scope:
+000000r 1               ;   Boot/init diagnostics only. This module deliberately avoids
+000000r 1               ;   syscalls, FD tables, FILE_IO, pipes, and RP mailbox requests.
+000000r 1               ;
+000000r 1               ; Backend:
+000000r 1               ;   BIOS_PUTCHAR, one character at a time.
+000000r 1               ;
+000000r 1               ; Rules:
+000000r 1               ;   - Do not call from IRQ handlers.
+000000r 1               ;   - Do not call from scheduler picker/wake paths.
+000000r 1               ;   - Do not call from gate/lock internals.
+000000r 1               ;   - Do not treat klog_ptr as generic scratch.
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "bios.inc"
+000000r 2               ;
+000000r 2               ; BIOS jumptable + inline context switch primitive
+000000r 2               ;
+000000r 2               .ifndef __BIOS_INC__
+000000r 2               __BIOS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               BIOS_IO_PORT    =   IO_PAGE_BASE
+000000r 2               
+000000r 2               BIOS_KBD_PORT   = BIOS_IO_PORT
+000000r 2               BIOS_DSP_PORT   = BIOS_IO_PORT + 1
+000000r 2               BIOS_CMD_PORT   = BIOS_IO_PORT + 2
+000000r 2               BIOS_PARAM_PORT = BIOS_IO_PORT + 3
+000000r 2               
+000000r 2               BIOS_IRQ_SOURCE =   RP_REQ_BASE + 16
+000000r 2               BIOS_IRQ_STATE  =   RP_REQ_BASE + 19
+000000r 2               
+000000r 2               ; BIOS_BASE is defined by config.inc as $F000
+000000r 2               
+000000r 2               BIOS_GETCHAR      = BIOS_BASE
+000000r 2               BIOS_PUTCHAR      = BIOS_BASE+3
+000000r 2               
+000000r 2               BIOS_ACK_IRQ      = BIOS_BASE+6
+000000r 2               
+000000r 2               ; BIOS command values used by the inline context switch macro.
+000000r 2               BIOS_CMD_NONE           = 0
+000000r 2               BIOS_CMD_ACK_IRQ        = 1
+000000r 2               BIOS_CMD_CONTEXT_SWITCH = 2
+000000r 2               
+000000r 2               ; -----------------------------------------------------------------------------
+000000r 2               ; BIOS_CONTEXT_SWITCH
+000000r 2               ;
+000000r 2               ; Inline, stack-free MMU/private-context switch primitive.
+000000r 2               ;
+000000r 2               ; Input:
+000000r 2               ;   A = target context
+000000r 2               ;
+000000r 2               ; Effect:
+000000r 2               ;   Switches private memory / MMU context to A.
+000000r 2               ;
+000000r 2               ; Clobbers:
+000000r 2               ;   A, Y
+000000r 2               ;
+000000r 2               ; Preserves:
+000000r 2               ;   X
+000000r 2               ;
+000000r 2               ; Rules:
+000000r 2               ;   - macro only: no JSR/RTS may cross the context switch because the stack is
+000000r 2               ;     private per context.
+000000r 2               ;   - does not restore registers.
+000000r 2               ;   - does not RTI or JMP into a task.
+000000r 2               ;   - scheduler/context owner must perform TXS/RTI/JMP after this macro, when
+000000r 2               ;     the target context's private stack is mapped.
+000000r 2               ; -----------------------------------------------------------------------------
+000000r 2               .macro BIOS_CONTEXT_SWITCH
+000000r 2                   .local wait_cmd, wait_completion
+000000r 2               
+000000r 2                   ; Preserve target context without using stack. X is intentionally left
+000000r 2                   ; untouched so callers may carry the target SP across the switch.
+000000r 2                   tay
+000000r 2               
+000000r 2               wait_cmd:
+000000r 2                   lda BIOS_CMD_PORT
+000000r 2                   bne wait_cmd
+000000r 2               
+000000r 2                   sty BIOS_PARAM_PORT
+000000r 2                   lda #BIOS_CMD_CONTEXT_SWITCH
+000000r 2                   sta BIOS_CMD_PORT
+000000r 2               
+000000r 2               wait_completion:
+000000r 2                   lda BIOS_CMD_PORT
+000000r 2                   bne wait_completion
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export klog_putc
+000000r 1               .export klog_puts
+000000r 1               .export klog_crlf
+000000r 1               .export klog_clear
+000000r 1               .export klog_boot
+000000r 1               .export klog_ok
+000000r 1               .export klog_fail
+000000r 1               
+000000r 1               .importzp klog_ptr
+000000r 1               
+000000r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; klog_putc
+000000r 1               ;
+000000r 1               ; Input:
+000000r 1               ;   A = character
+000000r 1               ;
+000000r 1               ; Output:
+000000r 1               ;   C clear on BIOS_PUTCHAR success
+000000r 1               ;
+000000r 1               ; Clobbers:
+000000r 1               ;   BIOS_PUTCHAR-defined
+000000r 1               ; ------------------------------------------------------------
+000000r 1               .proc klog_putc
+000000r 1  4C 03 F0         jmp BIOS_PUTCHAR
+000003r 1               .endproc
+000003r 1               
+000003r 1               ; ------------------------------------------------------------
+000003r 1               ; klog_crlf
+000003r 1               ;
+000003r 1               ; Output one NEOX console newline. The current VDU treats CR
+000003r 1               ; as line advance, so do not emit CR+LF here.
+000003r 1               ;
+000003r 1               ; Clobbers:
+000003r 1               ;   A
+000003r 1               ; ------------------------------------------------------------
+000003r 1               .proc klog_crlf
+000003r 1  A9 0D            lda #$0D
+000005r 1  4C rr rr         jmp klog_putc
+000008r 1               .endproc
+000008r 1               
+000008r 1               ; ------------------------------------------------------------
+000008r 1               ; klog_clear
+000008r 1               ;
+000008r 1               ; Clear screen using the native NEOX VDU control code.
+000008r 1               ; The current VDU command table maps ^L / $0C to clear-screen.
+000008r 1               ; Do not emit ANSI/VT escape sequences here.
+000008r 1               ;
+000008r 1               ; Clobbers:
+000008r 1               ;   A
+000008r 1               ; ------------------------------------------------------------
+000008r 1               .proc klog_clear
+000008r 1  A9 0C            lda #$0C        ; ^L / form feed / VDU clear screen
+00000Ar 1  4C rr rr         jmp klog_putc
+00000Dr 1               .endproc
+00000Dr 1               
+00000Dr 1               ; ------------------------------------------------------------
+00000Dr 1               ; klog_puts
+00000Dr 1               ;
+00000Dr 1               ; Input:
+00000Dr 1               ;   klog_ptr -> zero-terminated string
+00000Dr 1               ;
+00000Dr 1               ; Notes:
+00000Dr 1               ;   The pointer is advanced on page crossing. Boot log strings
+00000Dr 1               ;   are expected to be short, but page crossing is handled.
+00000Dr 1               ;
+00000Dr 1               ; Clobbers:
+00000Dr 1               ;   A, Y, klog_ptr high byte if string crosses a page
+00000Dr 1               ; ------------------------------------------------------------
+00000Dr 1               .proc klog_puts
+00000Dr 1  A0 00            ldy #$00
+00000Fr 1               
+00000Fr 1               @loop:
+00000Fr 1  B1 rr            lda (klog_ptr),y
+000011r 1  F0 0A            beq @done
+000013r 1               
+000013r 1  20 rr rr         jsr klog_putc
+000016r 1               
+000016r 1  C8               iny
+000017r 1  D0 F6            bne @loop
+000019r 1               
+000019r 1  E6 rr            inc klog_ptr+1
+00001Br 1  80 F2            bra @loop
+00001Dr 1               
+00001Dr 1               @done:
+00001Dr 1  60               rts
+00001Er 1               .endproc
+00001Er 1               
+00001Er 1               ; ------------------------------------------------------------
+00001Er 1               ; klog_boot
+00001Er 1               ;
+00001Er 1               ; Input:
+00001Er 1               ;   klog_ptr -> zero-terminated message
+00001Er 1               ;
+00001Er 1               ; Output:
+00001Er 1               ;   [boot] <message><crlf>
+00001Er 1               ; ------------------------------------------------------------
+00001Er 1               .proc klog_boot
+00001Er 1  A5 rr            lda klog_ptr
+000020r 1  48               pha
+000021r 1  A5 rr            lda klog_ptr+1
+000023r 1  48               pha
+000024r 1               
+000024r 1  A9 rr            lda #<msg_boot_prefix
+000026r 1  85 rr            sta klog_ptr
+000028r 1  A9 rr            lda #>msg_boot_prefix
+00002Ar 1  85 rr            sta klog_ptr+1
+00002Cr 1  20 rr rr         jsr klog_puts
+00002Fr 1               
+00002Fr 1  68               pla
+000030r 1  85 rr            sta klog_ptr+1
+000032r 1  68               pla
+000033r 1  85 rr            sta klog_ptr
+000035r 1  20 rr rr         jsr klog_puts
+000038r 1               
+000038r 1  4C rr rr         jmp klog_crlf
+00003Br 1               .endproc
+00003Br 1               
+00003Br 1               ; ------------------------------------------------------------
+00003Br 1               ; klog_ok
+00003Br 1               ;
+00003Br 1               ; Input:
+00003Br 1               ;   klog_ptr -> zero-terminated message
+00003Br 1               ;
+00003Br 1               ; Output:
+00003Br 1               ;   [ ok ] <message><crlf>
+00003Br 1               ; ------------------------------------------------------------
+00003Br 1               .proc klog_ok
+00003Br 1  A5 rr            lda klog_ptr
+00003Dr 1  48               pha
+00003Er 1  A5 rr            lda klog_ptr+1
+000040r 1  48               pha
+000041r 1               
+000041r 1  A9 rr            lda #<msg_ok_prefix
+000043r 1  85 rr            sta klog_ptr
+000045r 1  A9 rr            lda #>msg_ok_prefix
+000047r 1  85 rr            sta klog_ptr+1
+000049r 1  20 rr rr         jsr klog_puts
+00004Cr 1               
+00004Cr 1  68               pla
+00004Dr 1  85 rr            sta klog_ptr+1
+00004Fr 1  68               pla
+000050r 1  85 rr            sta klog_ptr
+000052r 1  20 rr rr         jsr klog_puts
+000055r 1               
+000055r 1  4C rr rr         jmp klog_crlf
+000058r 1               .endproc
+000058r 1               
+000058r 1               ; ------------------------------------------------------------
+000058r 1               ; klog_fail
+000058r 1               ;
+000058r 1               ; Input:
+000058r 1               ;   klog_ptr -> zero-terminated message
+000058r 1               ;
+000058r 1               ; Output:
+000058r 1               ;   [fail] <message><crlf>
+000058r 1               ; ------------------------------------------------------------
+000058r 1               .proc klog_fail
+000058r 1  A5 rr            lda klog_ptr
+00005Ar 1  48               pha
+00005Br 1  A5 rr            lda klog_ptr+1
+00005Dr 1  48               pha
+00005Er 1               
+00005Er 1  A9 rr            lda #<msg_fail_prefix
+000060r 1  85 rr            sta klog_ptr
+000062r 1  A9 rr            lda #>msg_fail_prefix
+000064r 1  85 rr            sta klog_ptr+1
+000066r 1  20 rr rr         jsr klog_puts
+000069r 1               
+000069r 1  68               pla
+00006Ar 1  85 rr            sta klog_ptr+1
+00006Cr 1  68               pla
+00006Dr 1  85 rr            sta klog_ptr
+00006Fr 1  20 rr rr         jsr klog_puts
+000072r 1               
+000072r 1  4C rr rr         jmp klog_crlf
+000075r 1               .endproc
+000075r 1               
+000075r 1               
+000075r 1               msg_boot_prefix:
+000075r 1  5B 62 6F 6F      .byte "[boot] ", $00
+000079r 1  74 5D 20 00  
+00007Dr 1               
+00007Dr 1               msg_ok_prefix:
+00007Dr 1  5B 20 6F 6B      .byte "[ ok ] ", $00
+000081r 1  20 5D 20 00  
+000085r 1               
+000085r 1               msg_fail_prefix:
+000085r 1  5B 66 61 69      .byte "[fail] ", $00
+000089r 1  6C 5D 20 00  
+00008Cr 1               

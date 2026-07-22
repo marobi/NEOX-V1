@@ -1,0 +1,42 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/ksys_time.asm
+Current file: kernel/ksys_time.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; ksys_time.asm
+000000r 1               ; NEOX - kernel-side time/tick syscalls
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .export ksys_ticks
+000000r 1               
+000000r 1               .import system_ticks_lo
+000000r 1               .import system_ticks_hi
+000000r 1               
+000000r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; ksys_ticks
+000000r 1               ;
+000000r 1               ; Return:
+000000r 1               ;   C clear
+000000r 1               ;   A = scheduler ticks low
+000000r 1               ;   X = scheduler ticks high
+000000r 1               ;
+000000r 1               ; Notes:
+000000r 1               ;   Uses a high-low-high stable read so an IRQ increment between
+000000r 1               ;   byte reads cannot return a torn 16-bit value.
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc ksys_ticks
+000000r 1               @retry:
+000000r 1  AE rr rr         ldx system_ticks_hi
+000003r 1  AD rr rr         lda system_ticks_lo
+000006r 1  EC rr rr         cpx system_ticks_hi
+000009r 1  D0 F5            bne @retry
+00000Br 1               
+00000Br 1  18               clc
+00000Cr 1  60               rts
+00000Dr 1               .endproc
+00000Dr 1               

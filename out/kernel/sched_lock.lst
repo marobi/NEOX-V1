@@ -1,0 +1,110 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/sched_lock.asm
+Current file: kernel/sched_lock.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; sched_lock.asm
+000000r 1               ; NEOX - scheduler preemption guard helpers
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Provides the small non-sleeping guard used to prevent timer-
+000000r 1               ;   IRQ driven preemption while the kernel is inside scheduler-
+000000r 1               ;   critical state.
+000000r 1               ;
+000000r 1               ; Model:
+000000r 1               ;   - sched_lock bit 0 is the real guard bit.
+000000r 1               ;   - sched_lock_try_enter uses W65C02 TSB to test-and-set bit 0.
+000000r 1               ;   - C clear on return means this caller acquired the guard.
+000000r 1               ;   - C set on return means the guard was already held; the caller
+000000r 1               ;     must not enter scheduler-critical code and must not call leave.
+000000r 1               ;   - sched_lock_leave uses W65C02 TRB to clear bit 0.
+000000r 1               ;   - This is deliberately not a FIFO/sleepable gate. The scheduler
+000000r 1               ;     cannot block on itself and IRQ handlers cannot sleep/yield.
+000000r 1               ;   - This lock is not recursive.
+000000r 1               ;
+000000r 1               ; IRQ semantics:
+000000r 1               ;   - On successful try_enter, IRQ remains masked until leave or a
+000000r 1               ;     final BIOS handoff. This is the scheduler no-preemption window.
+000000r 1               ;   - On busy try_enter, the caller's previous P is restored and C=1
+000000r 1               ;     is returned.
+000000r 1               ;   - leave preserves the caller's A and P, including the caller's I
+000000r 1               ;     flag state.
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .export sched_lock_try_enter
+000000r 1               .export sched_lock_leave
+000000r 1               
+000000r 1               .import sched_lock
+000000r 1               
+000000r 1               SCHED_LOCK_BIT = $01
+000000r 1               
+000000r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; sched_lock_try_enter
+000000r 1               ;
+000000r 1               ; Try to enter a scheduler-critical section.
+000000r 1               ;
+000000r 1               ; Return:
+000000r 1               ;   C clear = acquired; IRQ is masked and remains masked.
+000000r 1               ;   C set   = busy; caller did not acquire and must not leave.
+000000r 1               ;
+000000r 1               ; Clobbers: A, P
+000000r 1               ; Preserves: X, Y
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc sched_lock_try_enter
+000000r 1  08               php
+000001r 1  78               sei
+000002r 1               
+000002r 1  A9 01            lda #SCHED_LOCK_BIT
+000004r 1  0C rr rr         tsb sched_lock
+000007r 1  D0 03            bne @busy
+000009r 1               
+000009r 1                   ; The lock is now owned by this caller.  Discard the saved P
+000009r 1                   ; instead of PLP: restoring P here would re-enable IRQs inside
+000009r 1                   ; the scheduler critical section.
+000009r 1  68               pla
+00000Ar 1  18               clc
+00000Br 1  60               rts
+00000Cr 1               
+00000Cr 1               @busy:
+00000Cr 1                   ; The bit was already set before TSB. Restore the caller's P because
+00000Cr 1                   ; this caller did not acquire the scheduler guard.
+00000Cr 1  28               plp
+00000Dr 1  38               sec
+00000Er 1  60               rts
+00000Fr 1               .endproc
+00000Fr 1               
+00000Fr 1               ; ------------------------------------------------------------
+00000Fr 1               ; sched_lock_leave
+00000Fr 1               ;
+00000Fr 1               ; Leave a scheduler-critical section.
+00000Fr 1               ;
+00000Fr 1               ; Contract:
+00000Fr 1               ;   Only callers that received C clear from sched_lock_try_enter may
+00000Fr 1               ;   call this routine.
+00000Fr 1               ;
+00000Fr 1               ; Preserves: A, X, Y, P
+00000Fr 1               ; ------------------------------------------------------------
+00000Fr 1               
+00000Fr 1               .proc sched_lock_leave
+00000Fr 1  08               php
+000010r 1  48               pha
+000011r 1  78               sei
+000012r 1               
+000012r 1  AD rr rr         lda sched_lock
+000015r 1  29 01            and #SCHED_LOCK_BIT
+000017r 1  F0 05            beq @done
+000019r 1               
+000019r 1  A9 01            lda #SCHED_LOCK_BIT
+00001Br 1  1C rr rr         trb sched_lock
+00001Er 1               
+00001Er 1               @done:
+00001Er 1  68               pla
+00001Fr 1  28               plp
+000020r 1  60               rts
+000021r 1               .endproc
+000021r 1               

@@ -55,7 +55,7 @@ INSTALL_DIR := $(BASE_DIR)$(PROJECT_DIR)/data/system
 # Sources
 # -------------------------------------------------
 
-NBOX_BASE := user
+NBOX_BASE := user/nbox
 include user/nbox.mk
 
 KERNEL_SRCS := \
@@ -89,8 +89,8 @@ KERNEL_SRCS := \
 	kernel/init_tasks.asm
 
 USER_SRCS := \
-	user/user_space.asm \
-	user/neosh.asm \
+	user/task/user_image.asm \
+	user/shell/neosh_entry.asm \
 	$(NBOX_SRCS)
 
 # Optional user library objects
@@ -147,7 +147,7 @@ $(KRN_DIS): $(KRN_BIN) $(KRN_MAP) $(KRN_LBL) $(DISASM) | dirs
 	$(PYTHON) $(DISASM) $(KRN_BIN) 8000 $(KRN_MAP) $(KRN_LBL) > $@
 
 $(USR_DIS): $(USR_BIN) $(USR_MAP) $(USR_LBL) $(DISASM) | dirs
-	$(PYTHON) $(DISASM) $(USR_BIN) 2000 $(USR_MAP) $(USR_LBL) > $@
+	$(PYTHON) $(DISASM) $(USR_BIN) 1000 $(USR_MAP) $(USR_LBL) > $@
 
 disasm: $(KRN_DIS)
 
@@ -193,6 +193,9 @@ dirs:
 	$(MKDIR) $(OUTDIR)
 	$(MKDIR) $(OUTDIR)/kernel
 	$(MKDIR) $(OUTDIR)/user
+	$(MKDIR) $(OUTDIR)/user/task
+	$(MKDIR) $(OUTDIR)/user/shell
+	$(MKDIR) $(OUTDIR)/user/nbox
 	$(MKDIR) $(OUTDIR)/user/applets
 	$(MKDIR) $(OUTDIR)/user/lib
 

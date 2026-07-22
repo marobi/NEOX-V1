@@ -55,6 +55,7 @@
 .import rp_fs_exec
 
 .importzp io_ptr
+.importzp dev_ptr
 
 
 .segment "BSS"
@@ -81,6 +82,10 @@ ksys_open_obj:
     .res 1
 
 ksys_open_fd:
+    .res 1
+
+; Current no-handle filesystem operation while FILE_IO is owned.
+ksys_fs_operation:
     .res 1
 
 
@@ -127,6 +132,81 @@ ksys_open_fd:
 .endproc
 
 ; <summary>
+; Converts one caller pathname to uppercase ASCII in place.
+;
+; This is filesystem policy, not command parsing. Generic argument buffers
+; remain byte-preserving until a pathname-bearing filesystem syscall is made.
+; dev_ptr is shared zero-page scratch and is safe here because FILE_IO is
+; owned for the complete normalization and RP transaction.
+; </summary>
+; <param name="Y">Offset of the pathname pointer inside the syscall block.</param>
+; <returns>C clear on success.</returns>
+.proc ksys_fs_uppercase_path_at_y
+    lda (io_ptr),y
+    sta dev_ptr
+    iny
+    lda (io_ptr),y
+    sta dev_ptr+1
+
+    ldy #0
+@loop:
+    lda (dev_ptr),y
+    beq @done
+
+    cmp #'a'
+    bcc @next
+    cmp #'z' + 1
+    bcs @next
+
+    sec
+    sbc #$20
+    sta (dev_ptr),y
+
+@next:
+    iny
+    bne @loop
+
+    ; A pathname without a terminator in the first 256 bytes is invalid.
+    ldy #EINVAL
+    sec
+    rts
+
+@done:
+    clc
+    rts
+.endproc
+
+; <summary>
+; Applies pathname normalization required by a no-handle filesystem operation.
+; </summary>
+; <param name="A">RP_FS_OP_* operation code.</param>
+; <returns>C clear on success; C set with Y=errno on failure.</returns>
+.proc ksys_fs_normalize_no_handle_paths
+    cmp #RP_FS_OP_GETCWD
+    beq @none
+    cmp #RP_FS_OP_RENAME
+    beq @rename
+
+    ; LOAD, SAVE, DELETE, CHDIR, MKDIR, and RMDIR all place their first
+    ; pathname pointer at byte zero of the syscall argument block.
+    ldy #0
+    jmp ksys_fs_uppercase_path_at_y
+
+@rename:
+    ldy #rename_args::old_path_ptr
+    jsr ksys_fs_uppercase_path_at_y
+    bcs @fail
+
+    ldy #rename_args::new_path_ptr
+    jmp ksys_fs_uppercase_path_at_y
+
+@none:
+    clc
+@fail:
+    rts
+.endproc
+
+; <summary>
 ; Executes a path/bulk filesystem operation that needs no trusted RP handle.
 ; </summary>
 ; <param name="A">RP_FS_OP_* operation.</param>
@@ -143,6 +223,14 @@ ksys_open_fd:
 
 @owned:
     pla
+    sta ksys_fs_operation
+
+    jsr ksys_fs_normalize_no_handle_paths
+    bcc @normalized
+    jmp ksys_fs_finish
+
+@normalized:
+    lda ksys_fs_operation
     ldx #$FF
     ldy #$00
     jsr rp_fs_exec
@@ -194,6 +282,12 @@ ksys_open_fd:
     sec
     rts
 @gate_owned:
+    ldy #open_args::path_ptr
+    jsr ksys_fs_uppercase_path_at_y
+    bcc @path_ready
+    jmp @fail
+
+@path_ready:
     ldy #open_args::flags
     lda (io_ptr),y
     cmp #OPEN_READ
@@ -346,6 +440,12 @@ ksys_open_fd:
     sec
     rts
 @gate_owned:
+    ldy #opendir_args::path_ptr
+    jsr ksys_fs_uppercase_path_at_y
+    bcc @path_ready
+    jmp @fail
+
+@path_ready:
     ldy #opendir_args::flags
     lda (io_ptr),y
     beq @flags_ok

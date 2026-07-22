@@ -53,7 +53,7 @@
 .import ksys_getprocinfo
 .import ksys_waitpid
 .import ksys_get_launch_id
-.import ksys_get_launch_args2
+.import ksys_get_launch_line
 .import ksys_spawn_resident
 
 .segment "KERNEL_ENTRY"
@@ -95,7 +95,7 @@ kernel_entry_table:
     jmp ksys_getprocinfo
     jmp ksys_waitpid
     jmp ksys_get_launch_id
-    jmp ksys_get_launch_args2
+    jmp ksys_get_launch_line
     jmp ksys_spawn_resident
 
 ; KERNEL_ENTRY area is $0100 bytes.

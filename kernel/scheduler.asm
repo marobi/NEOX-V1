@@ -44,6 +44,7 @@
 .export proc_set_running
 .export proc_wake
 .export scheduler_wake_console_input
+.export scheduler_wake_console_owner
 
 .export proc_set_wait
 .export proc_clear_wait
@@ -66,6 +67,7 @@
 .import proc_signal_pending
 
 .import console_owner_pid
+.import console_focus_pid
 
 .import active_context
 
@@ -537,51 +539,76 @@ sched_handoff_sp:
 .proc sched_update_console_focus
     lda RP_CONSOLE_PID
 
-    ; --------------------------------------------------------
-    ; No focused task.
-    ; --------------------------------------------------------
-
+    ; Convert the RP route into a validated normal-process focus PID.
     cmp #$FF
-    beq @clear_focus
-
-    ; --------------------------------------------------------
-    ; Monitor/supervisor owns console.
-    ; --------------------------------------------------------
+    beq @validated_none
 
     cmp #0
-    beq @clear_focus
-
-    ; --------------------------------------------------------
-    ; Validate PID range.
-    ; --------------------------------------------------------
+    beq @validated_none
 
     cmp #MAX_PROCS
-    bcs @clear_focus
-
-    ; --------------------------------------------------------
-    ; Reject EMPTY/ZOMBIE process slots.
-    ; --------------------------------------------------------
+    bcs @validated_none
 
     tax
     lda proc_state,x
     cmp #PROC_EMPTY
-    beq @clear_focus
+    beq @validated_none
 
     cmp #PROC_ZOMBIE
-    beq @clear_focus
-
-    ; --------------------------------------------------------
-    ; Valid live PID.
-    ; --------------------------------------------------------
+    beq @validated_none
 
     txa
-    bra @set_focus
+    bra @validated
 
-@clear_focus:
+@validated_none:
     lda #$FF
 
-@set_focus:
+@validated:
+    ; RP routing and foreground ownership are separate. Only a route change
+    ; resets the foreground owner to the newly selected routed process.
+    cmp console_focus_pid
+    beq @done
+
+    sta console_focus_pid
     sta console_owner_pid
+    jsr scheduler_wake_console_owner
+
+@done:
+    rts
+.endproc
+
+; ------------------------------------------------------------
+; scheduler_wake_console_owner
+;
+; Wake the current console owner if it is blocked on WAIT_CONSOLE.
+;
+; This helper does not require RP_CONSOLE_RDY. It is used when foreground
+; ownership changes so the newly selected owner can retry its read. If no
+; input is available, console_read immediately blocks it again.
+; ------------------------------------------------------------
+
+.proc scheduler_wake_console_owner
+    ldx console_owner_pid
+    cpx #$FF
+    beq @done
+
+    cpx #FIRST_TASK_PID
+    bcc @done
+
+    cpx #MAX_PROCS
+    bcs @done
+
+    lda proc_state,x
+    cmp #PROC_BLOCKED
+    bne @done
+
+    lda wait_reason,x
+    cmp #WAIT_CONSOLE
+    bne @done
+
+    jmp proc_wake
+
+@done:
     rts
 .endproc
 
@@ -649,6 +676,7 @@ sched_handoff_sp:
 	stz monitor_active
 	
     lda #$FF
+    sta console_focus_pid
     sta console_owner_pid
 
     ldx #$00
@@ -820,7 +848,7 @@ sched_handoff_sp:
 ; Policy:
 ;   - Scans normal task PIDs only; PID 0 is never signalled here.
 ;   - Calls only proc_apply_scheduler_signal, which may handle
-;     SIG_HALT/SIG_CONT but deliberately does not apply SIG_KILL.
+;     SIG_STOP/SIG_CONT but deliberately does not apply SIG_KILL.
 ;   - Keeps sched_pick_next free of process-control side effects.
 ; ------------------------------------------------------------
 

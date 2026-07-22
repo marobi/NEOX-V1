@@ -1,0 +1,50 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/zero_page.asm
+Current file: kernel/zero_page.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; zero_page.asm
+000000r 1               ; NEOX - per-context zero page storage
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .segment "ZEROPAGE"
+000000r 1               
+000000r 1               ; ============================================================
+000000r 1               .exportzp factor1
+000000r 1               .exportzp factor2
+000000r 1               
+000000r 1               ; Context-private arithmetic scratch.
+000000r 1               ; IRQ handlers must not use these locations while an interrupted
+000000r 1               ; context may be executing mul8u.
+000000r 1  xx           factor1:        .res 1
+000001r 1  xx           factor2:        .res 1
+000002r 1               
+000002r 1               ; ============================================================
+000002r 1               .exportzp io_ptr
+000002r 1  xx xx        io_ptr:         .res 2
+000004r 1               
+000004r 1               ; ============================================================
+000004r 1               .exportzp sched_ptr
+000004r 1  xx xx        sched_ptr:      .res 2
+000006r 1               
+000006r 1               ; ============================================================
+000006r 1               .exportzp dev_ptr
+000006r 1  xx xx        dev_ptr:        .res 2
+000008r 1               
+000008r 1               ; ============================================================
+000008r 1               .exportzp fd_ptr
+000008r 1  xx xx        fd_ptr:         .res 2
+00000Ar 1               
+00000Ar 1               ; ============================================================
+00000Ar 1               .exportzp pipe_ptr
+00000Ar 1               .exportzp pipe_buf_ptr
+00000Ar 1               
+00000Ar 1  xx xx        pipe_ptr:       .res 2
+00000Cr 1  xx xx        pipe_buf_ptr:   .res 2
+00000Er 1               
+00000Er 1               ; ============================================================
+00000Er 1               .exportzp klog_ptr
+00000Er 1  xx xx        klog_ptr:      .res 2
+00000Er 1               

@@ -1,0 +1,625 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/gate.asm
+Current file: kernel/gate.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; gate.asm
+000000r 1               ; NEOX - sleepable FIFO gate mechanism
+000000r 1               ; ca65
+000000r 1               ;
+000000r 1               ; Model:
+000000r 1               ;   - syscall-level serialization primitive
+000000r 1               ;   - FIFO wait queue per gate
+000000r 1               ;   - WAIT_LOCK + lock object id
+000000r 1               ;   - ownership belongs to a PID, not to the currently executing timeslice
+000000r 1               ;   - a gate may remain owned across scheduler preemption
+000000r 1               ;   - an explicit subsystem wait may retain a gate only when its protocol
+000000r 1               ;     requires stable ownership, such as the planned WAIT_RP transaction
+000000r 1               ;
+000000r 1               ; Provides generated concrete gates:
+000000r 1               ;   file_io_gate_*
+000000r 1               ;   proc_gate_*
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "scheduler_defs.inc"
+000000r 2               ; ============================================================
+000000r 2               ; scheduler_defs.inc
+000000r 2               ; NEOX - scheduler constants
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SCHEDULER_DEFS_INC__
+000000r 2               __SCHEDULER_DEFS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               IDLE_PID        = 0
+000000r 2               FIRST_TASK_PID  = 1
+000000r 2               
+000000r 2               .struct proc_create_args
+000000r 2                   flags       .byte
+000000r 2                   reserved    .byte
+000000r 2                   entry       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROC_CREATE_ARGS_SIZE = .sizeof(proc_create_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "process.inc"
+000000r 2               .ifndef __PROCESS_INC__
+000000r 2               __PROCESS_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process states
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_EMPTY      = $00
+000000r 2               PROC_NEW        = $01
+000000r 2               PROC_READY      = $02
+000000r 2               PROC_RUNNING    = $03
+000000r 2               PROC_BLOCKED    = $04
+000000r 2               PROC_STOPPED    = $05
+000000r 2               PROC_ZOMBIE     = $06
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Flags byte bit definitions
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_FLAG_NONE              = $00
+000000r 2               PROC_FLAG_IDLE              = $01
+000000r 2               PROC_FLAG_ATTACHED_CON      = $02
+000000r 2               PROC_FLAG_FOREGROUND        = $04
+000000r 2               PROC_FLAG_SIGINT_INTERRUPT  = $08
+000000r 2               
+000000r 2               ; Flags that may be supplied as initial process characteristics by a
+000000r 2               ; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+000000r 2               ; kernel-owned and cannot be requested through these creation interfaces.
+000000r 2               PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process frame format
+000000r 2               ;
+000000r 2               ; All saved runnable process stacks use the IRQ-compatible
+000000r 2               ; extended RTI frame:
+000000r 2               ;     Y, X, A, P, PCL, PCH
+000000r 2               ; The scheduler has no per-process resume mode; normal task
+000000r 2               ; resume is always RTI.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process wait reasons
+000000r 2               ;
+000000r 2               ; WAIT_NONE means the process is not blocked on a known wait object.
+000000r 2               ; Other values describe why a PROC_BLOCKED process is blocked.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               WAIT_NONE       = $00
+000000r 2               WAIT_CONSOLE    = $01
+000000r 2               WAIT_DEVICE     = $02
+000000r 2               WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+000000r 2               WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
+000000r 2               WAIT_TIMER      = $04
+000000r 2               WAIT_PROC       = $05
+000000r 2               
+000000r 2               ; Generic sleepable gate wait.
+000000r 2               ;
+000000r 2               ; wait_object identifies the gate object:
+000000r 2               ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+000000r 2               ;   LOCK_ID_PROC    = future process-management syscall gate
+000000r 2               WAIT_LOCK       = $06
+000000r 2               
+000000r 2               ; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+000000r 2               ; readers and writers can be woken by the correct readiness event.
+000000r 2               WAIT_PIPE_WRITE = $07
+000000r 2               
+000000r 2               ; Blocked while retaining FILE_IO ownership until the RP2350 completes
+000000r 2               ; the single active generic filesystem request. wait_object contains the
+000000r 2               ; filesystem operation code.
+000000r 2               WAIT_RP         = $08
+000000r 2               
+000000r 2               LOCK_ID_FILE_IO = $00
+000000r 2               LOCK_ID_PROC    = $01
+000000r 2               
+000000r 2               ; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+000000r 2               PROC_HOLD_NONE     = $00
+000000r 2               PROC_HOLD_FILE_IO  = $01
+000000r 2               PROC_HOLD_PROC     = $02
+000000r 2               
+000000r 2               ; Sentinel used for free gate owners and empty gate wait queues.
+000000r 2               GATE_OWNER_NONE = $FF
+000000r 2               
+000000r 2               EXIT_OK         = $00
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "signal.inc"
+000000r 2               ; ============================================================
+000000r 2               ; signal.inc
+000000r 2               ; NEOX signal numbers
+000000r 2               ;
+000000r 2               ; Public signal numbers follow Linux:
+000000r 2               ;   SIG_INT  = 2
+000000r 2               ;   SIG_KILL = 9
+000000r 2               ;   SIG_CONT = 18
+000000r 2               ;   SIG_STOP = 19
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SIGNAL_INC__
+000000r 2               __SIGNAL_INC__ = 1
+000000r 2               
+000000r 2               SIG_NONE = 0
+000000r 2               SIG_INT  = 2
+000000r 2               SIG_KILL = 9
+000000r 2               SIG_CONT = 18
+000000r 2               SIG_STOP = 19
+000000r 2               
+000000r 2               ; Source compatibility for older NEOX assembly code.
+000000r 2               SIG_HALT = SIG_STOP
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export file_io_gate_init
+000000r 1               .export file_io_gate_acquire
+000000r 1               .export file_io_gate_release
+000000r 1               .export file_io_gate_cancel_wait
+000000r 1               
+000000r 1               .export proc_gate_init
+000000r 1               .export proc_gate_acquire
+000000r 1               .export proc_gate_release
+000000r 1               .export proc_gate_cancel_wait
+000000r 1               
+000000r 1               .import active_pid
+000000r 1               .import proc_set_wait
+000000r 1               .import proc_wake
+000000r 1               .import sched_yield
+000000r 1               .import proc_signal_pending
+000000r 1               .import proc_flags
+000000r 1               
+000000r 1               .import file_io_gate
+000000r 1               .import file_io_gate_owner
+000000r 1               .import file_io_gate_wait_head
+000000r 1               .import file_io_gate_wait_tail
+000000r 1               .import file_io_gate_next
+000000r 1               
+000000r 1               .import proc_gate
+000000r 1               .import proc_gate_owner
+000000r 1               .import proc_gate_wait_head
+000000r 1               .import proc_gate_wait_tail
+000000r 1               .import proc_gate_next
+000000r 1               
+000000r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; gate_signal_checkpoint
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Force a scheduler pass immediately after the active process has released
+000000r 1               ;   its final sleepable gate when a default-action SIG_INT is pending.
+000000r 1               ;
+000000r 1               ; Policy:
+000000r 1               ;   - never acts on PID 0
+000000r 1               ;   - never acts while the active process still owns FILE_IO or PROC
+000000r 1               ;   - leaves PROC_FLAG_SIGINT_INTERRUPT processes alive; their pending SIG_INT
+000000r 1               ;     is consumed by the interruptible console-read path as EINTR
+000000r 1               ;   - does not apply the signal directly; scheduler signal handling remains
+000000r 1               ;     the sole owner of process termination
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc gate_signal_checkpoint
+000000r 1  AE rr rr         ldx active_pid
+000003r 1  E0 00            cpx #IDLE_PID
+000005r 1  F0 25            beq @done
+000007r 1               
+000007r 1  E0 08            cpx #MAX_PROCS
+000009r 1  B0 21            bcs @done
+00000Br 1               
+00000Br 1  BD rr rr         lda proc_signal_pending,x
+00000Er 1  C9 02            cmp #SIG_INT
+000010r 1  D0 1A            bne @done
+000012r 1               
+000012r 1  BD rr rr         lda proc_flags,x
+000015r 1  29 08            and #PROC_FLAG_SIGINT_INTERRUPT
+000017r 1  D0 13            bne @done
+000019r 1               
+000019r 1  AD rr rr         lda file_io_gate_owner
+00001Cr 1  CD rr rr         cmp active_pid
+00001Fr 1  F0 0B            beq @done
+000021r 1               
+000021r 1  AD rr rr         lda proc_gate_owner
+000024r 1  CD rr rr         cmp active_pid
+000027r 1  F0 03            beq @done
+000029r 1               
+000029r 1  20 rr rr         jsr sched_yield
+00002Cr 1               
+00002Cr 1               @done:
+00002Cr 1  60               rts
+00002Dr 1               .endproc
+00002Dr 1               
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               ; DEFINE_SLEEPABLE_GATE
+00002Dr 1               ;
+00002Dr 1               ; Parameters:
+00002Dr 1               ;   init_proc       concrete init routine name
+00002Dr 1               ;   acquire_proc    concrete acquire routine name
+00002Dr 1               ;   release_proc    concrete release routine name
+00002Dr 1               ;   enqueue_proc    private FIFO enqueue routine name
+00002Dr 1               ;   dequeue_proc    private FIFO dequeue routine name
+00002Dr 1               ;   gate_byte       0/1 ownership byte
+00002Dr 1               ;   owner_byte      debug owner PID, $FF when free
+00002Dr 1               ;   phase_byte      debug phase byte, gate-specific values
+00002Dr 1               ;   wait_head       FIFO head PID, $FF when empty
+00002Dr 1               ;   wait_tail       FIFO tail PID, $FF when empty
+00002Dr 1               ;   next_table      next[pid] FIFO links, $FF when not queued
+00002Dr 1               ;   lock_id         WAIT_LOCK object id
+00002Dr 1               ;   idle_phase      phase value written on init/release
+00002Dr 1               ;
+00002Dr 1               ; IRQ policy:
+00002Dr 1               ;   acquire/release protect gate metadata with php/sei/plp.
+00002Dr 1               ;   They do not disable scheduling after returning. A timer preemption does
+00002Dr 1               ;   not transfer ownership; owner_byte continues to identify the owning PID.
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               
+00002Dr 1               .macro DEFINE_SLEEPABLE_GATE init_proc, acquire_proc, release_proc, enqueue_proc, dequeue_proc, gate_byte, owner_byte, wait_head, wait_tail, next_table, lock_id
+00002Dr 1               
+00002Dr 1               .proc init_proc
+00002Dr 1                   stz gate_byte
+00002Dr 1                   lda #GATE_OWNER_NONE
+00002Dr 1                   sta owner_byte
+00002Dr 1                   sta wait_head
+00002Dr 1                   sta wait_tail
+00002Dr 1               
+00002Dr 1                   ldx #MAX_PROCS - 1
+00002Dr 1               @clear_next:
+00002Dr 1                   sta next_table,x
+00002Dr 1                   dex
+00002Dr 1                   bpl @clear_next
+00002Dr 1               
+00002Dr 1                   rts
+00002Dr 1               .endproc
+00002Dr 1               
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               ; enqueue_proc
+00002Dr 1               ;
+00002Dr 1               ; Input:
+00002Dr 1               ;   X = current PID
+00002Dr 1               ;
+00002Dr 1               ; IRQ policy:
+00002Dr 1               ;   Caller has IRQs disabled.
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               
+00002Dr 1               .proc enqueue_proc
+00002Dr 1                   ; Mark this PID as queue tail by default.
+00002Dr 1                   lda #GATE_OWNER_NONE
+00002Dr 1                   sta next_table,x
+00002Dr 1               
+00002Dr 1                   lda wait_tail
+00002Dr 1                   cmp #GATE_OWNER_NONE
+00002Dr 1                   beq @empty
+00002Dr 1               
+00002Dr 1                   ; Existing tail -> current PID.
+00002Dr 1                   tay
+00002Dr 1                   txa
+00002Dr 1                   sta next_table,y
+00002Dr 1                   stx wait_tail
+00002Dr 1                   rts
+00002Dr 1               
+00002Dr 1               @empty:
+00002Dr 1                   stx wait_head
+00002Dr 1                   stx wait_tail
+00002Dr 1                   rts
+00002Dr 1               .endproc
+00002Dr 1               
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               ; dequeue_proc
+00002Dr 1               ;
+00002Dr 1               ; Output:
+00002Dr 1               ;   C clear = X contains dequeued PID
+00002Dr 1               ;   C set   = FIFO empty
+00002Dr 1               ;
+00002Dr 1               ; IRQ policy:
+00002Dr 1               ;   Caller has IRQs disabled.
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               
+00002Dr 1               .proc dequeue_proc
+00002Dr 1                   ldx wait_head
+00002Dr 1                   cpx #GATE_OWNER_NONE
+00002Dr 1                   bne @have_pid
+00002Dr 1               
+00002Dr 1                   sec
+00002Dr 1                   rts
+00002Dr 1               
+00002Dr 1               @have_pid:
+00002Dr 1                   lda next_table,x
+00002Dr 1                   sta wait_head
+00002Dr 1                   cmp #GATE_OWNER_NONE
+00002Dr 1                   bne @clear_link
+00002Dr 1               
+00002Dr 1                   sta wait_tail
+00002Dr 1               
+00002Dr 1               @clear_link:
+00002Dr 1                   lda #GATE_OWNER_NONE
+00002Dr 1                   sta next_table,x
+00002Dr 1               
+00002Dr 1                   clc
+00002Dr 1                   rts
+00002Dr 1               .endproc
+00002Dr 1               
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               ; acquire_proc
+00002Dr 1               ;
+00002Dr 1               ; Behavior:
+00002Dr 1               ;   If the gate is free, acquire it and return.
+00002Dr 1               ;   If another PID owns it, enqueue active_pid FIFO, block on
+00002Dr 1               ;   WAIT_LOCK / lock_id, yield, and retry when woken.
+00002Dr 1               ;   If active_pid already owns it, trap.
+00002Dr 1               ;
+00002Dr 1               ; Return:
+00002Dr 1               ;   C set = acquired
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               
+00002Dr 1               .proc acquire_proc
+00002Dr 1               @retry:
+00002Dr 1                   php
+00002Dr 1                   sei
+00002Dr 1               
+00002Dr 1                   lda #$01
+00002Dr 1                   tsb gate_byte
+00002Dr 1                   beq @acquired
+00002Dr 1               
+00002Dr 1                   lda owner_byte
+00002Dr 1                   cmp active_pid
+00002Dr 1                   bne @wait_for_owner
+00002Dr 1               
+00002Dr 1                   ; Do not hard-hang the system here.  A recursive acquire is
+00002Dr 1                   ; still a kernel bug, but the monitor must remain usable.
+00002Dr 1                   ; Return C clear so checked callers can fail/diagnose instead
+00002Dr 1                   ; of spinning forever.  The original owner keeps the gate.
+00002Dr 1                   plp
+00002Dr 1                   clc
+00002Dr 1                   rts
+00002Dr 1               
+00002Dr 1               @wait_for_owner:
+00002Dr 1                   ldx active_pid
+00002Dr 1                   jsr enqueue_proc
+00002Dr 1               
+00002Dr 1                   lda #WAIT_LOCK
+00002Dr 1                   ldy #lock_id
+00002Dr 1                   jsr proc_set_wait
+00002Dr 1               
+00002Dr 1                   plp
+00002Dr 1               
+00002Dr 1                   jsr sched_yield
+00002Dr 1                   bra @retry
+00002Dr 1               
+00002Dr 1               @acquired:
+00002Dr 1                   ldx active_pid
+00002Dr 1                   stx owner_byte
+00002Dr 1               
+00002Dr 1                   plp
+00002Dr 1                   sec
+00002Dr 1                   rts
+00002Dr 1               .endproc
+00002Dr 1               
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               ; release_proc
+00002Dr 1               ;
+00002Dr 1               ; Release the gate and wake exactly one FIFO waiter.
+00002Dr 1               ;
+00002Dr 1               ; Return:
+00002Dr 1               ;   C set
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               
+00002Dr 1               .proc release_proc
+00002Dr 1                   php
+00002Dr 1                   sei
+00002Dr 1               
+00002Dr 1                   lda owner_byte
+00002Dr 1                   cmp active_pid
+00002Dr 1                   beq @owner_ok
+00002Dr 1               
+00002Dr 1                   ; Do not hard-hang on bad release either.  Leave the gate state
+00002Dr 1                   ; untouched and return C clear for checked callers/monitor output.
+00002Dr 1                   plp
+00002Dr 1                   clc
+00002Dr 1                   rts
+00002Dr 1               
+00002Dr 1               @owner_ok:
+00002Dr 1                   lda #GATE_OWNER_NONE
+00002Dr 1                   sta owner_byte
+00002Dr 1               
+00002Dr 1                   lda #$01
+00002Dr 1                   trb gate_byte
+00002Dr 1               
+00002Dr 1                   jsr dequeue_proc
+00002Dr 1                   bcs @done
+00002Dr 1               
+00002Dr 1                   ; X = FIFO waiter PID.
+00002Dr 1                   jsr proc_wake
+00002Dr 1               
+00002Dr 1               @done:
+00002Dr 1                   plp
+00002Dr 1               
+00002Dr 1                   ; A pending default SIG_INT may have been deferred while this process
+00002Dr 1                   ; owned the gate. Once its final gate is released, enter the scheduler
+00002Dr 1                   ; before user code can begin another syscall.
+00002Dr 1                   jsr gate_signal_checkpoint
+00002Dr 1               
+00002Dr 1                   sec
+00002Dr 1                   rts
+00002Dr 1               .endproc
+00002Dr 1               
+00002Dr 1               .endmacro
+00002Dr 1               
+00002Dr 1               
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               ; DEFINE_GATE_CANCEL_WAIT
+00002Dr 1               ;
+00002Dr 1               ; Remove PID X from a gate FIFO without changing gate ownership.
+00002Dr 1               ; This is used when SIG_KILL converts a WAIT_LOCK process to ZOMBIE.
+00002Dr 1               ; IRQs are masked while the singly-linked FIFO is changed.
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               
+00002Dr 1               .macro DEFINE_GATE_CANCEL_WAIT cancel_proc, wait_head, wait_tail, next_table
+00002Dr 1               
+00002Dr 1               .proc cancel_proc
+00002Dr 1                   php
+00002Dr 1                   sei
+00002Dr 1               
+00002Dr 1                   cpx wait_head
+00002Dr 1                   bne @scan
+00002Dr 1               
+00002Dr 1                   ; Removing the queue head.
+00002Dr 1                   lda next_table,x
+00002Dr 1                   sta wait_head
+00002Dr 1                   cmp #GATE_OWNER_NONE
+00002Dr 1                   bne @clear_link
+00002Dr 1               
+00002Dr 1                   ; Removed the only queue entry.
+00002Dr 1                   sta wait_tail
+00002Dr 1                   bra @clear_link
+00002Dr 1               
+00002Dr 1               @scan:
+00002Dr 1                   ldy wait_head
+00002Dr 1               
+00002Dr 1               @scan_next:
+00002Dr 1                   cpy #GATE_OWNER_NONE
+00002Dr 1                   beq @done
+00002Dr 1               
+00002Dr 1                   txa
+00002Dr 1                   cmp next_table,y
+00002Dr 1                   beq @found
+00002Dr 1               
+00002Dr 1                   lda next_table,y
+00002Dr 1                   tay
+00002Dr 1                   bra @scan_next
+00002Dr 1               
+00002Dr 1               @found:
+00002Dr 1                   ; Y = predecessor, X = entry being removed.
+00002Dr 1                   lda next_table,x
+00002Dr 1                   sta next_table,y
+00002Dr 1               
+00002Dr 1                   cpx wait_tail
+00002Dr 1                   bne @clear_link
+00002Dr 1               
+00002Dr 1                   sty wait_tail
+00002Dr 1               
+00002Dr 1               @clear_link:
+00002Dr 1                   lda #GATE_OWNER_NONE
+00002Dr 1                   sta next_table,x
+00002Dr 1               
+00002Dr 1               @done:
+00002Dr 1                   plp
+00002Dr 1                   rts
+00002Dr 1               .endproc
+00002Dr 1               
+00002Dr 1               .endmacro
+00002Dr 1               
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               ; Concrete gate instances
+00002Dr 1               ; ------------------------------------------------------------
+00002Dr 1               
+00002Dr 1  9C rr rr A9  DEFINE_SLEEPABLE_GATE file_io_gate_init, file_io_gate_acquire, file_io_gate_release, file_io_gate_enqueue_current, file_io_gate_dequeue_one, file_io_gate, file_io_gate_owner, file_io_gate_wait_head, file_io_gate_wait_tail, file_io_gate_next, LOCK_ID_FILE_IO
+000031r 1  FF 8D rr rr  
+000035r 1  8D rr rr 8D  
+0000D2r 1  08 78 EC rr  DEFINE_GATE_CANCEL_WAIT file_io_gate_cancel_wait, file_io_gate_wait_head, file_io_gate_wait_tail, file_io_gate_next
+0000D6r 1  rr D0 0F BD  
+0000DAr 1  rr rr 8D rr  
+000110r 1               
+000110r 1  9C rr rr A9  DEFINE_SLEEPABLE_GATE proc_gate_init, proc_gate_acquire, proc_gate_release, proc_gate_enqueue_current, proc_gate_dequeue_one, proc_gate, proc_gate_owner, proc_gate_wait_head, proc_gate_wait_tail, proc_gate_next, LOCK_ID_PROC
+000114r 1  FF 8D rr rr  
+000118r 1  8D rr rr 8D  
+0001B5r 1  08 78 EC rr  DEFINE_GATE_CANCEL_WAIT proc_gate_cancel_wait, proc_gate_wait_head, proc_gate_wait_tail, proc_gate_next
+0001B9r 1  rr D0 0F BD  
+0001BDr 1  rr rr 8D rr  
+0001B5r 1               

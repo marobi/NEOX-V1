@@ -1,0 +1,1581 @@
+Modules list:
+-------------
+user_image.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    USER_ENTRY        Offs=000000  Size=000020  Align=00001  Fill=0000
+    USER_DATA         Offs=000000  Size=0004A4  Align=00001  Fill=0000
+    USER_TEXT         Offs=000000  Size=000DE5  Align=00001  Fill=0000
+neosh_entry.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    USER_TEXT         Offs=000DE5  Size=000003  Align=00001  Fill=0000
+nbox_child.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    USER_DATA         Offs=0004A4  Size=000004  Align=00001  Fill=0000
+    USER_TEXT         Offs=000DE8  Size=000032  Align=00001  Fill=0000
+nbox.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=000000  Size=000091  Align=00001  Fill=0000
+    C_BSS             Offs=000000  Size=000045  Align=00001  Fill=0000
+    C_CODE            Offs=000000  Size=000419  Align=00001  Fill=0000
+neosh.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=000091  Size=000051  Align=00001  Fill=0000
+    C_BSS             Offs=000045  Size=00020A  Align=00001  Fill=0000
+    C_CODE            Offs=000419  Size=0011EB  Align=00001  Fill=0000
+echo.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=0000E2  Size=000004  Align=00001  Fill=0000
+    C_CODE            Offs=001604  Size=0000BD  Align=00001  Fill=0000
+cat.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=0000E6  Size=00007D  Align=00001  Fill=0000
+    C_BSS             Offs=00024F  Size=000080  Align=00001  Fill=0000
+    C_CODE            Offs=0016C1  Size=0001AB  Align=00001  Fill=0000
+path_command.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=000163  Size=000019  Align=00001  Fill=0000
+    C_BSS             Offs=0002CF  Size=000040  Align=00001  Fill=0000
+    C_CODE            Offs=00186C  Size=000129  Align=00001  Fill=0000
+two_path_command.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=00030F  Size=000080  Align=00001  Fill=0000
+    C_CODE            Offs=001995  Size=00019F  Align=00001  Fill=0000
+rm.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=00017C  Size=000072  Align=00001  Fill=0000
+    C_CODE            Offs=001B34  Size=000058  Align=00001  Fill=0000
+mkdir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=0001EE  Size=000074  Align=00001  Fill=0000
+    C_CODE            Offs=001B8C  Size=000056  Align=00001  Fill=0000
+rmdir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=000262  Size=000095  Align=00001  Fill=0000
+    C_CODE            Offs=001BE2  Size=000058  Align=00001  Fill=0000
+mv.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=0002F7  Size=000098  Align=00001  Fill=0000
+    C_CODE            Offs=001C3A  Size=000058  Align=00001  Fill=0000
+cp.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=00038F  Size=000112  Align=00001  Fill=0000
+    C_BSS             Offs=00038F  Size=0000C0  Align=00001  Fill=0000
+    C_CODE            Offs=001C92  Size=000396  Align=00001  Fill=0000
+cd.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=0004A1  Size=00006F  Align=00001  Fill=0000
+    C_BSS             Offs=00044F  Size=000040  Align=00001  Fill=0000
+    C_CODE            Offs=002028  Size=0000DA  Align=00001  Fill=0000
+pwd.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=000510  Size=000050  Align=00001  Fill=0000
+    C_BSS             Offs=00048F  Size=000040  Align=00001  Fill=0000
+    C_CODE            Offs=002102  Size=0000D5  Align=00001  Fill=0000
+ls.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=000560  Size=0000AB  Align=00001  Fill=0000
+    C_BSS             Offs=0004CF  Size=00005C  Align=00001  Fill=0000
+    C_CODE            Offs=0021D7  Size=000308  Align=00001  Fill=0000
+ps.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=00060B  Size=0000CD  Align=00001  Fill=0000
+    C_BSS             Offs=00052B  Size=000013  Align=00001  Fill=0000
+    C_CODE            Offs=0024DF  Size=000421  Align=00001  Fill=0000
+kill.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=0006D8  Size=00005D  Align=00001  Fill=0000
+    C_CODE            Offs=002900  Size=0002E4  Align=00001  Fill=0000
+zeropage.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_ZEROPAGE        Offs=000000  Size=00001A  Align=00001  Fill=0000
+runtime.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    USER_TEXT         Offs=000E1A  Size=00003F  Align=00001  Fill=0000
+neox_open.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=00053E  Size=00000A  Align=00001  Fill=0000
+    C_CODE            Offs=002BE4  Size=00005F  Align=00001  Fill=0000
+neox_read.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=000548  Size=00000B  Align=00001  Fill=0000
+    C_CODE            Offs=002C43  Size=00006F  Align=00001  Fill=0000
+neox_write.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=000553  Size=00000B  Align=00001  Fill=0000
+    C_CODE            Offs=002CB2  Size=00006F  Align=00001  Fill=0000
+neox_close.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_CODE            Offs=002D21  Size=00000E  Align=00001  Fill=0000
+neox_delete.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=00055E  Size=000006  Align=00001  Fill=0000
+    C_CODE            Offs=002D2F  Size=000026  Align=00001  Fill=0000
+neox_mkdir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=000564  Size=000006  Align=00001  Fill=0000
+    C_CODE            Offs=002D55  Size=000026  Align=00001  Fill=0000
+neox_rmdir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=00056A  Size=000006  Align=00001  Fill=0000
+    C_CODE            Offs=002D7B  Size=000026  Align=00001  Fill=0000
+neox_rename.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=000570  Size=000008  Align=00001  Fill=0000
+    C_CODE            Offs=002DA1  Size=00003A  Align=00001  Fill=0000
+neox_chdir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=000578  Size=000006  Align=00001  Fill=0000
+    C_CODE            Offs=002DDB  Size=000026  Align=00001  Fill=0000
+neox_getcwd.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=00057E  Size=00000D  Align=00001  Fill=0000
+    C_CODE            Offs=002E01  Size=000071  Align=00001  Fill=0000
+neox_opendir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=00058B  Size=00000A  Align=00001  Fill=0000
+    C_CODE            Offs=002E72  Size=00005B  Align=00001  Fill=0000
+neox_readdir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=000595  Size=00000A  Align=00001  Fill=0000
+    C_CODE            Offs=002ECD  Size=000069  Align=00001  Fill=0000
+neox_closedir.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=00059F  Size=000002  Align=00001  Fill=0000
+    C_CODE            Offs=002F36  Size=000018  Align=00001  Fill=0000
+neox_get_process_info.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=0005A1  Size=000007  Align=00001  Fill=0000
+    C_CODE            Offs=002F4E  Size=000035  Align=00001  Fill=0000
+neox_seek.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=0005A8  Size=00000D  Align=00001  Fill=0000
+    C_CODE            Offs=002F83  Size=00007F  Align=00001  Fill=0000
+neox_spawn_resident.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=0005B5  Size=000004  Align=00001  Fill=0000
+    C_CODE            Offs=003002  Size=000045  Align=00001  Fill=0000
+neox_waitpid.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=0005B9  Size=000004  Align=00001  Fill=0000
+    C_CODE            Offs=003047  Size=00003D  Align=00001  Fill=0000
+neox_signal.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=0005BD  Size=000002  Align=00001  Fill=0000
+    C_CODE            Offs=003084  Size=000021  Align=00001  Fill=0000
+neox_get_launch_id.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=0005BF  Size=000004  Align=00001  Fill=0000
+    C_CODE            Offs=0030A5  Size=000039  Align=00001  Fill=0000
+neox_get_launch_line.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_BSS             Offs=0005C3  Size=000007  Align=00001  Fill=0000
+    C_CODE            Offs=0030DE  Size=000055  Align=00001  Fill=0000
+applet_args.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_CODE            Offs=003133  Size=00026E  Align=00001  Fill=0000
+applet_support.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    C_RODATA          Offs=000735  Size=000011  Align=00001  Fill=0000
+    C_CODE            Offs=0033A1  Size=000314  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(addeqsp.o):
+    CODE              Offs=000000  Size=000011  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(addysp.o):
+    CODE              Offs=000011  Size=00000E  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp1.o):
+    CODE              Offs=00001F  Size=000009  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp2.o):
+    CODE              Offs=000028  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp3.o):
+    CODE              Offs=000035  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp4.o):
+    CODE              Offs=000042  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp5.o):
+    CODE              Offs=00004F  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp6.o):
+    CODE              Offs=00005C  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp7.o):
+    CODE              Offs=000069  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(decsp8.o):
+    CODE              Offs=000076  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(icmp.o):
+    CODE              Offs=000083  Size=00002E  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp1.o):
+    CODE              Offs=0000B1  Size=000007  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp2.o):
+    CODE              Offs=0000B8  Size=000016  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp3.o):
+    CODE              Offs=0000CE  Size=000005  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp4.o):
+    CODE              Offs=0000D3  Size=000005  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp5.o):
+    CODE              Offs=0000D8  Size=000005  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp6.o):
+    CODE              Offs=0000DD  Size=000005  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp7.o):
+    CODE              Offs=0000E2  Size=000005  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(incsp8.o):
+    CODE              Offs=0000E7  Size=000005  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(jmpvec.o):
+    CODE              Offs=0000EC  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000003  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(lcmp.o):
+    CODE              Offs=0000EC  Size=00003B  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(ldeaxi.o):
+    CODE              Offs=000127  Size=000017  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(ldeaxysp.o):
+    CODE              Offs=00013E  Size=000013  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(lne.o):
+    CODE              Offs=000151  Size=000006  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(lpush.o):
+    CODE              Offs=000157  Size=000021  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(ludiv.o):
+    CODE              Offs=000178  Size=00007A  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(lumod.o):
+    CODE              Offs=0001F2  Size=000019  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(makebool.o):
+    CODE              Offs=00020B  Size=00002C  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(mulax10.o):
+    CODE              Offs=000237  Size=000019  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(mulax6.o):
+    CODE              Offs=000250  Size=000016  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(pusha.o):
+    CODE              Offs=000266  Size=000016  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(pushax.o):
+    CODE              Offs=00027C  Size=00001A  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(pushwsp.o):
+    CODE              Offs=000296  Size=00001C  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(staspidx.o):
+    CODE              Offs=0002B2  Size=000016  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(staxsp.o):
+    CODE              Offs=0002C8  Size=00000B  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(steaxsp.o):
+    CODE              Offs=0002D3  Size=000015  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(subeqsp.o):
+    CODE              Offs=0002E8  Size=000015  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+G:\cc65\lib/none.lib(subysp.o):
+    CODE              Offs=0002FD  Size=00000D  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000003  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+
+
+Segment list:
+-------------
+Name                   Start     End    Size  Align
+----------------------------------------------------
+NULL                  000000  000000  000000  00001
+C_ZEROPAGE            000020  000039  00001A  00001
+ZEROPAGE              00003A  00003A  000000  00001
+USER_ENTRY            001000  00101F  000020  00001
+USER_TEXT             001020  001E78  000E59  00001
+USER_DATA             001E79  002320  0004A8  00001
+C_CODE                002321  0059D5  0036B5  00001
+C_RODATA              0059D6  00611B  000746  00001
+CODE                  00611C  006425  00030A  00001
+DATA                  006426  006428  000003  00001
+RODATA                006426  006426  000000  00001
+C_BSS                 006429  0069F2  0005CA  00001
+BSS                   0069F3  0069F3  000000  00001
+
+
+Exports list by name:
+---------------------
+__C_BSS_LOAD__            006429  LA    __C_BSS_RUN__             006429 RLA    
+__C_BSS_SIZE__            0005CA REA    __C_STACK_FILEOFFS__      000000  EA    
+__C_STACK_LAST__          007C00  LA    __C_STACK_SIZE__          000400 REA    
+__C_STACK_START__         007C00 RLA    __C_ZP_FILEOFFS__         000000  EA    
+__C_ZP_LAST__             00003A  LA    __C_ZP_SIZE__             000060  EA    
+__C_ZP_START__            000020  LA    __USER_IMAGE_FILEOFFS__   000000  EA    
+__USER_IMAGE_LAST__       0069F3  LA    __USER_IMAGE_SIZE__       006C00  EA    
+__USER_IMAGE_START__      001000  LA    _nbox_exec_mode           00646A RLA    
+_nbox_execute_launch_id   00252F RLA    _nbox_launch_id           00646B RLA    
+_nbox_line_buf            006429 RLA    _nbox_line_idx            00646C RLA    
+_nbox_line_len            006469 RLA    _neosh_main               0038A1 RLA    
+_neosh_nbox_child_entry   001E22 REA    _neosh_nbox_dispatch      0024D1 RLA    
+_neosh_nbox_print_unknown 002524 RLA    _neosh_nbox_resolve       002321 RLA    
+_neox_applet_cat          003A74 RLA    _neox_applet_cd           004349 RLA    
+_neox_applet_copy_argument 0057F5 RLA    _neox_applet_cp           004033 RLA    
+_neox_applet_echo         003925 RLA    _neox_applet_format_hex8  005991 RLA    
+_neox_applet_format_u32   0058AD RLA    _neox_applet_kill         004DEF RLA    
+_neox_applet_ls           0046E7 RLA    _neox_applet_mkdir        003EAD RLA    
+_neox_applet_mv           003F5B RLA    _neox_applet_ps           004B66 RLA    
+_neox_applet_pwd          004423 RLA    _neox_applet_report       0057E0 RLA    
+_neox_applet_rm           003E55 RLA    _neox_applet_rmdir        003F03 RLA    
+_neox_applet_run_one_path 003B8D RLA    _neox_applet_run_two_paths 003CB6 RLA    
+_neox_applet_string_length 0056C2 RLA    _neox_applet_write_all    0056F9 RLA    
+_neox_applet_write_string 0057B2 RLA    _neox_arg_cursor_init     005454 RLA    
+_neox_arg_next            0054B0 RLA    _neox_chdir               0050FC RLA    
+_neox_close               005042 RLA    _neox_closedir            005257 RLA    
+_neox_delete              005050 RLA    _neox_get_launch_id       0053C6  LA    
+_neox_get_launch_line     0053FF  LA    _neox_get_process_info    00526F RLA    
+_neox_getcwd              005122 RLA    _neox_mkdir               005076 RLA    
+_neox_open                004F05 RLA    _neox_opendir             005193 RLA    
+_neox_read                004F64 RLA    _neox_readdir             0051EE RLA    
+_neox_rename              0050C2 RLA    _neox_rmdir               00509C RLA    
+_neox_seek                0052A4 RLA    _neox_signal              0053A5 RLA    
+_neox_spawn_resident      005323 RLA    _neox_waitpid             005368 RLA    
+_neox_write               004FD3 RLA    addeq0sp                  00611C RLA    
+addeqysp                  00611E RLA    addysp                    00612E RLA    
+addysp1                   00612D RLA    booleq                    00632D RLA    
+boolge                    00633E  LA    boolgt                    00633C  LA    
+boolle                    006334  LA    boollt                    006336  LA    
+boolne                    006327 RLA    booluge                   00634E  LA    
+boolugt                   00634C  LA    boolule                   006344  LA    
+boolult                   006346  LA    c_sp                      000020 RLZ    
+decsp1                    00613B RLA    decsp2                    006144 RLA    
+decsp3                    006151 RLA    decsp4                    00615E RLA    
+decsp5                    00616B RLA    decsp6                    006178 RLA    
+decsp7                    006185 RLA    decsp8                    006192 RLA    
+getlop                    0062A5 RLA    incsp1                    0061CD RLA    
+incsp2                    0061DC RLA    incsp3                    0061EA RLA    
+incsp4                    0061EF RLA    incsp5                    0061F4 RLA    
+incsp6                    0061F9 RLA    incsp7                    0061FE RLA    
+incsp8                    006203 RLA    jmpvec                    006426 RLA    
+ldeax0sp                  00625A  LA    ldeaxi                    006243  LA    
+ldeaxidx                  006245 RLA    ldeaxysp                  00625C RLA    
+mulax10                   006353 RLA    mulax6                    00636C RLA    
+nbox_child_entry          001E22  LA    neosh_main                001E05 RLA    
+neox_cc65_runtime_init    001E3A RLA    popax                     0061D4  LA    
+ptr1                      000028 RLZ    ptr2                      00002A RLZ    
+ptr3                      00002C RLZ    ptr4                      00002E RLZ    
+push0                     006398 RLA    push0ax                   006276 RLA    
+pusha                     006386 RLA    pusha0                    00639A RLA    
+pusha0sp                  006382  LA    pushax                    00639C RLA    
+pushaysp                  006384  LA    pusheax                   00627C RLA    
+pushl0                    006273  LA    pushw0sp                  0063B2 RLA    
+pushwysp                  0063B4 RLA    regbank                   000034  LZ    
+regsave                   000024  LZ    sreg                      000022 RLZ    
+staspidx                  0063CE RLA    stax0sp                   0063E4 RLA    
+staxysp                   0063E6 RLA    steax0sp                  0063EF  LA    
+steaxysp                  0063F1 RLA    subeq0sp                  006404  LA    
+subeqysp                  006406 RLA    subysp                    006419 RLA    
+tmp1                      000030 RLZ    tmp2                      000031 RLZ    
+tmp3                      000032 RLZ    tmp4                      000033 RLZ    
+tosicmp                   0061A1 RLA    tosicmp0                  00619F RLA    
+toslcmp                   006208 RLA    tosneeax                  00626D RLA    
+tosudiv0ax                006294 RLA    tosudiveax                00629A  LA    
+tosumod0ax                00630E RLA    tosumodeax                006314  LA    
+udiv32                    0062C9 RLA    user_image_header         001000  LA    
+user_task1_entry          001136  LA    user_task2_entry          0011FA  LA    
+user_task3_entry          00124E  LA    user_task4_entry          00130F  LA    
+user_task5_disabled_entry 001339  LA    user_task5_entry          001DA3  LA    
+user_task6_entry          001DFF  LA    
+
+
+Exports list by value:
+----------------------
+__C_STACK_FILEOFFS__      000000  EA    __C_ZP_FILEOFFS__         000000  EA    
+__USER_IMAGE_FILEOFFS__   000000  EA    __C_ZP_START__            000020  LA    
+c_sp                      000020 RLZ    sreg                      000022 RLZ    
+regsave                   000024  LZ    ptr1                      000028 RLZ    
+ptr2                      00002A RLZ    ptr3                      00002C RLZ    
+ptr4                      00002E RLZ    tmp1                      000030 RLZ    
+tmp2                      000031 RLZ    tmp3                      000032 RLZ    
+tmp4                      000033 RLZ    regbank                   000034  LZ    
+__C_ZP_LAST__             00003A  LA    __C_ZP_SIZE__             000060  EA    
+__C_STACK_SIZE__          000400 REA    __C_BSS_SIZE__            0005CA REA    
+user_image_header         001000  LA    __USER_IMAGE_START__      001000  LA    
+user_task1_entry          001136  LA    user_task2_entry          0011FA  LA    
+user_task3_entry          00124E  LA    user_task4_entry          00130F  LA    
+user_task5_disabled_entry 001339  LA    user_task5_entry          001DA3  LA    
+user_task6_entry          001DFF  LA    neosh_main                001E05 RLA    
+nbox_child_entry          001E22  LA    _neosh_nbox_child_entry   001E22 REA    
+neox_cc65_runtime_init    001E3A RLA    _neosh_nbox_resolve       002321 RLA    
+_neosh_nbox_dispatch      0024D1 RLA    _neosh_nbox_print_unknown 002524 RLA    
+_nbox_execute_launch_id   00252F RLA    _neosh_main               0038A1 RLA    
+_neox_applet_echo         003925 RLA    _neox_applet_cat          003A74 RLA    
+_neox_applet_run_one_path 003B8D RLA    _neox_applet_run_two_paths 003CB6 RLA    
+_neox_applet_rm           003E55 RLA    _neox_applet_mkdir        003EAD RLA    
+_neox_applet_rmdir        003F03 RLA    _neox_applet_mv           003F5B RLA    
+_neox_applet_cp           004033 RLA    _neox_applet_cd           004349 RLA    
+_neox_applet_pwd          004423 RLA    _neox_applet_ls           0046E7 RLA    
+_neox_applet_ps           004B66 RLA    _neox_applet_kill         004DEF RLA    
+_neox_open                004F05 RLA    _neox_read                004F64 RLA    
+_neox_write               004FD3 RLA    _neox_close               005042 RLA    
+_neox_delete              005050 RLA    _neox_mkdir               005076 RLA    
+_neox_rmdir               00509C RLA    _neox_rename              0050C2 RLA    
+_neox_chdir               0050FC RLA    _neox_getcwd              005122 RLA    
+_neox_opendir             005193 RLA    _neox_readdir             0051EE RLA    
+_neox_closedir            005257 RLA    _neox_get_process_info    00526F RLA    
+_neox_seek                0052A4 RLA    _neox_spawn_resident      005323 RLA    
+_neox_waitpid             005368 RLA    _neox_signal              0053A5 RLA    
+_neox_get_launch_id       0053C6  LA    _neox_get_launch_line     0053FF  LA    
+_neox_arg_cursor_init     005454 RLA    _neox_arg_next            0054B0 RLA    
+_neox_applet_string_length 0056C2 RLA    _neox_applet_write_all    0056F9 RLA    
+_neox_applet_write_string 0057B2 RLA    _neox_applet_report       0057E0 RLA    
+_neox_applet_copy_argument 0057F5 RLA    _neox_applet_format_u32   0058AD RLA    
+_neox_applet_format_hex8  005991 RLA    addeq0sp                  00611C RLA    
+addeqysp                  00611E RLA    addysp1                   00612D RLA    
+addysp                    00612E RLA    decsp1                    00613B RLA    
+decsp2                    006144 RLA    decsp3                    006151 RLA    
+decsp4                    00615E RLA    decsp5                    00616B RLA    
+decsp6                    006178 RLA    decsp7                    006185 RLA    
+decsp8                    006192 RLA    tosicmp0                  00619F RLA    
+tosicmp                   0061A1 RLA    incsp1                    0061CD RLA    
+popax                     0061D4  LA    incsp2                    0061DC RLA    
+incsp3                    0061EA RLA    incsp4                    0061EF RLA    
+incsp5                    0061F4 RLA    incsp6                    0061F9 RLA    
+incsp7                    0061FE RLA    incsp8                    006203 RLA    
+toslcmp                   006208 RLA    ldeaxi                    006243  LA    
+ldeaxidx                  006245 RLA    ldeax0sp                  00625A  LA    
+ldeaxysp                  00625C RLA    tosneeax                  00626D RLA    
+pushl0                    006273  LA    push0ax                   006276 RLA    
+pusheax                   00627C RLA    tosudiv0ax                006294 RLA    
+tosudiveax                00629A  LA    getlop                    0062A5 RLA    
+udiv32                    0062C9 RLA    tosumod0ax                00630E RLA    
+tosumodeax                006314  LA    boolne                    006327 RLA    
+booleq                    00632D RLA    boolle                    006334  LA    
+boollt                    006336  LA    boolgt                    00633C  LA    
+boolge                    00633E  LA    boolule                   006344  LA    
+boolult                   006346  LA    boolugt                   00634C  LA    
+booluge                   00634E  LA    mulax10                   006353 RLA    
+mulax6                    00636C RLA    pusha0sp                  006382  LA    
+pushaysp                  006384  LA    pusha                     006386 RLA    
+push0                     006398 RLA    pusha0                    00639A RLA    
+pushax                    00639C RLA    pushw0sp                  0063B2 RLA    
+pushwysp                  0063B4 RLA    staspidx                  0063CE RLA    
+stax0sp                   0063E4 RLA    staxysp                   0063E6 RLA    
+steax0sp                  0063EF  LA    steaxysp                  0063F1 RLA    
+subeq0sp                  006404  LA    subeqysp                  006406 RLA    
+subysp                    006419 RLA    jmpvec                    006426 RLA    
+__C_BSS_RUN__             006429 RLA    __C_BSS_LOAD__            006429  LA    
+_nbox_line_buf            006429 RLA    _nbox_line_len            006469 RLA    
+_nbox_exec_mode           00646A RLA    _nbox_launch_id           00646B RLA    
+_nbox_line_idx            00646C RLA    __USER_IMAGE_LAST__       0069F3  LA    
+__USER_IMAGE_SIZE__       006C00  EA    __C_STACK_LAST__          007C00  LA    
+__C_STACK_START__         007C00 RLA    
+
+
+Imports list:
+-------------
+__C_BSS_LOAD__ ([linker generated]):
+__C_BSS_RUN__ ([linker generated]):
+    runtime.o                 libneox/cc65/runtime.asm:39
+__C_BSS_SIZE__ ([linker generated]):
+    runtime.o                 libneox/cc65/runtime.asm:40
+__C_STACK_FILEOFFS__ ([linker generated]):
+__C_STACK_LAST__ ([linker generated]):
+__C_STACK_SIZE__ ([linker generated]):
+    runtime.o                 libneox/cc65/runtime.asm:38
+__C_STACK_START__ ([linker generated]):
+    runtime.o                 libneox/cc65/runtime.asm:37
+__C_ZP_FILEOFFS__ ([linker generated]):
+__C_ZP_LAST__ ([linker generated]):
+__C_ZP_SIZE__ ([linker generated]):
+__C_ZP_START__ ([linker generated]):
+__USER_IMAGE_FILEOFFS__ ([linker generated]):
+__USER_IMAGE_LAST__ ([linker generated]):
+__USER_IMAGE_SIZE__ ([linker generated]):
+__USER_IMAGE_START__ ([linker generated]):
+_nbox_exec_mode (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:27
+_nbox_execute_launch_id (nbox.o):
+    nbox_child.o              user/nbox/nbox_child.asm:16
+_nbox_launch_id (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:28
+_nbox_line_buf (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:25
+    nbox_child.o              user/nbox/nbox_child.asm:14
+_nbox_line_idx (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:29
+_nbox_line_len (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:26
+    nbox_child.o              user/nbox/nbox_child.asm:15
+_neosh_main (neosh.o):
+    neosh_entry.o             user/shell/neosh_entry.asm:9
+_neosh_nbox_child_entry (nbox_child.o):
+    neosh.o                   out/user/shell/neosh.s:33
+_neosh_nbox_dispatch (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:31
+_neosh_nbox_print_unknown (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:32
+_neosh_nbox_resolve (nbox.o):
+    neosh.o                   out/user/shell/neosh.s:30
+_neox_applet_cat (cat.o):
+    nbox.o                    out/user/nbox/nbox.s:26
+_neox_applet_cd (cd.o):
+    nbox.o                    out/user/nbox/nbox.s:24
+_neox_applet_copy_argument (applet_support.o):
+    ls.o                      out/user/applets/ls.s:19
+    cd.o                      out/user/applets/cd.s:16
+    cp.o                      out/user/applets/cp.s:17
+    two_path_command.o        out/user/applets/two_path_command.s:16
+    path_command.o            out/user/applets/path_command.s:16
+    cat.o                     out/user/applets/cat.s:17
+_neox_applet_cp (cp.o):
+    nbox.o                    out/user/nbox/nbox.s:32
+_neox_applet_echo (echo.o):
+    nbox.o                    out/user/nbox/nbox.s:27
+_neox_applet_format_hex8 (applet_support.o):
+    ps.o                      out/user/applets/ps.s:19
+_neox_applet_format_u32 (applet_support.o):
+    ps.o                      out/user/applets/ps.s:18
+    ls.o                      out/user/applets/ls.s:20
+_neox_applet_kill (kill.o):
+    nbox.o                    out/user/nbox/nbox.s:34
+_neox_applet_ls (ls.o):
+    nbox.o                    out/user/nbox/nbox.s:25
+_neox_applet_mkdir (mkdir.o):
+    nbox.o                    out/user/nbox/nbox.s:30
+_neox_applet_mv (mv.o):
+    nbox.o                    out/user/nbox/nbox.s:29
+_neox_applet_ps (ps.o):
+    nbox.o                    out/user/nbox/nbox.s:33
+_neox_applet_pwd (pwd.o):
+    nbox.o                    out/user/nbox/nbox.s:23
+_neox_applet_report (applet_support.o):
+    kill.o                    out/user/applets/kill.s:15
+    ps.o                      out/user/applets/ps.s:17
+    ls.o                      out/user/applets/ls.s:18
+    pwd.o                     out/user/applets/pwd.s:16
+    cd.o                      out/user/applets/cd.s:15
+    cp.o                      out/user/applets/cp.s:16
+    two_path_command.o        out/user/applets/two_path_command.s:15
+    path_command.o            out/user/applets/path_command.s:15
+    cat.o                     out/user/applets/cat.s:16
+    neosh.o                   out/user/shell/neosh.s:16
+    nbox.o                    out/user/nbox/nbox.s:13
+_neox_applet_rm (rm.o):
+    nbox.o                    out/user/nbox/nbox.s:28
+_neox_applet_rmdir (rmdir.o):
+    nbox.o                    out/user/nbox/nbox.s:31
+_neox_applet_run_one_path (path_command.o):
+    rmdir.o                   out/user/applets/rmdir.s:14
+    mkdir.o                   out/user/applets/mkdir.s:14
+    rm.o                      out/user/applets/rm.s:14
+_neox_applet_run_two_paths (two_path_command.o):
+    mv.o                      out/user/applets/mv.s:14
+_neox_applet_string_length (applet_support.o):
+    ls.o                      out/user/applets/ls.s:15
+    neosh.o                   out/user/shell/neosh.s:13
+_neox_applet_write_all (applet_support.o):
+    ps.o                      out/user/applets/ps.s:15
+    ls.o                      out/user/applets/ls.s:16
+    pwd.o                     out/user/applets/pwd.s:15
+    cp.o                      out/user/applets/cp.s:15
+    cat.o                     out/user/applets/cat.s:15
+    echo.o                    out/user/applets/echo.s:15
+    neosh.o                   out/user/shell/neosh.s:14
+_neox_applet_write_string (applet_support.o):
+    ps.o                      out/user/applets/ps.s:16
+    ls.o                      out/user/applets/ls.s:17
+    neosh.o                   out/user/shell/neosh.s:15
+_neox_arg_cursor_init (applet_args.o):
+    kill.o                    out/user/applets/kill.s:13
+    ps.o                      out/user/applets/ps.s:13
+    ls.o                      out/user/applets/ls.s:13
+    pwd.o                     out/user/applets/pwd.s:13
+    cd.o                      out/user/applets/cd.s:13
+    cp.o                      out/user/applets/cp.s:13
+    two_path_command.o        out/user/applets/two_path_command.s:13
+    path_command.o            out/user/applets/path_command.s:13
+    cat.o                     out/user/applets/cat.s:13
+    echo.o                    out/user/applets/echo.s:13
+_neox_arg_next (applet_args.o):
+    kill.o                    out/user/applets/kill.s:14
+    ps.o                      out/user/applets/ps.s:14
+    ls.o                      out/user/applets/ls.s:14
+    pwd.o                     out/user/applets/pwd.s:14
+    cd.o                      out/user/applets/cd.s:14
+    cp.o                      out/user/applets/cp.s:14
+    two_path_command.o        out/user/applets/two_path_command.s:14
+    path_command.o            out/user/applets/path_command.s:14
+    cat.o                     out/user/applets/cat.s:14
+    echo.o                    out/user/applets/echo.s:14
+_neox_chdir (neox_chdir.o):
+    cd.o                      out/user/applets/cd.s:17
+    neosh.o                   out/user/shell/neosh.s:17
+_neox_close (neox_close.o):
+    cp.o                      out/user/applets/cp.s:20
+    cat.o                     out/user/applets/cat.s:20
+    neosh.o                   out/user/shell/neosh.s:22
+_neox_closedir (neox_closedir.o):
+    ls.o                      out/user/applets/ls.s:23
+_neox_delete (neox_delete.o):
+    rm.o                      out/user/applets/rm.s:13
+_neox_get_launch_id (neox_get_launch_id.o):
+_neox_get_launch_line (neox_get_launch_line.o):
+_neox_get_process_info (neox_get_process_info.o):
+    ps.o                      out/user/applets/ps.s:20
+_neox_getcwd (neox_getcwd.o):
+    pwd.o                     out/user/applets/pwd.s:17
+    neosh.o                   out/user/shell/neosh.s:18
+_neox_mkdir (neox_mkdir.o):
+    mkdir.o                   out/user/applets/mkdir.s:13
+_neox_open (neox_open.o):
+    cp.o                      out/user/applets/cp.s:18
+    cat.o                     out/user/applets/cat.s:18
+    neosh.o                   out/user/shell/neosh.s:19
+_neox_opendir (neox_opendir.o):
+    ls.o                      out/user/applets/ls.s:21
+_neox_read (neox_read.o):
+    cp.o                      out/user/applets/cp.s:19
+    cat.o                     out/user/applets/cat.s:19
+    neosh.o                   out/user/shell/neosh.s:20
+_neox_readdir (neox_readdir.o):
+    ls.o                      out/user/applets/ls.s:22
+_neox_rename (neox_rename.o):
+    mv.o                      out/user/applets/mv.s:13
+_neox_rmdir (neox_rmdir.o):
+    rmdir.o                   out/user/applets/rmdir.s:13
+_neox_seek (neox_seek.o):
+    neosh.o                   out/user/shell/neosh.s:21
+_neox_signal (neox_signal.o):
+    kill.o                    out/user/applets/kill.s:16
+_neox_spawn_resident (neox_spawn_resident.o):
+    neosh.o                   out/user/shell/neosh.s:23
+_neox_waitpid (neox_waitpid.o):
+    neosh.o                   out/user/shell/neosh.s:24
+_neox_write (neox_write.o):
+    applet_support.o          out/libneox/common/applet_support.s:20
+addeq0sp (addeqsp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    cp.o                      out/user/applets/cp.s:557
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+addeqysp (addeqsp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    kill.o                    out/user/applets/kill.s:458
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+addysp (addysp.o):
+    incsp8.o                  runtime/incsp8.s:8
+    incsp7.o                  runtime/incsp7.s:8
+    incsp6.o                  runtime/incsp6.s:8
+    incsp5.o                  runtime/incsp5.s:8
+    incsp4.o                  runtime/incsp4.s:8
+    incsp3.o                  runtime/incsp3.s:8
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    kill.o                    out/user/applets/kill.s:458
+    kill.o                    out/user/applets/kill.s:458
+    kill.o                    out/user/applets/kill.s:458
+    ps.o                      out/user/applets/ps.s:702
+    ls.o                      out/user/applets/ls.s:499
+    pwd.o                     out/user/applets/pwd.s:160
+    cd.o                      out/user/applets/cd.s:162
+    cp.o                      out/user/applets/cp.s:557
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    cat.o                     out/user/applets/cat.s:287
+    echo.o                    out/user/applets/echo.s:134
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+addysp1 (addysp.o):
+    ludiv.o                   runtime/ludiv.s:9
+booleq (makebool.o):
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+boolge (makebool.o):
+boolgt (makebool.o):
+boolle (makebool.o):
+boollt (makebool.o):
+boolne (makebool.o):
+    lne.o                     runtime/lne.s:8
+    ls.o                      out/user/applets/ls.s:499
+booluge (makebool.o):
+boolugt (makebool.o):
+boolule (makebool.o):
+boolult (makebool.o):
+c_sp (zeropage.o):
+    lcmp.o                    runtime/lcmp.s:10
+    subysp.o                  runtime/subysp.s:9
+    subeqsp.o                 runtime/subeqsp.s:8
+    steaxsp.o                 runtime/steaxsp.s:8
+    staxsp.o                  runtime/staxsp.s:8
+    staspidx.o                runtime/staspidx.s:9
+    pushwsp.o                 runtime/pushwsp.s:8
+    pushax.o                  runtime/pushax.s:8
+    pusha.o                   runtime/pusha.s:8
+    ludiv.o                   runtime/ludiv.s:10
+    lpush.o                   runtime/lpush.s:13
+    ldeaxysp.o                runtime/ldeaxysp.s:12
+    incsp2.o                  runtime/incsp2.s:8
+    incsp1.o                  runtime/incsp1.s:8
+    icmp.o                    runtime/icmp.s:9
+    decsp8.o                  runtime/decsp8.s:8
+    decsp7.o                  runtime/decsp7.s:8
+    decsp6.o                  runtime/decsp6.s:8
+    decsp5.o                  runtime/decsp5.s:8
+    decsp4.o                  runtime/decsp4.s:8
+    decsp3.o                  runtime/decsp3.s:8
+    decsp2.o                  runtime/decsp2.s:8
+    decsp1.o                  runtime/decsp1.s:8
+    addysp.o                  runtime/addysp.s:8
+    addeqsp.o                 runtime/addeqsp.s:8
+    applet_support.o          out/libneox/common/applet_support.s:10
+    applet_args.o             out/libneox/common/applet_args.s:10
+    neox_get_launch_line.o    libneox/cc65/neox_get_launch_line.asm:9
+    neox_signal.o             libneox/cc65/neox_signal.asm:12
+    neox_waitpid.o            libneox/cc65/neox_waitpid.asm:9
+    neox_spawn_resident.o     libneox/cc65/neox_spawn_resident.asm:9
+    neox_seek.o               libneox/cc65/neox_seek.asm:9
+    neox_get_process_info.o   libneox/cc65/neox_get_process_info.asm:12
+    neox_readdir.o            libneox/cc65/neox_readdir.asm:12
+    neox_opendir.o            libneox/cc65/neox_opendir.asm:12
+    neox_getcwd.o             libneox/cc65/neox_getcwd.asm:12
+    neox_rename.o             libneox/cc65/neox_rename.asm:12
+    neox_write.o              libneox/cc65/neox_write.asm:44
+    neox_read.o               libneox/cc65/neox_read.asm:12
+    neox_open.o               libneox/cc65/neox_open.asm:12
+    runtime.o                 libneox/cc65/runtime.asm:32
+    kill.o                    out/user/applets/kill.s:10
+    ps.o                      out/user/applets/ps.s:10
+    ls.o                      out/user/applets/ls.s:10
+    pwd.o                     out/user/applets/pwd.s:10
+    cd.o                      out/user/applets/cd.s:10
+    cp.o                      out/user/applets/cp.s:10
+    mv.o                      out/user/applets/mv.s:10
+    rmdir.o                   out/user/applets/rmdir.s:10
+    mkdir.o                   out/user/applets/mkdir.s:10
+    rm.o                      out/user/applets/rm.s:10
+    two_path_command.o        out/user/applets/two_path_command.s:10
+    path_command.o            out/user/applets/path_command.s:10
+    cat.o                     out/user/applets/cat.s:10
+    echo.o                    out/user/applets/echo.s:10
+    neosh.o                   out/user/shell/neosh.s:10
+    nbox.o                    out/user/nbox/nbox.s:10
+decsp1 (decsp1.o):
+    kill.o                    out/user/applets/kill.s:458
+    ls.o                      out/user/applets/ls.s:499
+    cat.o                     out/user/applets/cat.s:287
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+decsp2 (decsp2.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_args.o             out/libneox/common/applet_args.s:404
+    cp.o                      out/user/applets/cp.s:557
+    cp.o                      out/user/applets/cp.s:557
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+decsp3 (decsp3.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    kill.o                    out/user/applets/kill.s:458
+    kill.o                    out/user/applets/kill.s:458
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ls.o                      out/user/applets/ls.s:499
+    ls.o                      out/user/applets/ls.s:499
+    ls.o                      out/user/applets/ls.s:499
+    pwd.o                     out/user/applets/pwd.s:160
+    cp.o                      out/user/applets/cp.s:557
+    cat.o                     out/user/applets/cat.s:287
+    cat.o                     out/user/applets/cat.s:287
+    echo.o                    out/user/applets/echo.s:134
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+decsp4 (decsp4.o):
+    lpush.o                   runtime/lpush.s:12
+    applet_support.o          out/libneox/common/applet_support.s:536
+    kill.o                    out/user/applets/kill.s:458
+    ls.o                      out/user/applets/ls.s:499
+    pwd.o                     out/user/applets/pwd.s:160
+    cd.o                      out/user/applets/cd.s:162
+    cp.o                      out/user/applets/cp.s:557
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    cat.o                     out/user/applets/cat.s:287
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+decsp5 (decsp5.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    kill.o                    out/user/applets/kill.s:458
+    ls.o                      out/user/applets/ls.s:499
+    ls.o                      out/user/applets/ls.s:499
+    cp.o                      out/user/applets/cp.s:557
+    cat.o                     out/user/applets/cat.s:287
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+decsp6 (decsp6.o):
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+decsp7 (decsp7.o):
+    nbox.o                    out/user/nbox/nbox.s:803
+decsp8 (decsp8.o):
+    neosh.o                   out/user/shell/neosh.s:2757
+getlop (ludiv.o):
+    lumod.o                   runtime/lumod.s:9
+incsp1 (incsp1.o):
+    applet_args.o             out/libneox/common/applet_args.s:404
+    neox_signal.o             libneox/cc65/neox_signal.asm:13
+    neox_waitpid.o            libneox/cc65/neox_waitpid.asm:11
+    neox_get_process_info.o   libneox/cc65/neox_get_process_info.asm:13
+    kill.o                    out/user/applets/kill.s:458
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    cat.o                     out/user/applets/cat.s:287
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+incsp2 (incsp2.o):
+    staspidx.o                runtime/staspidx.s:8
+    applet_support.o          out/libneox/common/applet_support.s:536
+    neox_spawn_resident.o     libneox/cc65/neox_spawn_resident.asm:11
+    neox_opendir.o            libneox/cc65/neox_opendir.asm:14
+    neox_rename.o             libneox/cc65/neox_rename.asm:13
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    cp.o                      out/user/applets/cp.s:557
+    mv.o                      out/user/applets/mv.s:95
+    rmdir.o                   out/user/applets/rmdir.s:94
+    mkdir.o                   out/user/applets/mkdir.s:89
+    rm.o                      out/user/applets/rm.s:93
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+incsp3 (incsp3.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    neox_readdir.o            libneox/cc65/neox_readdir.asm:14
+    neox_open.o               libneox/cc65/neox_open.asm:14
+    ls.o                      out/user/applets/ls.s:499
+    cat.o                     out/user/applets/cat.s:287
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+incsp4 (incsp4.o):
+    lcmp.o                    runtime/lcmp.s:9
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_args.o             out/libneox/common/applet_args.s:404
+    neox_get_launch_line.o    libneox/cc65/neox_get_launch_line.asm:11
+    neox_getcwd.o             libneox/cc65/neox_getcwd.asm:14
+    ps.o                      out/user/applets/ps.s:702
+    cp.o                      out/user/applets/cp.s:557
+    cat.o                     out/user/applets/cat.s:287
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+incsp5 (incsp5.o):
+    neox_write.o              libneox/cc65/neox_write.asm:46
+    neox_read.o               libneox/cc65/neox_read.asm:14
+    ps.o                      out/user/applets/ps.s:702
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+incsp6 (incsp6.o):
+    applet_args.o             out/libneox/common/applet_args.s:404
+    neox_seek.o               libneox/cc65/neox_seek.asm:11
+    cp.o                      out/user/applets/cp.s:557
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+incsp7 (incsp7.o):
+    ls.o                      out/user/applets/ls.s:499
+    nbox.o                    out/user/nbox/nbox.s:803
+incsp8 (incsp8.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    ls.o                      out/user/applets/ls.s:499
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+jmpvec (jmpvec.o):
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    nbox.o                    out/user/nbox/nbox.s:803
+ldeax0sp (ldeaxysp.o):
+ldeaxi (ldeaxi.o):
+ldeaxidx (ldeaxi.o):
+    ls.o                      out/user/applets/ls.s:499
+ldeaxysp (ldeaxysp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+mulax10 (mulax10.o):
+    kill.o                    out/user/applets/kill.s:458
+mulax6 (mulax6.o):
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+nbox_child_entry (nbox_child.o):
+neosh_main (neosh_entry.o):
+    user_image.o              user/task/task6.asm:18
+neox_cc65_runtime_init (runtime.o):
+    user_image.o              user/task/task6.asm:19
+popax (incsp2.o):
+ptr1 (zeropage.o):
+    lcmp.o                    runtime/lcmp.s:10
+    staspidx.o                runtime/staspidx.s:9
+    mulax6.o                  runtime/mulax6.s:9
+    mulax10.o                 runtime/mulax10.s:9
+    ludiv.o                   runtime/ludiv.s:10
+    ldeaxi.o                  runtime/ldeaxi.s:8
+    applet_support.o          out/libneox/common/applet_support.s:11
+    applet_args.o             out/libneox/common/applet_args.s:11
+    neox_get_launch_line.o    libneox/cc65/neox_get_launch_line.asm:10
+    neox_get_launch_id.o      libneox/cc65/neox_get_launch_id.asm:9
+    neox_waitpid.o            libneox/cc65/neox_waitpid.asm:10
+    neox_spawn_resident.o     libneox/cc65/neox_spawn_resident.asm:10
+    neox_seek.o               libneox/cc65/neox_seek.asm:10
+    neox_readdir.o            libneox/cc65/neox_readdir.asm:13
+    neox_opendir.o            libneox/cc65/neox_opendir.asm:13
+    neox_getcwd.o             libneox/cc65/neox_getcwd.asm:13
+    neox_write.o              libneox/cc65/neox_write.asm:45
+    neox_read.o               libneox/cc65/neox_read.asm:13
+    neox_open.o               libneox/cc65/neox_open.asm:13
+    runtime.o                 libneox/cc65/runtime.asm:33
+    kill.o                    out/user/applets/kill.s:11
+    ps.o                      out/user/applets/ps.s:11
+    ls.o                      out/user/applets/ls.s:11
+    cp.o                      out/user/applets/cp.s:11
+    neosh.o                   out/user/shell/neosh.s:11
+    nbox.o                    out/user/nbox/nbox.s:11
+ptr2 (zeropage.o):
+    lumod.o                   runtime/lumod.s:10
+    ludiv.o                   runtime/ludiv.s:10
+ptr3 (zeropage.o):
+    ludiv.o                   runtime/ludiv.s:10
+ptr4 (zeropage.o):
+    ludiv.o                   runtime/ludiv.s:10
+push0 (pushax.o):
+    nbox.o                    out/user/nbox/nbox.s:803
+push0ax (lpush.o):
+    ps.o                      out/user/applets/ps.s:702
+pusha (pusha.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_args.o             out/libneox/common/applet_args.s:404
+    kill.o                    out/user/applets/kill.s:458
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ls.o                      out/user/applets/ls.s:499
+    ls.o                      out/user/applets/ls.s:499
+    cp.o                      out/user/applets/cp.s:557
+    cat.o                     out/user/applets/cat.s:287
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+pusha0 (pushax.o):
+    nbox.o                    out/user/nbox/nbox.s:803
+pusha0sp (pusha.o):
+pushax (pushax.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_args.o             out/libneox/common/applet_args.s:404
+    applet_args.o             out/libneox/common/applet_args.s:404
+    kill.o                    out/user/applets/kill.s:458
+    kill.o                    out/user/applets/kill.s:458
+    kill.o                    out/user/applets/kill.s:458
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ls.o                      out/user/applets/ls.s:499
+    ls.o                      out/user/applets/ls.s:499
+    ls.o                      out/user/applets/ls.s:499
+    pwd.o                     out/user/applets/pwd.s:160
+    cd.o                      out/user/applets/cd.s:162
+    cp.o                      out/user/applets/cp.s:557
+    cp.o                      out/user/applets/cp.s:557
+    mv.o                      out/user/applets/mv.s:95
+    rmdir.o                   out/user/applets/rmdir.s:94
+    mkdir.o                   out/user/applets/mkdir.s:89
+    rm.o                      out/user/applets/rm.s:93
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    cat.o                     out/user/applets/cat.s:287
+    echo.o                    out/user/applets/echo.s:134
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+    nbox.o                    out/user/nbox/nbox.s:803
+pushaysp (pusha.o):
+pusheax (lpush.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    ls.o                      out/user/applets/ls.s:499
+pushl0 (lpush.o):
+pushw0sp (pushwsp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    ls.o                      out/user/applets/ls.s:499
+    neosh.o                   out/user/shell/neosh.s:2757
+pushwysp (pushwsp.o):
+    kill.o                    out/user/applets/kill.s:458
+    ls.o                      out/user/applets/ls.s:499
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+regbank (zeropage.o):
+regsave (zeropage.o):
+sreg (zeropage.o):
+    lcmp.o                    runtime/lcmp.s:10
+    steaxsp.o                 runtime/steaxsp.s:8
+    lumod.o                   runtime/lumod.s:10
+    ludiv.o                   runtime/ludiv.s:10
+    lpush.o                   runtime/lpush.s:13
+    ldeaxysp.o                runtime/ldeaxysp.s:12
+    ldeaxi.o                  runtime/ldeaxi.s:8
+    icmp.o                    runtime/icmp.s:9
+    applet_support.o          out/libneox/common/applet_support.s:10
+    applet_args.o             out/libneox/common/applet_args.s:10
+    cp.o                      out/user/applets/cp.s:10
+    neosh.o                   out/user/shell/neosh.s:10
+staspidx (staspidx.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+stax0sp (staxsp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_args.o             out/libneox/common/applet_args.s:404
+    ls.o                      out/user/applets/ls.s:499
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+staxysp (staxsp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    kill.o                    out/user/applets/kill.s:458
+    kill.o                    out/user/applets/kill.s:458
+    ps.o                      out/user/applets/ps.s:702
+    ps.o                      out/user/applets/ps.s:702
+    ls.o                      out/user/applets/ls.s:499
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    nbox.o                    out/user/nbox/nbox.s:803
+steax0sp (steaxsp.o):
+steaxysp (steaxsp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+subeq0sp (subeqsp.o):
+subeqysp (subeqsp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    ls.o                      out/user/applets/ls.s:499
+subysp (subysp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    kill.o                    out/user/applets/kill.s:458
+    ps.o                      out/user/applets/ps.s:702
+    ls.o                      out/user/applets/ls.s:499
+    pwd.o                     out/user/applets/pwd.s:160
+    cd.o                      out/user/applets/cd.s:162
+    cp.o                      out/user/applets/cp.s:557
+    mv.o                      out/user/applets/mv.s:95
+    rmdir.o                   out/user/applets/rmdir.s:94
+    mkdir.o                   out/user/applets/mkdir.s:89
+    rm.o                      out/user/applets/rm.s:93
+    two_path_command.o        out/user/applets/two_path_command.s:251
+    path_command.o            out/user/applets/path_command.s:193
+    cat.o                     out/user/applets/cat.s:287
+    echo.o                    out/user/applets/echo.s:134
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+    neosh.o                   out/user/shell/neosh.s:2757
+tmp1 (zeropage.o):
+    staspidx.o                runtime/staspidx.s:9
+    runtime.o                 libneox/cc65/runtime.asm:34
+    kill.o                    out/user/applets/kill.s:11
+    neosh.o                   out/user/shell/neosh.s:11
+tmp2 (zeropage.o):
+    runtime.o                 libneox/cc65/runtime.asm:35
+tmp3 (zeropage.o):
+    lumod.o                   runtime/lumod.s:10
+    ludiv.o                   runtime/ludiv.s:10
+tmp4 (zeropage.o):
+    lumod.o                   runtime/lumod.s:10
+    ludiv.o                   runtime/ludiv.s:10
+tosicmp (icmp.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+    applet_args.o             out/libneox/common/applet_args.s:404
+    kill.o                    out/user/applets/kill.s:458
+    neosh.o                   out/user/shell/neosh.s:2757
+tosicmp0 (icmp.o):
+    nbox.o                    out/user/nbox/nbox.s:803
+toslcmp (lcmp.o):
+    lne.o                     runtime/lne.s:8
+tosneeax (lne.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+tosudiv0ax (ludiv.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+tosudiveax (ludiv.o):
+tosumod0ax (lumod.o):
+    applet_support.o          out/libneox/common/applet_support.s:536
+tosumodeax (lumod.o):
+udiv32 (ludiv.o):
+    lumod.o                   runtime/lumod.s:9
+user_image_header (user_image.o):
+user_task1_entry (user_image.o):
+user_task2_entry (user_image.o):
+user_task3_entry (user_image.o):
+user_task4_entry (user_image.o):
+user_task5_disabled_entry (user_image.o):
+user_task5_entry (user_image.o):
+user_task6_entry (user_image.o):
+

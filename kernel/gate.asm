@@ -21,6 +21,7 @@
 
 .include "scheduler_defs.inc"
 .include "process.inc"
+.include "signal.inc"
 
 .export file_io_gate_init
 .export file_io_gate_acquire
@@ -36,6 +37,8 @@
 .import proc_set_wait
 .import proc_wake
 .import sched_yield
+.import proc_signal_pending
+.import proc_flags
 
 .import file_io_gate
 .import file_io_gate_owner
@@ -50,6 +53,52 @@
 .import proc_gate_next
 
 .segment "KERN_TEXT"
+
+; ------------------------------------------------------------
+; gate_signal_checkpoint
+;
+; Purpose:
+;   Force a scheduler pass immediately after the active process has released
+;   its final sleepable gate when a default-action SIG_INT is pending.
+;
+; Policy:
+;   - never acts on PID 0
+;   - never acts while the active process still owns FILE_IO or PROC
+;   - leaves PROC_FLAG_SIGINT_INTERRUPT processes alive; their pending SIG_INT
+;     is consumed by the interruptible console-read path as EINTR
+;   - does not apply the signal directly; scheduler signal handling remains
+;     the sole owner of process termination
+; ------------------------------------------------------------
+
+.proc gate_signal_checkpoint
+    ldx active_pid
+    cpx #IDLE_PID
+    beq @done
+
+    cpx #MAX_PROCS
+    bcs @done
+
+    lda proc_signal_pending,x
+    cmp #SIG_INT
+    bne @done
+
+    lda proc_flags,x
+    and #PROC_FLAG_SIGINT_INTERRUPT
+    bne @done
+
+    lda file_io_gate_owner
+    cmp active_pid
+    beq @done
+
+    lda proc_gate_owner
+    cmp active_pid
+    beq @done
+
+    jsr sched_yield
+
+@done:
+    rts
+.endproc
 
 ; ------------------------------------------------------------
 ; DEFINE_SLEEPABLE_GATE
@@ -254,6 +303,12 @@
 
 @done:
     plp
+
+    ; A pending default SIG_INT may have been deferred while this process
+    ; owned the gate. Once its final gate is released, enter the scheduler
+    ; before user code can begin another syscall.
+    jsr gate_signal_checkpoint
+
     sec
     rts
 .endproc

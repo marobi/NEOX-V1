@@ -1,0 +1,411 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/supervisor.asm
+Current file: kernel/supervisor.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; supervisor.asm
+000000r 1               ; NEOX - MICMON supervisor entry/exit
+000000r 1               ;
+000000r 1               ; Model:
+000000r 1               ;   Entering monitor freezes the current 6502 continuation.
+000000r 1               ;   MICMON uses BIOS low-level raw get/put-char only.
+000000r 1               ;   It must not call kernel syscalls, FD, pipe, ksys_io, RP mailbox,
+000000r 1               ;   scheduler services, or any other inspected subsystem.
+000000r 1               ;
+000000r 1               ; Return modes:
+000000r 1               ;   - RTS mode: manual/cooperative entry through enter_monitor
+000000r 1               ;   - IRQ mode: monitor IRQ entry through supervisor_enter_from_irq
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "bios.inc"
+000000r 2               ;
+000000r 2               ; BIOS jumptable + inline context switch primitive
+000000r 2               ;
+000000r 2               .ifndef __BIOS_INC__
+000000r 2               __BIOS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               BIOS_IO_PORT    =   IO_PAGE_BASE
+000000r 2               
+000000r 2               BIOS_KBD_PORT   = BIOS_IO_PORT
+000000r 2               BIOS_DSP_PORT   = BIOS_IO_PORT + 1
+000000r 2               BIOS_CMD_PORT   = BIOS_IO_PORT + 2
+000000r 2               BIOS_PARAM_PORT = BIOS_IO_PORT + 3
+000000r 2               
+000000r 2               BIOS_IRQ_SOURCE =   RP_REQ_BASE + 16
+000000r 2               BIOS_IRQ_STATE  =   RP_REQ_BASE + 19
+000000r 2               
+000000r 2               ; BIOS_BASE is defined by config.inc as $F000
+000000r 2               
+000000r 2               BIOS_GETCHAR      = BIOS_BASE
+000000r 2               BIOS_PUTCHAR      = BIOS_BASE+3
+000000r 2               
+000000r 2               BIOS_ACK_IRQ      = BIOS_BASE+6
+000000r 2               
+000000r 2               ; BIOS command values used by the inline context switch macro.
+000000r 2               BIOS_CMD_NONE           = 0
+000000r 2               BIOS_CMD_ACK_IRQ        = 1
+000000r 2               BIOS_CMD_CONTEXT_SWITCH = 2
+000000r 2               
+000000r 2               ; -----------------------------------------------------------------------------
+000000r 2               ; BIOS_CONTEXT_SWITCH
+000000r 2               ;
+000000r 2               ; Inline, stack-free MMU/private-context switch primitive.
+000000r 2               ;
+000000r 2               ; Input:
+000000r 2               ;   A = target context
+000000r 2               ;
+000000r 2               ; Effect:
+000000r 2               ;   Switches private memory / MMU context to A.
+000000r 2               ;
+000000r 2               ; Clobbers:
+000000r 2               ;   A, Y
+000000r 2               ;
+000000r 2               ; Preserves:
+000000r 2               ;   X
+000000r 2               ;
+000000r 2               ; Rules:
+000000r 2               ;   - macro only: no JSR/RTS may cross the context switch because the stack is
+000000r 2               ;     private per context.
+000000r 2               ;   - does not restore registers.
+000000r 2               ;   - does not RTI or JMP into a task.
+000000r 2               ;   - scheduler/context owner must perform TXS/RTI/JMP after this macro, when
+000000r 2               ;     the target context's private stack is mapped.
+000000r 2               ; -----------------------------------------------------------------------------
+000000r 2               .macro BIOS_CONTEXT_SWITCH
+000000r 2                   .local wait_cmd, wait_completion
+000000r 2               
+000000r 2                   ; Preserve target context without using stack. X is intentionally left
+000000r 2                   ; untouched so callers may carry the target SP across the switch.
+000000r 2                   tay
+000000r 2               
+000000r 2               wait_cmd:
+000000r 2                   lda BIOS_CMD_PORT
+000000r 2                   bne wait_cmd
+000000r 2               
+000000r 2                   sty BIOS_PARAM_PORT
+000000r 2                   lda #BIOS_CMD_CONTEXT_SWITCH
+000000r 2                   sta BIOS_CMD_PORT
+000000r 2               
+000000r 2               wait_completion:
+000000r 2                   lda BIOS_CMD_PORT
+000000r 2                   bne wait_completion
+000000r 2               .endmacro
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "sched_lock.inc"
+000000r 2               ; ============================================================
+000000r 2               ; sched_lock.inc
+000000r 2               ; NEOX - public scheduler-lock interface
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Provides the callable scheduler-lock interface and real guard byte.
+000000r 2               ;
+000000r 2               ; Rule:
+000000r 2               ;   All exits, including final context handoff after the target
+000000r 2               ;   private stack is installed, use jsr sched_lock_leave.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SCHED_LOCK_INC__
+000000r 2               __SCHED_LOCK_INC__ = 1
+000000r 2               
+000000r 2               .import sched_lock_try_enter
+000000r 2               .import sched_lock_leave
+000000r 2               
+000000r 2               .import sched_lock
+000000r 2               
+000000r 2               SCHED_LOCK_BIT = $01
+000000r 2               
+000000r 2               .endif ; __SCHED_LOCK_INC__
+000000r 2               
+000000r 1               
+000000r 1               .export enter_monitor
+000000r 1               .export leave_monitor
+000000r 1               .export supervisor_enter_from_irq
+000000r 1               
+000000r 1               .import active_pid
+000000r 1               .import active_context
+000000r 1               
+000000r 1               .import console_monitor_enter
+000000r 1               .import console_monitor_exit
+000000r 1               
+000000r 1               .import irq_restore
+000000r 1               
+000000r 1               MONITOR_CONTEXT     = $00
+000000r 1               MONITOR_ENTRY       = MICMON_BASE + 3
+000000r 1               
+000000r 1               SUP_RETURN_RTS      = $00
+000000r 1               SUP_RETURN_IRQ      = $01
+000000r 1               
+000000r 1               .segment "KERN_BSS"
+000000r 1               
+000000r 1               supervisor_saved_pid:
+000000r 1  xx               .res 1
+000001r 1               
+000001r 1               supervisor_saved_sp:
+000001r 1  xx               .res 1
+000002r 1               
+000002r 1               supervisor_saved_context:
+000002r 1  xx               .res 1
+000003r 1               
+000003r 1               supervisor_saved_return_mode:
+000003r 1  xx               .res 1
+000004r 1               
+000004r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; supervisor_enter_from_irq
+000000r 1               ;
+000000r 1               ; Called directly from irq_entry for RP_IRQ_SRC_MONITOR via JMP
+000000r 1               ;
+000000r 1               ; Stack on entry:
+000000r 1               ;   irq_entry has already pushed A, X, Y.
+000000r 1               ;   Below that is the hardware IRQ return frame.
+000000r 1               ;
+000000r 1               ; The saved return context is active_context, not a lookup
+000000r 1               ; through scheduler cursor state. active_pid is the interrupted
+000000r 1               ; process identity at this boundary.
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc supervisor_enter_from_irq
+000000r 1  78               sei
+000001r 1               
+000001r 1  AC rr rr         ldy active_pid
+000004r 1  8C rr rr         sty supervisor_saved_pid
+000007r 1               
+000007r 1  AD rr rr         lda active_context
+00000Ar 1  8D rr rr         sta supervisor_saved_context
+00000Dr 1               
+00000Dr 1  BA               tsx
+00000Er 1  8E rr rr         stx supervisor_saved_sp
+000011r 1               
+000011r 1  A9 01            lda #SUP_RETURN_IRQ
+000013r 1  8D rr rr         sta supervisor_saved_return_mode
+000016r 1               
+000016r 1  20 rr rr         jsr sched_lock_try_enter
+000019r 1  B0 21            bcs busy_restore_irq
+00001Br 1               
+00001Br 1  20 rr rr         jsr console_monitor_enter
+00001Er 1               
+00001Er 1                   ; The interrupted context was saved in supervisor_saved_context.
+00001Er 1                   ; From this point the active execution context becomes MICMON.
+00001Er 1                   ; Publish PID 0 together with context 0 so monitor-side ps never
+00001Er 1                   ; observes an impossible user PID / supervisor-context pair.
+00001Er 1  9C rr rr         stz active_pid
+000021r 1  A9 00            lda #MONITOR_CONTEXT
+000023r 1  8D rr rr         sta active_context
+000026r 1               
+000026r 1                   ; A still contains MONITOR_CONTEXT after publishing active_context.
+000026r 1  A8 AD 02 E0      BIOS_CONTEXT_SWITCH
+00002Ar 1  D0 FB 8C 03  
+00002Er 1  E0 A9 02 8D  
+000039r 1  4C 03 D0         jmp MONITOR_ENTRY
+00003Cr 1               
+00003Cr 1               busy_restore_irq:
+00003Cr 1                   ; sched_lock was already held.  Do not enter monitor from inside
+00003Cr 1                   ; a scheduler-critical section; restore the interrupted context.
+00003Cr 1  4C rr rr         jmp irq_restore
+00003Fr 1               .endproc
+00003Fr 1               
+00003Fr 1               ; ------------------------------------------------------------
+00003Fr 1               ; enter_monitor
+00003Fr 1               ;
+00003Fr 1               ; Manual/cooperative monitor entry.
+00003Fr 1               ;
+00003Fr 1               ; This path saves the current RTS-style continuation and returns
+00003Fr 1               ; through resume_rts_from_monitor on monitor exit.
+00003Fr 1               ; ------------------------------------------------------------
+00003Fr 1               
+00003Fr 1               .proc enter_monitor
+00003Fr 1  AC rr rr         ldy active_pid
+000042r 1  8C rr rr         sty supervisor_saved_pid
+000045r 1               
+000045r 1  AD rr rr         lda active_context
+000048r 1  8D rr rr         sta supervisor_saved_context
+00004Br 1               
+00004Br 1  BA               tsx
+00004Cr 1  8E rr rr         stx supervisor_saved_sp
+00004Fr 1               
+00004Fr 1  A9 00            lda #SUP_RETURN_RTS
+000051r 1  8D rr rr         sta supervisor_saved_return_mode
+000054r 1               
+000054r 1  20 rr rr         jsr sched_lock_try_enter
+000057r 1  B0 21            bcs busy_rts
+000059r 1               
+000059r 1  20 rr rr         jsr console_monitor_enter
+00005Cr 1               
+00005Cr 1                   ; The return context was saved in supervisor_saved_context.
+00005Cr 1                   ; From this point the active execution context becomes MICMON.
+00005Cr 1                   ; Publish PID 0 together with context 0 so monitor-side ps never
+00005Cr 1                   ; observes an impossible user PID / supervisor-context pair.
+00005Cr 1  9C rr rr         stz active_pid
+00005Fr 1  A9 00            lda #MONITOR_CONTEXT
+000061r 1  8D rr rr         sta active_context
+000064r 1               
+000064r 1                   ; A still contains MONITOR_CONTEXT after publishing active_context.
+000064r 1  A8 AD 02 E0      BIOS_CONTEXT_SWITCH
+000068r 1  D0 FB 8C 03  
+00006Cr 1  E0 A9 02 8D  
+000077r 1  4C 03 D0         jmp MONITOR_ENTRY
+00007Ar 1               
+00007Ar 1               busy_rts:
+00007Ar 1                   ; Manual monitor entry cannot proceed while scheduler state is
+00007Ar 1                   ; locked.  The try-lock restored the caller's P on failure.
+00007Ar 1  60               rts
+00007Br 1               .endproc
+00007Br 1               
+00007Br 1               ; ------------------------------------------------------------
+00007Br 1               ; leave_monitor
+00007Br 1               ;
+00007Br 1               ; Leave MICMON and resume the exact saved continuation.
+00007Br 1               ; ------------------------------------------------------------
+00007Br 1               
+00007Br 1               .proc leave_monitor
+00007Br 1  78               sei
+00007Cr 1               
+00007Cr 1  20 rr rr         jsr console_monitor_exit
+00007Fr 1               
+00007Fr 1  AD rr rr         lda supervisor_saved_return_mode
+000082r 1  C9 01            cmp #SUP_RETURN_IRQ
+000084r 1  F0 29            beq return_irq
+000086r 1               
+000086r 1               return_rts:
+000086r 1  AD rr rr         lda supervisor_saved_pid
+000089r 1  8D rr rr         sta active_pid
+00008Cr 1  AD rr rr         lda supervisor_saved_context
+00008Fr 1  8D rr rr         sta active_context
+000092r 1               
+000092r 1                   ; A still contains the saved context after publishing active_context.
+000092r 1  A8 AD 02 E0      BIOS_CONTEXT_SWITCH
+000096r 1  D0 FB 8C 03  
+00009Ar 1  E0 A9 02 8D  
+0000A5r 1               
+0000A5r 1  AE rr rr         ldx supervisor_saved_sp
+0000A8r 1  9A               txs
+0000A9r 1               
+0000A9r 1  20 rr rr         jsr sched_lock_leave
+0000ACr 1               
+0000ACr 1  4C rr rr         jmp resume_rts_from_monitor
+0000AFr 1               
+0000AFr 1               return_irq:
+0000AFr 1  AD rr rr         lda supervisor_saved_pid
+0000B2r 1  8D rr rr         sta active_pid
+0000B5r 1  AD rr rr         lda supervisor_saved_context
+0000B8r 1  8D rr rr         sta active_context
+0000BBr 1               
+0000BBr 1                   ; A still contains the saved context after publishing active_context.
+0000BBr 1  A8 AD 02 E0      BIOS_CONTEXT_SWITCH
+0000BFr 1  D0 FB 8C 03  
+0000C3r 1  E0 A9 02 8D  
+0000CEr 1               
+0000CEr 1  AE rr rr         ldx supervisor_saved_sp
+0000D1r 1  9A               txs
+0000D2r 1               
+0000D2r 1  20 rr rr         jsr sched_lock_leave
+0000D5r 1               
+0000D5r 1  4C rr rr         jmp irq_restore
+0000D8r 1               .endproc
+0000D8r 1               
+0000D8r 1               ; ------------------------------------------------------------
+0000D8r 1               ; resume_rts_from_monitor
+0000D8r 1               ;
+0000D8r 1               ; RTS-style monitor return trampoline.
+0000D8r 1               ; ------------------------------------------------------------
+0000D8r 1               
+0000D8r 1               .proc resume_rts_from_monitor
+0000D8r 1  58               cli
+0000D9r 1  60               rts
+0000DAr 1               .endproc
+0000DAr 1               

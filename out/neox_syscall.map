@@ -1,0 +1,296 @@
+Modules list:
+-------------
+zero_page.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000010  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+shared_state.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    KERN_BSS          Offs=000000  Size=0005BF  Align=00001  Fill=0000
+syscall_table.o:
+    CODE              Offs=000000  Size=000000  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
+    DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000010  Size=000000  Align=00001  Fill=0000
+    NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    SYSCALL_STUBS     Offs=000000  Size=00005D  Align=00001  Fill=0000
+    KERN_TEXT         Offs=000000  Size=000060  Align=00001  Fill=0000
+
+
+Segment list:
+-------------
+Name                   Start     End    Size  Align
+----------------------------------------------------
+CODE                  000000  000000  000000  00001
+DATA                  000000  000000  000000  00001
+NULL                  000000  000000  000000  00001
+ZEROPAGE              0000A0  0000AF  000010  00001
+BSS                   000280  000280  000000  00001
+KERN_BSS              00B020  00B5DE  0005BF  00001
+SYSCALL_STUBS         00F100  00F15C  00005D  00001
+KERN_TEXT             00F15D  00F1BC  000060  00001
+RODATA                00F1BD  00F1BD  000000  00001
+
+
+Exports list by name:
+---------------------
+__BSS_LOAD__              000280  LA    __BSS_RUN__               000280  LA    
+__BSS_SIZE__              000000  EA    __KERN_BSS_LOAD__         00B020  LA    
+__KERN_BSS_RUN__          00B020  LA    __KERN_BSS_SIZE__         0005BF  EA    
+__PRIVRAM_FILEOFFS__      000000  EA    __PRIVRAM_LAST__          000280  LA    
+__PRIVRAM_SIZE__          001D80  EA    __PRIVRAM_START__         000280  LA    
+__SHARED_FILEOFFS__       000000  EA    __SHARED_LAST__           00B5DF  LA    
+__SHARED_SIZE__           000FE0  EA    __SHARED_START__          00B020  LA    
+__ZP_FILEOFFS__           000000  EA    __ZP_LAST__               0000B0  LA    
+__ZP_SIZE__               000020  EA    __ZP_START__              0000A0  LA    
+active_context            00B096  LA    active_pid                00B03D  LA    
+brk_vector                00B022  LA    console_focus_pid         00B5DE  LA    
+console_owner_pid         00B094  LA    console_read_len_hi       00B39A  LA    
+console_read_len_lo       00B399  LA    context_owner_pid         00B059  LA    
+context_state             00B04F  LA    dev_ptr                   0000A6  LZ    
+factor1                   0000A0  LZ    factor2                   0000A1  LZ    
+fd_ptr                    0000A8  LZ    file_io_gate              00B025  LA    
+file_io_gate_next         00B029  LA    file_io_gate_owner        00B026  LA    
+file_io_gate_wait_head    00B027  LA    file_io_gate_wait_tail    00B028  LA    
+init_task_count           00B39B  LA    init_task_ptr             00B39C  LA    
+io_ptr                    0000A2  LZ    k_chdir                   00F1A2  LA    
+k_close                   00F163  LA    k_closedir                00F19F  LA    
+k_delete                  00F184  LA    k_dup                     00F18D  LA    
+k_dup2                    00F190  LA    k_exit                    00F15D  LA    
+k_get_launch_id           00F1B4  LA    k_get_launch_line         00F1B7  LA    
+k_getcwd                  00F1A5  LA    k_getprocinfo             00F1AE  LA    
+k_load_file_to_memory     00F16F  LA    k_mkdir                   00F1A8  LA    
+k_monitor                 00F16C  LA    k_open                    00F160  LA    
+k_opendir                 00F199  LA    k_pipe                    00F17B  LA    
+k_read                    00F166  LA    k_readdir                 00F19C  LA    
+k_rename                  00F187  LA    k_rmdir                   00F1AB  LA    
+k_save_memory_to_file     00F172  LA    k_seek                    00F175  LA    
+k_signal                  00F196  LA    k_sleep                   00F18A  LA    
+k_spawn_resident          00F1BA  LA    k_tell                    00F178  LA    
+k_ticks                   00F193  LA    k_waitpid                 00F1B1  LA    
+k_write                   00F169  LA    k_yield                   00F17E  LA    
+kernel_version            00B020  LA    klog_ptr                  0000AE  LZ    
+monitor_active            00B095  LA    open_dev                  00B127  LA    
+open_file_handle          00B137  LA    open_flags                00B117  LA    
+open_pipe                 00B5BE  LA    open_pipe_mode            00B5CE  LA    
+open_refcnt               00B107  LA    open_type                 00B0F7  LA    
+pipe_buf                  00B3BE  LA    pipe_buf_ptr              0000AC  LZ    
+pipe_count                00B3B6  LA    pipe_head                 00B3A6  LA    
+pipe_ptr                  0000AA  LZ    pipe_state                00B39E  LA    
+pipe_tail                 00B3AE  LA    proc_context              00B047  LA    
+proc_entryH               00B073  LA    proc_entryL               00B06B  LA    
+proc_exit_code            00B157  LA    proc_fd_flags             00B0C7  LA    
+proc_fd_obj               00B097  LA    proc_flags                00B07B  LA    
+proc_gate                 00B031  LA    proc_gate_next            00B035  LA    
+proc_gate_owner           00B032  LA    proc_gate_wait_head       00B033  LA    
+proc_gate_wait_tail       00B034  LA    proc_launch_id            00B15F  LA    
+proc_launch_line          00B16F  LA    proc_launch_line_len      00B167  LA    
+proc_parent_pid           00B083  LA    proc_signal_pending       00B08B  LA    
+proc_sp                   00B063  LA    proc_state                00B03F  LA    
+proc_ticks_hi             00B391  LA    proc_ticks_lo             00B389  LA    
+rp_lock                   00B024  LA    sched_cursor_pid          00B03E  LA    
+sched_lock                00B093  LA    sched_ptr                 0000A4  LZ    
+syscall_table             00F100  LA    system_ticks_hi           00B370  LA    
+system_ticks_lo           00B36F  LA    timer_pid                 00B371  LA    
+timer_until_hi            00B381  LA    timer_until_lo            00B379  LA    
+wait_object               00B14F  LA    wait_reason               00B147  LA    
+
+
+
+Exports list by value:
+----------------------
+__ZP_FILEOFFS__           000000  EA    __BSS_SIZE__              000000  EA    
+__PRIVRAM_FILEOFFS__      000000  EA    __SHARED_FILEOFFS__       000000  EA    
+__ZP_SIZE__               000020  EA    factor1                   0000A0  LZ    
+__ZP_START__              0000A0  LA    factor2                   0000A1  LZ    
+io_ptr                    0000A2  LZ    sched_ptr                 0000A4  LZ    
+dev_ptr                   0000A6  LZ    fd_ptr                    0000A8  LZ    
+pipe_ptr                  0000AA  LZ    pipe_buf_ptr              0000AC  LZ    
+klog_ptr                  0000AE  LZ    __ZP_LAST__               0000B0  LA    
+__BSS_RUN__               000280  LA    __BSS_LOAD__              000280  LA    
+__PRIVRAM_START__         000280  LA    __PRIVRAM_LAST__          000280  LA    
+__KERN_BSS_SIZE__         0005BF  EA    __SHARED_SIZE__           000FE0  EA    
+__PRIVRAM_SIZE__          001D80  EA    __KERN_BSS_RUN__          00B020  LA    
+__KERN_BSS_LOAD__         00B020  LA    __SHARED_START__          00B020  LA    
+kernel_version            00B020  LA    brk_vector                00B022  LA    
+rp_lock                   00B024  LA    file_io_gate              00B025  LA    
+file_io_gate_owner        00B026  LA    file_io_gate_wait_head    00B027  LA    
+file_io_gate_wait_tail    00B028  LA    file_io_gate_next         00B029  LA    
+proc_gate                 00B031  LA    proc_gate_owner           00B032  LA    
+proc_gate_wait_head       00B033  LA    proc_gate_wait_tail       00B034  LA    
+proc_gate_next            00B035  LA    active_pid                00B03D  LA    
+sched_cursor_pid          00B03E  LA    proc_state                00B03F  LA    
+proc_context              00B047  LA    context_state             00B04F  LA    
+context_owner_pid         00B059  LA    proc_sp                   00B063  LA    
+proc_entryL               00B06B  LA    proc_entryH               00B073  LA    
+proc_flags                00B07B  LA    proc_parent_pid           00B083  LA    
+proc_signal_pending       00B08B  LA    sched_lock                00B093  LA    
+console_owner_pid         00B094  LA    monitor_active            00B095  LA    
+active_context            00B096  LA    proc_fd_obj               00B097  LA    
+proc_fd_flags             00B0C7  LA    open_type                 00B0F7  LA    
+open_refcnt               00B107  LA    open_flags                00B117  LA    
+open_dev                  00B127  LA    open_file_handle          00B137  LA    
+wait_reason               00B147  LA    wait_object               00B14F  LA    
+proc_exit_code            00B157  LA    proc_launch_id            00B15F  LA    
+proc_launch_line_len      00B167  LA    proc_launch_line          00B16F  LA    
+system_ticks_lo           00B36F  LA    system_ticks_hi           00B370  LA    
+timer_pid                 00B371  LA    timer_until_lo            00B379  LA    
+timer_until_hi            00B381  LA    proc_ticks_lo             00B389  LA    
+proc_ticks_hi             00B391  LA    console_read_len_lo       00B399  LA    
+console_read_len_hi       00B39A  LA    init_task_count           00B39B  LA    
+init_task_ptr             00B39C  LA    pipe_state                00B39E  LA    
+pipe_head                 00B3A6  LA    pipe_tail                 00B3AE  LA    
+pipe_count                00B3B6  LA    pipe_buf                  00B3BE  LA    
+open_pipe                 00B5BE  LA    open_pipe_mode            00B5CE  LA    
+console_focus_pid         00B5DE  LA    __SHARED_LAST__           00B5DF  LA    
+syscall_table             00F100  LA    k_exit                    00F15D  LA    
+k_open                    00F160  LA    k_close                   00F163  LA    
+k_read                    00F166  LA    k_write                   00F169  LA    
+k_monitor                 00F16C  LA    k_load_file_to_memory     00F16F  LA    
+k_save_memory_to_file     00F172  LA    k_seek                    00F175  LA    
+k_tell                    00F178  LA    k_pipe                    00F17B  LA    
+k_yield                   00F17E  LA    k_delete                  00F184  LA    
+k_rename                  00F187  LA    k_sleep                   00F18A  LA    
+k_dup                     00F18D  LA    k_dup2                    00F190  LA    
+k_ticks                   00F193  LA    k_signal                  00F196  LA    
+k_opendir                 00F199  LA    k_readdir                 00F19C  LA    
+k_closedir                00F19F  LA    k_chdir                   00F1A2  LA    
+k_getcwd                  00F1A5  LA    k_mkdir                   00F1A8  LA    
+k_rmdir                   00F1AB  LA    k_getprocinfo             00F1AE  LA    
+k_waitpid                 00F1B1  LA    k_get_launch_id           00F1B4  LA    
+k_get_launch_line         00F1B7  LA    k_spawn_resident          00F1BA  LA    
+
+
+
+Imports list:
+-------------
+__BSS_LOAD__ ([linker generated]):
+__BSS_RUN__ ([linker generated]):
+__BSS_SIZE__ ([linker generated]):
+__KERN_BSS_LOAD__ ([linker generated]):
+__KERN_BSS_RUN__ ([linker generated]):
+__KERN_BSS_SIZE__ ([linker generated]):
+__PRIVRAM_FILEOFFS__ ([linker generated]):
+__PRIVRAM_LAST__ ([linker generated]):
+__PRIVRAM_SIZE__ ([linker generated]):
+__PRIVRAM_START__ ([linker generated]):
+__SHARED_FILEOFFS__ ([linker generated]):
+__SHARED_LAST__ ([linker generated]):
+__SHARED_SIZE__ ([linker generated]):
+__SHARED_START__ ([linker generated]):
+__ZP_FILEOFFS__ ([linker generated]):
+__ZP_LAST__ ([linker generated]):
+__ZP_SIZE__ ([linker generated]):
+__ZP_START__ ([linker generated]):
+active_context (shared_state.o):
+active_pid (shared_state.o):
+brk_vector (shared_state.o):
+console_focus_pid (shared_state.o):
+console_owner_pid (shared_state.o):
+console_read_len_hi (shared_state.o):
+console_read_len_lo (shared_state.o):
+context_owner_pid (shared_state.o):
+context_state (shared_state.o):
+dev_ptr (zero_page.o):
+factor1 (zero_page.o):
+factor2 (zero_page.o):
+fd_ptr (zero_page.o):
+file_io_gate (shared_state.o):
+file_io_gate_next (shared_state.o):
+file_io_gate_owner (shared_state.o):
+file_io_gate_wait_head (shared_state.o):
+file_io_gate_wait_tail (shared_state.o):
+init_task_count (shared_state.o):
+init_task_ptr (shared_state.o):
+io_ptr (zero_page.o):
+k_chdir (syscall_table.o):
+k_close (syscall_table.o):
+k_closedir (syscall_table.o):
+k_delete (syscall_table.o):
+k_dup (syscall_table.o):
+k_dup2 (syscall_table.o):
+k_exit (syscall_table.o):
+k_get_launch_id (syscall_table.o):
+k_get_launch_line (syscall_table.o):
+k_getcwd (syscall_table.o):
+k_getprocinfo (syscall_table.o):
+k_load_file_to_memory (syscall_table.o):
+k_mkdir (syscall_table.o):
+k_monitor (syscall_table.o):
+k_open (syscall_table.o):
+k_opendir (syscall_table.o):
+k_pipe (syscall_table.o):
+k_read (syscall_table.o):
+k_readdir (syscall_table.o):
+k_rename (syscall_table.o):
+k_rmdir (syscall_table.o):
+k_save_memory_to_file (syscall_table.o):
+k_seek (syscall_table.o):
+k_signal (syscall_table.o):
+k_sleep (syscall_table.o):
+k_spawn_resident (syscall_table.o):
+k_tell (syscall_table.o):
+k_ticks (syscall_table.o):
+k_waitpid (syscall_table.o):
+k_write (syscall_table.o):
+k_yield (syscall_table.o):
+kernel_version (shared_state.o):
+klog_ptr (zero_page.o):
+monitor_active (shared_state.o):
+open_dev (shared_state.o):
+open_file_handle (shared_state.o):
+open_flags (shared_state.o):
+open_pipe (shared_state.o):
+open_pipe_mode (shared_state.o):
+open_refcnt (shared_state.o):
+open_type (shared_state.o):
+pipe_buf (shared_state.o):
+pipe_buf_ptr (zero_page.o):
+pipe_count (shared_state.o):
+pipe_head (shared_state.o):
+pipe_ptr (zero_page.o):
+pipe_state (shared_state.o):
+pipe_tail (shared_state.o):
+proc_context (shared_state.o):
+proc_entryH (shared_state.o):
+proc_entryL (shared_state.o):
+proc_exit_code (shared_state.o):
+proc_fd_flags (shared_state.o):
+proc_fd_obj (shared_state.o):
+proc_flags (shared_state.o):
+proc_gate (shared_state.o):
+proc_gate_next (shared_state.o):
+proc_gate_owner (shared_state.o):
+proc_gate_wait_head (shared_state.o):
+proc_gate_wait_tail (shared_state.o):
+proc_launch_id (shared_state.o):
+proc_launch_line (shared_state.o):
+proc_launch_line_len (shared_state.o):
+proc_parent_pid (shared_state.o):
+proc_signal_pending (shared_state.o):
+proc_sp (shared_state.o):
+proc_state (shared_state.o):
+proc_ticks_hi (shared_state.o):
+proc_ticks_lo (shared_state.o):
+rp_lock (shared_state.o):
+sched_cursor_pid (shared_state.o):
+sched_lock (shared_state.o):
+sched_ptr (zero_page.o):
+syscall_table (syscall_table.o):
+system_ticks_hi (shared_state.o):
+system_ticks_lo (shared_state.o):
+timer_pid (shared_state.o):
+timer_until_hi (shared_state.o):
+timer_until_lo (shared_state.o):
+wait_object (shared_state.o):
+wait_reason (shared_state.o):
+

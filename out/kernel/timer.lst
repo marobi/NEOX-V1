@@ -1,0 +1,692 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/timer.asm
+Current file: kernel/timer.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; timer.asm
+000000r 1               ; NEOX - scheduler timer wait subsystem
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Provides timer-based blocking for sys_sleep and future
+000000r 1               ;   timeout-based waits.
+000000r 1               ;
+000000r 1               ; Model:
+000000r 1               ;   - system_ticks is a 16-bit tick counter incremented once per
+000000r 1               ;     timer IRQ.
+000000r 1               ;   - sleeping processes use WAIT_TIMER.
+000000r 1               ;   - wait_object[pid] stores the timer slot index.
+000000r 1               ;   - timer_pid[slot] stores the PID attached to that slot.
+000000r 1               ;
+000000r 1               ; Ownership:
+000000r 1               ;   - shared_state.asm owns storage
+000000r 1               ;   - timer.asm owns timer-slot logic
+000000r 1               ;   - scheduler.asm calls scheduler_tick / scheduler_wake_timers
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "process.inc"
+000000r 2               .ifndef __PROCESS_INC__
+000000r 2               __PROCESS_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process states
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_EMPTY      = $00
+000000r 2               PROC_NEW        = $01
+000000r 2               PROC_READY      = $02
+000000r 2               PROC_RUNNING    = $03
+000000r 2               PROC_BLOCKED    = $04
+000000r 2               PROC_STOPPED    = $05
+000000r 2               PROC_ZOMBIE     = $06
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Flags byte bit definitions
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               PROC_FLAG_NONE              = $00
+000000r 2               PROC_FLAG_IDLE              = $01
+000000r 2               PROC_FLAG_ATTACHED_CON      = $02
+000000r 2               PROC_FLAG_FOREGROUND        = $04
+000000r 2               PROC_FLAG_SIGINT_INTERRUPT  = $08
+000000r 2               
+000000r 2               ; Flags that may be supplied as initial process characteristics by a
+000000r 2               ; boot-task record or resident spawn request. PROC_FLAG_IDLE remains
+000000r 2               ; kernel-owned and cannot be requested through these creation interfaces.
+000000r 2               PROC_FLAGS_CREATE_MASK = PROC_FLAG_ATTACHED_CON | PROC_FLAG_FOREGROUND | PROC_FLAG_SIGINT_INTERRUPT
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process frame format
+000000r 2               ;
+000000r 2               ; All saved runnable process stacks use the IRQ-compatible
+000000r 2               ; extended RTI frame:
+000000r 2               ;     Y, X, A, P, PCL, PCH
+000000r 2               ; The scheduler has no per-process resume mode; normal task
+000000r 2               ; resume is always RTI.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Process wait reasons
+000000r 2               ;
+000000r 2               ; WAIT_NONE means the process is not blocked on a known wait object.
+000000r 2               ; Other values describe why a PROC_BLOCKED process is blocked.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               WAIT_NONE       = $00
+000000r 2               WAIT_CONSOLE    = $01
+000000r 2               WAIT_DEVICE     = $02
+000000r 2               WAIT_PIPE_READ  = $03        ; pipe read wait on empty pipe
+000000r 2               WAIT_PIPE       = WAIT_PIPE_READ ; compatibility alias
+000000r 2               WAIT_TIMER      = $04
+000000r 2               WAIT_PROC       = $05
+000000r 2               
+000000r 2               ; Generic sleepable gate wait.
+000000r 2               ;
+000000r 2               ; wait_object identifies the gate object:
+000000r 2               ;   LOCK_ID_FILE_IO = FD/open-object/pipe/console syscall gate
+000000r 2               ;   LOCK_ID_PROC    = future process-management syscall gate
+000000r 2               WAIT_LOCK       = $06
+000000r 2               
+000000r 2               ; Pipe write wait on a full pipe. Kept separate from WAIT_PIPE_READ so
+000000r 2               ; readers and writers can be woken by the correct readiness event.
+000000r 2               WAIT_PIPE_WRITE = $07
+000000r 2               
+000000r 2               ; Blocked while retaining FILE_IO ownership until the RP2350 completes
+000000r 2               ; the single active generic filesystem request. wait_object contains the
+000000r 2               ; filesystem operation code.
+000000r 2               WAIT_RP         = $08
+000000r 2               
+000000r 2               LOCK_ID_FILE_IO = $00
+000000r 2               LOCK_ID_PROC    = $01
+000000r 2               
+000000r 2               ; Diagnostic gate-hold mask returned by SYS_GETPROCINFO.
+000000r 2               PROC_HOLD_NONE     = $00
+000000r 2               PROC_HOLD_FILE_IO  = $01
+000000r 2               PROC_HOLD_PROC     = $02
+000000r 2               
+000000r 2               ; Sentinel used for free gate owners and empty gate wait queues.
+000000r 2               GATE_OWNER_NONE = $FF
+000000r 2               
+000000r 2               EXIT_OK         = $00
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "scheduler_defs.inc"
+000000r 2               ; ============================================================
+000000r 2               ; scheduler_defs.inc
+000000r 2               ; NEOX - scheduler constants
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SCHEDULER_DEFS_INC__
+000000r 2               __SCHEDULER_DEFS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               IDLE_PID        = 0
+000000r 2               FIRST_TASK_PID  = 1
+000000r 2               
+000000r 2               .struct proc_create_args
+000000r 2                   flags       .byte
+000000r 2                   reserved    .byte
+000000r 2                   entry       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROC_CREATE_ARGS_SIZE = .sizeof(proc_create_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "timer.inc"
+000000r 2               ; ============================================================
+000000r 2               ; timer.inc
+000000r 2               ; NEOX - scheduler timer wait definitions
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ;   Defines the timer wait subsystem used by sys_sleep and
+000000r 2               ;   future timeout-based waits.
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __TIMER_INC__
+000000r 2               __TIMER_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Special values
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               TIMER_NONE     = $FF
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Timer range
+000000r 2               ;
+000000r 2               ; Expiry uses signed 16-bit tick difference:
+000000r 2               ;
+000000r 2               ;   expired if signed(system_ticks - target_tick) >= 0
+000000r 2               ;
+000000r 2               ; Therefore one sleep interval must be less than $8000 ticks.
+000000r 2               ;
+000000r 2               ; At 50 Hz:
+000000r 2               ;   $8000 ticks = about 10.9 minutes
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               TIMER_MAX_DELTA = $7F
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export timer_init
+000000r 1               .export timer_alloc
+000000r 1               .export timer_free
+000000r 1               .export timer_start_current
+000000r 1               .export timer_commit_current
+000000r 1               .export scheduler_wake_timers
+000000r 1               
+000000r 1               .import active_pid
+000000r 1               .import proc_state
+000000r 1               .import wait_reason
+000000r 1               .import wait_object
+000000r 1               
+000000r 1               
+000000r 1               .import timer_pid
+000000r 1               .import timer_until_lo
+000000r 1               .import timer_until_hi
+000000r 1               
+000000r 1               .import proc_wake
+000000r 1               
+000000r 1               .import system_ticks_lo
+000000r 1               .import system_ticks_hi
+000000r 1               
+000000r 1               .segment "KERN_BSS"
+000000r 1               
+000000r 1               ; Timer wake scratch.  scheduler_wake_timers is called only from
+000000r 1               ; scheduler-owned paths while scheduler serialization is active.
+000000r 1               timer_scan_slot_tmp:
+000000r 1  xx               .res 1
+000001r 1               
+000001r 1               timer_scan_pid_tmp:
+000001r 1  xx               .res 1
+000002r 1               
+000002r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               ; ------------------------------------------------------------
+000000r 1               ; timer_init
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Initialize global tick counter and timer wait table.
+000000r 1               ;
+000000r 1               ; Called from:
+000000r 1               ;   kernel initialization.
+000000r 1               ; ------------------------------------------------------------
+000000r 1               
+000000r 1               .proc timer_init
+000000r 1  A2 00            ldx #0
+000002r 1               
+000002r 1               @clear:
+000002r 1  A9 FF            lda #TIMER_NONE
+000004r 1  9D rr rr         sta timer_pid,x
+000007r 1               
+000007r 1  9E rr rr         stz timer_until_lo,x
+00000Ar 1  9E rr rr         stz timer_until_hi,x
+00000Dr 1               
+00000Dr 1  E8               inx
+00000Er 1  E0 08            cpx #MAX_TIMER
+000010r 1  D0 F0            bne @clear
+000012r 1               
+000012r 1  60               rts
+000013r 1               .endproc
+000013r 1               
+000013r 1               ; ------------------------------------------------------------
+000013r 1               ; timer_alloc
+000013r 1               ;
+000013r 1               ; Purpose:
+000013r 1               ;   Allocate a free timer slot.
+000013r 1               ;
+000013r 1               ; Output:
+000013r 1               ;   C clear = success
+000013r 1               ;             X = timer slot
+000013r 1               ;
+000013r 1               ;   C set   = no free timer slot
+000013r 1               ;
+000013r 1               ; Notes:
+000013r 1               ;   The slot is not marked used here. Caller fills timer_pid.
+000013r 1               ; ------------------------------------------------------------
+000013r 1               
+000013r 1               .proc timer_alloc
+000013r 1  A2 00            ldx #0
+000015r 1               
+000015r 1               @scan:
+000015r 1  E0 08            cpx #MAX_TIMER
+000017r 1  B0 0C            bcs @fail
+000019r 1               
+000019r 1  BD rr rr         lda timer_pid,x
+00001Cr 1  C9 FF            cmp #TIMER_NONE
+00001Er 1  F0 03            beq @found
+000020r 1               
+000020r 1  E8               inx
+000021r 1  80 F2            bra @scan
+000023r 1               
+000023r 1               @found:
+000023r 1  18               clc
+000024r 1  60               rts
+000025r 1               
+000025r 1               @fail:
+000025r 1  38               sec
+000026r 1  60               rts
+000027r 1               .endproc
+000027r 1               
+000027r 1               ; ------------------------------------------------------------
+000027r 1               ; timer_free
+000027r 1               ;
+000027r 1               ; Input:
+000027r 1               ;   X = timer slot
+000027r 1               ;
+000027r 1               ; Purpose:
+000027r 1               ;   Release a timer slot.
+000027r 1               ; ------------------------------------------------------------
+000027r 1               
+000027r 1               .proc timer_free
+000027r 1  A9 FF            lda #TIMER_NONE
+000029r 1  9D rr rr         sta timer_pid,x
+00002Cr 1               
+00002Cr 1  9E rr rr         stz timer_until_lo,x
+00002Fr 1  9E rr rr         stz timer_until_hi,x
+000032r 1               
+000032r 1  60               rts
+000033r 1               .endproc
+000033r 1               
+000033r 1               ; ------------------------------------------------------------
+000033r 1               ; timer_start_current
+000033r 1               ;
+000033r 1               ; Input:
+000033r 1               ;   A = relative sleep ticks
+000033r 1               ;
+000033r 1               ; Output:
+000033r 1               ;   C clear = timer slot armed for active_pid
+000033r 1               ;             Y = timer slot
+000033r 1               ;
+000033r 1               ;   C set   = no timer slot available
+000033r 1               ;
+000033r 1               ; Purpose:
+000033r 1               ;   Reserve and arm a timer slot for active_pid.  This routine does
+000033r 1               ;   not mark the process blocked.  The scheduler-owned block primitive
+000033r 1               ;   commits WAIT_TIMER after the syscall continuation has been saved.
+000033r 1               ;
+000033r 1               ; Race rule:
+000033r 1               ;   The slot is attached to active_pid before IRQs are restored.
+000033r 1               ;   scheduler_wake_timers only wakes a process if wait_object[pid]
+000033r 1               ;   matches this exact timer slot.  If a very short timer expires
+000033r 1               ;   before the process commits WAIT_TIMER, the slot is freed as stale
+000033r 1               ;   and sys_sleep returns as already elapsed.
+000033r 1               ; ------------------------------------------------------------
+000033r 1               
+000033r 1               .proc timer_start_current
+000033r 1  08               php
+000034r 1  78               sei
+000035r 1  48               pha                         ; saved duration, above saved P
+000036r 1               
+000036r 1  20 rr rr         jsr timer_alloc
+000039r 1  90 04            bcc @slot_ok
+00003Br 1               
+00003Br 1                   ; No slot available: discard saved duration and restore caller P.
+00003Br 1  68               pla
+00003Cr 1  28               plp
+00003Dr 1  38               sec
+00003Er 1  60               rts
+00003Fr 1               
+00003Fr 1               @slot_ok:
+00003Fr 1                   ; Save allocated slot in Y for wait_object.
+00003Fr 1  8A               txa
+000040r 1  A8               tay
+000041r 1               
+000041r 1                   ; Attach the slot to the current process.  The process is not
+000041r 1                   ; blocked yet; scheduler_wake_timers verifies wait_object before
+000041r 1                   ; waking, and frees expired non-matching slots as stale.
+000041r 1  AD rr rr         lda active_pid
+000044r 1  9D rr rr         sta timer_pid,x
+000047r 1               
+000047r 1                   ; Compute absolute wake tick:
+000047r 1                   ;   wake = system_ticks + duration
+000047r 1  68               pla                         ; A = saved duration
+000048r 1  18               clc
+000049r 1  6D rr rr         adc system_ticks_lo
+00004Cr 1  9D rr rr         sta timer_until_lo,x
+00004Fr 1               
+00004Fr 1  AD rr rr         lda system_ticks_hi
+000052r 1  69 00            adc #0
+000054r 1  9D rr rr         sta timer_until_hi,x
+000057r 1               
+000057r 1  28               plp
+000058r 1  18               clc
+000059r 1  60               rts
+00005Ar 1               .endproc
+00005Ar 1               
+00005Ar 1               ; ------------------------------------------------------------
+00005Ar 1               ; timer_commit_current
+00005Ar 1               ;
+00005Ar 1               ; Input:
+00005Ar 1               ;   X = armed timer slot
+00005Ar 1               ;
+00005Ar 1               ; Output:
+00005Ar 1               ;   C clear = slot is still attached to active_pid and still pending
+00005Ar 1               ;   C set   = slot is invalid or already expired/freed
+00005Ar 1               ;
+00005Ar 1               ; Purpose:
+00005Ar 1               ;   Validate that the armed timer slot still belongs to active_pid and
+00005Ar 1               ;   has not already expired before sched_block_current commits
+00005Ar 1               ;   WAIT_TIMER.  If the timer is already due, free the slot and let
+00005Ar 1               ;   sys_sleep return success immediately instead of blocking on a timer
+00005Ar 1               ;   that should already have elapsed.
+00005Ar 1               ; ------------------------------------------------------------
+00005Ar 1               
+00005Ar 1               .proc timer_commit_current
+00005Ar 1  E0 08            cpx #MAX_TIMER
+00005Cr 1  B0 1E            bcs @fail
+00005Er 1               
+00005Er 1  BD rr rr         lda timer_pid,x
+000061r 1  CD rr rr         cmp active_pid
+000064r 1  D0 16            bne @fail
+000066r 1               
+000066r 1                   ; Use the same signed 16-bit expiry test as scheduler_wake_timers:
+000066r 1                   ;   expired if signed(system_ticks - timer_until) >= 0
+000066r 1  38               sec
+000067r 1  AD rr rr         lda system_ticks_lo
+00006Ar 1  FD rr rr         sbc timer_until_lo,x
+00006Dr 1               
+00006Dr 1  AD rr rr         lda system_ticks_hi
+000070r 1  FD rr rr         sbc timer_until_hi,x
+000073r 1  30 05            bmi @pending
+000075r 1               
+000075r 1                   ; The timer elapsed before the block transition committed.
+000075r 1                   ; Free the slot and report "already elapsed" to sched_block_current.
+000075r 1  20 rr rr         jsr timer_free
+000078r 1  38               sec
+000079r 1  60               rts
+00007Ar 1               
+00007Ar 1               @pending:
+00007Ar 1  18               clc
+00007Br 1  60               rts
+00007Cr 1               
+00007Cr 1               @fail:
+00007Cr 1  38               sec
+00007Dr 1  60               rts
+00007Er 1               .endproc
+00007Er 1               
+00007Er 1               ; ------------------------------------------------------------
+00007Er 1               ; scheduler_wake_timers
+00007Er 1               ;
+00007Er 1               ; Purpose:
+00007Er 1               ;   Wake processes whose timer wait has expired.
+00007Er 1               ;
+00007Er 1               ; Model:
+00007Er 1               ;   timer_pid[slot] identifies the sleeping process.
+00007Er 1               ;   wait_object[pid] contains the timer slot index.
+00007Er 1               ;
+00007Er 1               ; Expiry test:
+00007Er 1               ;   Uses signed 16-bit difference:
+00007Er 1               ;
+00007Er 1               ;       expired if signed(system_ticks - timer_until) >= 0
+00007Er 1               ;
+00007Er 1               ;   This is safe across 16-bit wraparound as long as one sleep
+00007Er 1               ;   interval is less than $8000 ticks.
+00007Er 1               ;
+00007Er 1               ; Clobbers:
+00007Er 1               ;   A, X, Y
+00007Er 1               ; ------------------------------------------------------------
+00007Er 1               
+00007Er 1               .proc scheduler_wake_timers
+00007Er 1  A2 00            ldx #0
+000080r 1               
+000080r 1               @scan:
+000080r 1  E0 08            cpx #MAX_TIMER
+000082r 1  B0 56            bcs @done
+000084r 1               
+000084r 1  BD rr rr         lda timer_pid,x
+000087r 1  C9 FF            cmp #TIMER_NONE
+000089r 1  F0 4C            beq @next
+00008Br 1               
+00008Br 1  8D rr rr         sta timer_scan_pid_tmp
+00008Er 1  8E rr rr         stx timer_scan_slot_tmp
+000091r 1               
+000091r 1                   ; --------------------------------------------------------
+000091r 1                   ; Overflow-safe expiry check:
+000091r 1                   ;
+000091r 1                   ;   delta = system_ticks - timer_until
+000091r 1                   ;
+000091r 1                   ; If delta high byte has bit 7 set, the timer target is
+000091r 1                   ; still in the future.
+000091r 1                   ; --------------------------------------------------------
+000091r 1               
+000091r 1  38               sec
+000092r 1  AD rr rr         lda system_ticks_lo
+000095r 1  FD rr rr         sbc timer_until_lo,x
+000098r 1               
+000098r 1  AD rr rr         lda system_ticks_hi
+00009Br 1  FD rr rr         sbc timer_until_hi,x
+00009Er 1               
+00009Er 1  30 37            bmi @next
+0000A0r 1               
+0000A0r 1                   ; --------------------------------------------------------
+0000A0r 1                   ; Timer expired.  Wake only if the stored PID is still blocked
+0000A0r 1                   ; on WAIT_TIMER for this exact timer slot.  Mismatched expired
+0000A0r 1                   ; slots are stale and are freed without waking anything.
+0000A0r 1                   ; --------------------------------------------------------
+0000A0r 1               
+0000A0r 1  AE rr rr         ldx timer_scan_pid_tmp
+0000A3r 1               
+0000A3r 1  BD rr rr         lda proc_state,x
+0000A6r 1  C9 04            cmp #PROC_BLOCKED
+0000A8r 1  D0 21            bne @free_stale
+0000AAr 1               
+0000AAr 1  BD rr rr         lda wait_reason,x
+0000ADr 1  C9 04            cmp #WAIT_TIMER
+0000AFr 1  D0 1A            bne @free_stale
+0000B1r 1               
+0000B1r 1  BD rr rr         lda wait_object,x
+0000B4r 1  CD rr rr         cmp timer_scan_slot_tmp
+0000B7r 1  D0 12            bne @free_stale
+0000B9r 1               
+0000B9r 1                   ; Exact owner match: free slot, then wake the process.
+0000B9r 1                   ; Continue from the following timer slot afterwards.  proc_wake may
+0000B9r 1                   ; clobber X, so reload the saved slot index explicitly.
+0000B9r 1  AE rr rr         ldx timer_scan_slot_tmp
+0000BCr 1  20 rr rr         jsr timer_free
+0000BFr 1               
+0000BFr 1  AE rr rr         ldx timer_scan_pid_tmp
+0000C2r 1  20 rr rr         jsr proc_wake
+0000C5r 1               
+0000C5r 1  AE rr rr         ldx timer_scan_slot_tmp
+0000C8r 1  E8               inx
+0000C9r 1  80 B5            bra @scan
+0000CBr 1               
+0000CBr 1               @free_stale:
+0000CBr 1  AE rr rr         ldx timer_scan_slot_tmp
+0000CEr 1  20 rr rr         jsr timer_free
+0000D1r 1               
+0000D1r 1  AE rr rr         ldx timer_scan_slot_tmp
+0000D4r 1  E8               inx
+0000D5r 1  80 A9            bra @scan
+0000D7r 1               
+0000D7r 1               @next:
+0000D7r 1  E8               inx
+0000D8r 1  80 A6            bra @scan
+0000DAr 1               
+0000DAr 1               @done:
+0000DAr 1  60               rts
+0000DBr 1               .endproc
+0000DBr 1               

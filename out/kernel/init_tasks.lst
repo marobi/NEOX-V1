@@ -1,0 +1,477 @@
+ca65 V2.19 - Git cc3c40c
+Main file   : kernel/init_tasks.asm
+Current file: kernel/init_tasks.asm
+
+000000r 1               ; ============================================================
+000000r 1               ; init_tasks.asm
+000000r 1               ; NEOX - initial runnable task setup
+000000r 1               ;
+000000r 1               ; Purpose:
+000000r 1               ;   Creates initial user/test tasks.
+000000r 1               ;
+000000r 1               ; Model:
+000000r 1               ;   - PID 0 is the idle process, initialized by scheduler/main.
+000000r 1               ;   - Monitor is not a process.
+000000r 1               ;   - Normal tasks are allocated from PID 1 upward.
+000000r 1               ;   - User process code lives in USER_TEXT, not KERN_TEXT.
+000000r 1               ;   - The task table supplies entry points, not MMU context ids.
+000000r 1               ;   - proc_create allocates both PID and preloaded context.
+000000r 1               ; ============================================================
+000000r 1               
+000000r 1               .setcpu "65C02"
+000000r 1               
+000000r 1               .include "config.inc"
+000000r 2               ; ============================================================
+000000r 2               ; config.inc
+000000r 2               ; NEOX - kernel configuration
+000000r 2               ;
+000000r 2               ; Purpose:
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __CONFIG_INC__
+000000r 2               __CONFIG_INC__ = 1
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Limits
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               MAX_FDS     = 6          ; per-process descriptor count
+000000r 2               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Maximum simultaneously active processes
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               MAX_PROCS   = 8
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Maximum simultaneously active timer waits
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               MAX_TIMER   = 8
+000000r 2               
+000000r 2               ;
+000000r 2               ;
+000000r 2               ;
+000000r 2               
+000000r 2               MAX_PIPES       = 8
+000000r 2               PIPE_BUF_SIZE   = 64
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Filesystem path limits
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 2               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 2               ; ============================================================
+000000r 2               ;
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               USER_IMAGE_TABLE = $1000
+000000r 2               
+000000r 2               ; Final 32/32 virtual-memory split.
+000000r 2               USER_SPACE_LIMIT = $8000
+000000r 2               KERNEL_SHARED_BASE = $B020
+000000r 2               KERNEL_OVERFLOW_BASE = $C000
+000000r 2               MICMON_BASE = $D000
+000000r 2               IO_PAGE_BASE = $E000
+000000r 2               BIOS_BASE = $F000
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Kernel
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               KERNEL_BASE = $8000
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Syscall table location
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               SYSCALL_BASE = $F100
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; RP2350 mailbox control registers (MMIO)
+000000r 2               ;
+000000r 2               ; Layout:
+000000r 2               ;   Page E is shared I/O space
+000000r 2               ;   OS-owned mailbox doorbell starts at $E010
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_DOORBELL  = $E010
+000000r 2               
+000000r 2               ; ------------------------------------------------------------
+000000r 2               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 2               ;
+000000r 2               ; mailbox request block.
+000000r 2               ; ------------------------------------------------------------
+000000r 2               
+000000r 2               RP_REQ_BASE  = $B000
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "kernel.inc"
+000000r 2               ; ============================================================
+000000r 2               ; kernel_entry.inc
+000000r 2               ; NEOX - fixed kernel entry table
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __KERNEL_ENTRY_INC__
+000000r 2               __KERNEL_ENTRY_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               KERNEL_ENTRY_SIZE           = 3
+000000r 2               
+000000r 2               KERN_ENTRY_MAIN             = KERNEL_BASE + (0 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_MONITOR          = KERNEL_BASE + (1 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_SET_BRK_VECTOR   = KERNEL_BASE + (2 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_LEAVE_MONITOR    = KERNEL_BASE + (3 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_READ        = KERNEL_BASE + (4 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_WRITE       = KERNEL_BASE + (5 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_EXIT        = KERNEL_BASE + (6 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_YIELD       = KERNEL_BASE + (7 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SLEEP       = KERNEL_BASE + (8 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_CLOSE       = KERNEL_BASE + (9 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_DUP  		= KERNEL_BASE + (10 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_DUP2 		= KERNEL_BASE + (11 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_PIPE		= KERNEL_BASE + (12 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_PIPE_CREATE_BETWEEN_FD = KERNEL_BASE + (13 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_TICKS       = KERNEL_BASE + (14 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SIGNAL      = KERNEL_BASE + (15 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_OPEN        = KERNEL_BASE + (16 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_LOAD_FILE_TO_MEMORY = KERNEL_BASE + (17 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SAVE_MEMORY_TO_FILE = KERNEL_BASE + (18 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SEEK       = KERNEL_BASE + (19 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_TELL       = KERNEL_BASE + (20 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_DELETE     = KERNEL_BASE + (21 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_RENAME     = KERNEL_BASE + (22 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_OPENDIR    = KERNEL_BASE + (23 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_READDIR    = KERNEL_BASE + (24 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_CLOSEDIR   = KERNEL_BASE + (25 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_CHDIR      = KERNEL_BASE + (26 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GETCWD     = KERNEL_BASE + (27 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_MKDIR      = KERNEL_BASE + (28 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_RMDIR      = KERNEL_BASE + (29 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GETPROCINFO = KERNEL_BASE + (30 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_WAITPID = KERNEL_BASE + (31 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GET_LAUNCH_ID = KERNEL_BASE + (32 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_GET_LAUNCH_LINE = KERNEL_BASE + (33 * KERNEL_ENTRY_SIZE)
+000000r 2               KERN_ENTRY_KSYS_SPAWN_RESIDENT = KERNEL_BASE + (34 * KERNEL_ENTRY_SIZE)
+000000r 2               .endif
+000000r 2               
+000000r 1               .include "scheduler_defs.inc"
+000000r 2               ; ============================================================
+000000r 2               ; scheduler_defs.inc
+000000r 2               ; NEOX - scheduler constants
+000000r 2               ; ============================================================
+000000r 2               
+000000r 2               .ifndef __SCHEDULER_DEFS_INC__
+000000r 2               __SCHEDULER_DEFS_INC__ = 1
+000000r 2               
+000000r 2               .include "config.inc"
+000000r 3               ; ============================================================
+000000r 3               ; config.inc
+000000r 3               ; NEOX - kernel configuration
+000000r 3               ;
+000000r 3               ; Purpose:
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               .ifndef __CONFIG_INC__
+000000r 3               __CONFIG_INC__ = 1
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_FDS     = 6          ; per-process descriptor count
+000000r 3               OPEN_MAX    = 16         ; system-wide open object slots
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active processes
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_PROCS   = 8
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Maximum simultaneously active timer waits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               MAX_TIMER   = 8
+000000r 3               
+000000r 3               ;
+000000r 3               ;
+000000r 3               ;
+000000r 3               
+000000r 3               MAX_PIPES       = 8
+000000r 3               PIPE_BUF_SIZE   = 64
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Filesystem path limits
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               NEOX_CWD_MAX  = 32        ; process-private current-directory path bytes
+000000r 3               NEOX_PATH_MAX = 64        ; kernel path resolver buffer bytes
+000000r 3               ; ============================================================
+000000r 3               ;
+000000r 3               ; ============================================================
+000000r 3               
+000000r 3               USER_IMAGE_TABLE = $1000
+000000r 3               
+000000r 3               ; Final 32/32 virtual-memory split.
+000000r 3               USER_SPACE_LIMIT = $8000
+000000r 3               KERNEL_SHARED_BASE = $B020
+000000r 3               KERNEL_OVERFLOW_BASE = $C000
+000000r 3               MICMON_BASE = $D000
+000000r 3               IO_PAGE_BASE = $E000
+000000r 3               BIOS_BASE = $F000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Kernel
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               KERNEL_BASE = $8000
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Syscall table location
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               SYSCALL_BASE = $F100
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; RP2350 mailbox control registers (MMIO)
+000000r 3               ;
+000000r 3               ; Layout:
+000000r 3               ;   Page E is shared I/O space
+000000r 3               ;   OS-owned mailbox doorbell starts at $E010
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_DOORBELL  = $E010
+000000r 3               
+000000r 3               ; ------------------------------------------------------------
+000000r 3               ; Shared RAM request/result block (ordinary shared RAM, not I/O)
+000000r 3               ;
+000000r 3               ; mailbox request block.
+000000r 3               ; ------------------------------------------------------------
+000000r 3               
+000000r 3               RP_REQ_BASE  = $B000
+000000r 3               
+000000r 3               .endif
+000000r 3               
+000000r 2               
+000000r 2               IDLE_PID        = 0
+000000r 2               FIRST_TASK_PID  = 1
+000000r 2               
+000000r 2               .struct proc_create_args
+000000r 2                   flags       .byte
+000000r 2                   reserved    .byte
+000000r 2                   entry       .word
+000000r 2               .endstruct
+000000r 2               
+000000r 2               PROC_CREATE_ARGS_SIZE = .sizeof(proc_create_args)
+000000r 2               
+000000r 2               .endif
+000000r 2               
+000000r 1               
+000000r 1               .export tasks_init
+000000r 1               
+000000r 1               .import proc_create
+000000r 1               
+000000r 1               .import init_task_count
+000000r 1               .import init_task_ptr
+000000r 1               
+000000r 1               .segment "KERN_TEXT"
+000000r 1               
+000000r 1               USER_MAGIC0      = USER_IMAGE_TABLE + 0
+000000r 1               USER_MAGIC1      = USER_IMAGE_TABLE + 1
+000000r 1               USER_VERSION     = USER_IMAGE_TABLE + 2
+000000r 1               USER_TASK_COUNT  = USER_IMAGE_TABLE + 3
+000000r 1               USER_TASK_TABLE  = USER_IMAGE_TABLE + 4
+000000r 1               
+000000r 1               USER_ENTRY_SIZE  = 4
+000000r 1               
+000000r 1               .proc tasks_init
+000000r 1                   ; Validate magic.
+000000r 1  AD 00 10         lda USER_MAGIC0
+000003r 1  C9 4E            cmp #'N'
+000005r 1  D0 6D            bne @bad_user_image
+000007r 1               
+000007r 1  AD 01 10         lda USER_MAGIC1
+00000Ar 1  C9 58            cmp #'X'
+00000Cr 1  D0 66            bne @bad_user_image
+00000Er 1               
+00000Er 1                   ; Validate version.
+00000Er 1  AD 02 10         lda USER_VERSION
+000011r 1  C9 01            cmp #$01
+000013r 1  D0 5F            bne @bad_user_image
+000015r 1               
+000015r 1  AD 03 10         lda USER_TASK_COUNT
+000018r 1  F0 58            beq @done
+00001Ar 1               
+00001Ar 1  8D rr rr         sta init_task_count
+00001Dr 1               
+00001Dr 1  A9 04            lda #<USER_TASK_TABLE
+00001Fr 1  8D rr rr         sta init_task_ptr
+000022r 1  A9 10            lda #>USER_TASK_TABLE
+000024r 1  8D rr rr         sta init_task_ptr+1
+000027r 1               
+000027r 1               @loop:
+000027r 1  AE rr rr         ldx init_task_ptr
+00002Ar 1  AC rr rr         ldy init_task_ptr+1
+00002Dr 1  20 rr rr         jsr proc_create
+000030r 1  90 02            bcc @task_created
+000032r 1               
+000032r 1               @task_create_failed:
+000032r 1  80 FE            bra @task_create_failed
+000034r 1               
+000034r 1               @task_created:
+000034r 1  18               clc
+000035r 1  AD rr rr         lda init_task_ptr
+000038r 1  69 04            adc #USER_ENTRY_SIZE
+00003Ar 1  8D rr rr         sta init_task_ptr
+00003Dr 1               
+00003Dr 1  AD rr rr         lda init_task_ptr+1
+000040r 1  69 00            adc #0
+000042r 1  8D rr rr         sta init_task_ptr+1
+000045r 1               
+000045r 1  CE rr rr         dec init_task_count
+000048r 1  D0 DD            bne @loop
+00004Ar 1               
+00004Ar 1                   ; Only wire static inter-process test pipe when PID 1 and PID 2 exist.
+00004Ar 1  AD 03 10         lda USER_TASK_COUNT
+00004Dr 1  C9 02            cmp #2
+00004Fr 1  90 21            bcc @done
+000051r 1               
+000051r 1                   ; --------------------------------------------------------
+000051r 1                   ; Static ping-pong pipes.
+000051r 1                   ;
+000051r 1                   ; Pipe A:
+000051r 1                   ;   PID 1 fd 3 = write
+000051r 1                   ;   PID 2 fd 3 = read
+000051r 1                   ;
+000051r 1                   ; Pipe B:
+000051r 1                   ;   PID 2 fd 4 = write
+000051r 1                   ;   PID 1 fd 4 = read
+000051r 1                   ; --------------------------------------------------------
+000051r 1               
+000051r 1  AD 03 10         lda USER_TASK_COUNT
+000054r 1  C9 02            cmp #2
+000056r 1  90 1A            bcc @done
+000058r 1               
+000058r 1                   ; Pipe A: Task 1 -> Task 2
+000058r 1  A9 02            lda #2          ; reader PID
+00005Ar 1  A2 01            ldx #1          ; writer PID
+00005Cr 1  A0 03            ldy #3          ; fd number in both processes
+00005Er 1  20 27 80         jsr KERN_ENTRY_PIPE_CREATE_BETWEEN_FD
+000061r 1  90 02            bcc :+
+000063r 1               
+000063r 1               @pipe_a_setup_failed:
+000063r 1  80 FE            bra @pipe_a_setup_failed
+000065r 1               :
+000065r 1               
+000065r 1                   ; Pipe B: Task 2 -> Task 1
+000065r 1  A9 01            lda #1          ; reader PID
+000067r 1  A2 02            ldx #2          ; writer PID
+000069r 1  A0 04            ldy #4          ; fd number in both processes
+00006Br 1  20 27 80         jsr KERN_ENTRY_PIPE_CREATE_BETWEEN_FD
+00006Er 1  90 02            bcc @done
+000070r 1               
+000070r 1               @pipe_b_setup_failed:
+000070r 1  80 FE            bra @pipe_b_setup_failed
+000072r 1               
+000072r 1               @done:
+000072r 1  18               clc
+000073r 1  60               rts
+000074r 1               
+000074r 1               @bad_user_image:
+000074r 1                   ; For now, trap hard. Later print a boot error.
+000074r 1  80 FE            bra @bad_user_image
+000076r 1               .endproc
+000076r 1               
