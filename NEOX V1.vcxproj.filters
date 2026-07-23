@@ -1,239 +1,570 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="bios">
+      <UniqueIdentifier>{91511c79-5960-5cf6-ba30-b067eadaefc5}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    <Filter Include="docs">
+      <UniqueIdentifier>{3cca9314-b178-5faa-9430-566e101b741b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    <Filter Include="docs\6502_kernel">
+      <UniqueIdentifier>{b9e08aa9-e705-5dcc-882d-a4632536d2c2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\interface">
+      <UniqueIdentifier>{1518bcd7-3d33-5b6a-a247-9e1ca9d297b7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\monitor">
+      <UniqueIdentifier>{37680e51-3921-5157-aaea-e2203b11656d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\rp_side">
+      <UniqueIdentifier>{ff626be0-1161-55ed-b996-fa578bba44ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\shell">
+      <UniqueIdentifier>{2b50dee7-0de8-54a4-ba0c-c5fcc07a0b6e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{a3690692-d9cb-5b10-9655-b6a71e009bfe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="kernel">
+      <UniqueIdentifier>{236f2908-6a99-5c14-ac1e-2750c8ac3493}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libneox">
+      <UniqueIdentifier>{62e78b1b-9d74-55aa-9cca-ae499b5c06be}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libneox\cc65">
+      <UniqueIdentifier>{e6ad581c-7879-584c-8d80-456a992f0d74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libneox\cc65\cfg">
+      <UniqueIdentifier>{d2cd0613-038c-5d3e-be57-6440dd54d143}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libneox\common">
+      <UniqueIdentifier>{21ed626b-660e-5b10-8a37-a33d9b78d825}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libneox\include">
+      <UniqueIdentifier>{a439aba2-0c59-5c53-9847-665729e2aaa5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libneox\include\neox">
+      <UniqueIdentifier>{1fbd7ce6-e4ad-5592-90ac-8cf4aed51215}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user">
+      <UniqueIdentifier>{7aa1a363-a18f-51ee-ac30-02ac27e0be89}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user\applets">
+      <UniqueIdentifier>{e92555cd-ac5c-5230-9187-97d5b70d3cc7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user\include">
+      <UniqueIdentifier>{48c25fb4-05fa-5c4f-9e23-6c5adc444512}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user\nbox">
+      <UniqueIdentifier>{67ec3e8b-b543-5b62-824a-1b74944a7677}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user\save_pipe_test">
+      <UniqueIdentifier>{de2809ef-4d27-5d6d-a84b-eaef6731d375}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user\save_signal_test">
+      <UniqueIdentifier>{e38844cc-722d-51ad-a3ed-6d6fda186047}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user\shell">
+      <UniqueIdentifier>{1625ca4d-a3d6-5891-a340-25ac176c7fdd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="user\task">
+      <UniqueIdentifier>{615b1260-4dc5-5dbf-806e-6bc39c480486}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="include\mailbox.inc">
-      <Filter>Header Files</Filter>
-    </None>
-    <None Include="include\syscall.inc">
-      <Filter>Header Files</Filter>
-    </None>
-    <None Include="kernel\rp2350.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="kernel\syscall_table.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="kernel\zero_page.asm">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="bios\bios.asm">
-      <Filter>Source Files</Filter>
+      <Filter>bios</Filter>
     </None>
     <None Include="bios\bios.cfg">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="bios\getaddress">
-      <Filter>Resource Files</Filter>
+      <Filter>bios</Filter>
     </None>
     <None Include="bios\bios.inc">
-      <Filter>Header Files</Filter>
+      <Filter>bios</Filter>
+    </None>
+    <None Include="bios\disasm6502.py">
+      <Filter>bios</Filter>
+    </None>
+    <None Include="bios\getaddress">
+      <Filter>bios</Filter>
     </None>
     <None Include="bios\Makefile">
-      <Filter>Resource Files</Filter>
+      <Filter>bios</Filter>
     </None>
-    <None Include="kernel\init_tasks.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\6502_kernel\filesystem_model.md">
+      <Filter>docs\6502_kernel</Filter>
     </None>
-    <None Include="kernel\irq.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\6502_kernel\pipes.md">
+      <Filter>docs\6502_kernel</Filter>
     </None>
-    <None Include="kernel\main.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\6502_kernel\process_management.md">
+      <Filter>docs\6502_kernel</Filter>
     </None>
-    <None Include="kernel\sched_lock.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\6502_kernel\scheduler_and_timers.md">
+      <Filter>docs\6502_kernel</Filter>
     </None>
-    <None Include="kernel\scheduler.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\6502_kernel\signalling.md">
+      <Filter>docs\6502_kernel</Filter>
     </None>
-    <None Include="kernel\shared_state.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\6502_kernel\spawn_and_exec.md">
+      <Filter>docs\6502_kernel</Filter>
     </None>
-    <None Include="include\irq.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\6502_kernel\syscall_abi.md">
+      <Filter>docs\6502_kernel</Filter>
     </None>
-    <None Include="include\scheduler.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\architecture.md">
+      <Filter>docs</Filter>
     </None>
-    <None Include="include\scheduler_defs.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\interface\mailbox_abi.md">
+      <Filter>docs\interface</Filter>
     </None>
-    <None Include="include\supervisor.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\libneox_cc65.md">
+      <Filter>docs</Filter>
     </None>
-    <None Include="kernel\entry_table.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\monitor\6502_micmon_monitor.md">
+      <Filter>docs\monitor</Filter>
     </None>
-    <None Include="kernel\supervisor.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\monitor\micmon_monitor.md">
+      <Filter>docs\monitor</Filter>
     </None>
-    <None Include="include\process.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\rp_side\6502_clock_and_irq_generation.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="include\fd.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\rp_side\6502_control_and_debug.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="kernel\fd.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\rp_side\console_focus_selection.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="kernel\spawn.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\rp_side\keyboard_and_input.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="include\kernel.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\rp_side\keyboard_locale.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="kernel\ksys_io.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\rp_side\mailbox_bridge.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="README.md" />
-    <None Include="kernel\idle_task.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\rp_side\onscreen_editing.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="kernel\ksys_proc.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\rp_side\rp_overview.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="include\timer.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\rp_side\transparent_memory_access.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="kernel\timer.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\rp_side\usb_subsystem.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="include\signal.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\rp_side\vdu_mouse_support.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="include\spawn.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\rp_side\vdu_subsystem.md">
+      <Filter>docs\rp_side</Filter>
     </None>
-    <None Include="kernel\process_control.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\shell\command_execution_modes.md">
+      <Filter>docs\shell</Filter>
     </None>
-    <None Include="include\lock.inc">
-      <Filter>Header Files</Filter>
+    <None Include="docs\shell\neosh_nbox_applets.md">
+      <Filter>docs\shell</Filter>
     </None>
-    <None Include="user\task1.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\user_tasks.md">
+      <Filter>docs</Filter>
     </None>
-    <None Include="user\task2.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\task3.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\task6.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\nbox.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\applet_scratch.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\help.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\pwd.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\cd.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\ls.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\cat.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\rm.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\mv.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\mkdir.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\rmdir.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\cp.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\ps.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\applets\common.inc">
-      <Filter>Header Files</Filter>
-    </None>
-    <None Include="user\nbox.inc">
-      <Filter>Header Files</Filter>
-    </None>
-    <None Include="user\nbox.mk">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\task5.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\task4.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\user_entry.asm">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="user\user_space.asm">
-      <Filter>Source Files</Filter>
+    <None Include="docs\validation.md">
+      <Filter>docs</Filter>
     </None>
     <None Include="include\config.inc">
-      <Filter>Header Files</Filter>
+      <Filter>include</Filter>
     </None>
     <None Include="include\context.inc">
-      <Filter>Header Files</Filter>
+      <Filter>include</Filter>
     </None>
-    <None Include="include\pipe.inc">
-      <Filter>Header Files</Filter>
+    <None Include="include\fd.inc">
+      <Filter>include</Filter>
     </None>
-    <None Include="kernel\pipe.asm">
-      <Filter>Source Files</Filter>
+    <None Include="include\irq.inc">
+      <Filter>include</Filter>
     </None>
-    <None Include="kernel\klog.asm">
-      <Filter>Source Files</Filter>
+    <None Include="include\kernel.inc">
+      <Filter>include</Filter>
     </None>
     <None Include="include\klog.inc">
-      <Filter>Header Files</Filter>
+      <Filter>include</Filter>
     </None>
-    <None Include="user\neosh.asm">
-      <Filter>Source Files</Filter>
+    <None Include="include\lock.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\mailbox.inc">
+      <Filter>include</Filter>
     </None>
     <None Include="include\math8.inc">
-      <Filter>Header Files</Filter>
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\pipe.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\process.inc">
+      <Filter>include</Filter>
     </None>
     <None Include="include\sched_lock.inc">
-      <Filter>Header Files</Filter>
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\scheduler.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\scheduler_defs.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\signal.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\spawn.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\supervisor.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\syscall.inc">
+      <Filter>include</Filter>
+    </None>
+    <None Include="include\timer.inc">
+      <Filter>include</Filter>
     </None>
     <None Include="include\version.inc">
-      <Filter>Header Files</Filter>
+      <Filter>include</Filter>
     </None>
-    <None Include="user\applets\kill.c">
-      <Filter>Source Files</Filter>
+    <None Include="kernel\console_device.asm">
+      <Filter>kernel</Filter>
     </None>
-    <None Include="libneox\include\neox\signal.h">
-      <Filter>Header Files</Filter>
+    <None Include="kernel\context.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\device.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\entry_table.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\fd.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\gate.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\idle_task.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\init_tasks.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\irq.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\klog.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\ksys_fs.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\ksys_io.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\ksys_proc.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\ksys_time.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\mailbox.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\main.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\Makefile">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\math8.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\pipe.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\process_control.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\rp_console_io.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\rp_fs_io.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\sched_lock.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\scheduler.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\shared_state.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\spawn.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\supervisor.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\syscall_table.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\timer.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="kernel\zero_page.asm">
+      <Filter>kernel</Filter>
+    </None>
+    <None Include="libneox\cc65\cfg\neox.cfg">
+      <Filter>libneox\cc65\cfg</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_chdir.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_close.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_closedir.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_delete.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_get_launch_id.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_get_launch_line.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_get_process_info.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_getcwd.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_mkdir.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_open.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_opendir.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_path_call.inc">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_read.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_readdir.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_rename.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_rmdir.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_seek.asm">
+      <Filter>libneox\cc65</Filter>
     </None>
     <None Include="libneox\cc65\neox_signal.asm">
-      <Filter>Source Files</Filter>
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_spawn_resident.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_waitpid.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\neox_write.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\README.md">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\runtime.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\cc65\zeropage.asm">
+      <Filter>libneox\cc65</Filter>
+    </None>
+    <None Include="libneox\common\applet_args.c">
+      <Filter>libneox\common</Filter>
+    </None>
+    <None Include="libneox\common\applet_support.c">
+      <Filter>libneox\common</Filter>
+    </None>
+    <None Include="libneox\include\neox\applet.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\applet_support.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\compiler.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\fs.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\io.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\libneox.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\process.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\signal.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\status.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="libneox\include\neox\types.h">
+      <Filter>libneox\include\neox</Filter>
+    </None>
+    <None Include="Makefile" />
+    <None Include="README.md" />
+    <None Include="user\applets\cat.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\cd.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\cp.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\echo.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\kill.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\ls.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\mkdir.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\mv.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\path_command.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\ps.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\pwd.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\rm.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\rmdir.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\applets\two_path_command.c">
+      <Filter>user\applets</Filter>
+    </None>
+    <None Include="user\include\nbox.h">
+      <Filter>user\include</Filter>
+    </None>
+    <None Include="user\include\neosh_child_entry.h">
+      <Filter>user\include</Filter>
+    </None>
+    <None Include="user\include\neox_applet_path.h">
+      <Filter>user\include</Filter>
+    </None>
+    <None Include="user\include\neox_applet_two_path.h">
+      <Filter>user\include</Filter>
+    </None>
+    <None Include="user\Makefile">
+      <Filter>user</Filter>
+    </None>
+    <None Include="user\nbox.mk">
+      <Filter>user</Filter>
+    </None>
+    <None Include="user\nbox\nbox.c">
+      <Filter>user\nbox</Filter>
+    </None>
+    <None Include="user\nbox\nbox.inc">
+      <Filter>user\nbox</Filter>
+    </None>
+    <None Include="user\nbox\nbox_child.asm">
+      <Filter>user\nbox</Filter>
+    </None>
+    <None Include="user\save_pipe_test\task1.asm">
+      <Filter>user\save_pipe_test</Filter>
+    </None>
+    <None Include="user\save_pipe_test\task2.asm">
+      <Filter>user\save_pipe_test</Filter>
+    </None>
+    <None Include="user\save_pipe_test\task3.asm">
+      <Filter>user\save_pipe_test</Filter>
+    </None>
+    <None Include="user\save_pipe_test\user_entry.asm">
+      <Filter>user\save_pipe_test</Filter>
+    </None>
+    <None Include="user\save_pipe_test\user_space.asm">
+      <Filter>user\save_pipe_test</Filter>
+    </None>
+    <None Include="user\save_signal_test\task1.asm">
+      <Filter>user\save_signal_test</Filter>
+    </None>
+    <None Include="user\save_signal_test\task2.asm">
+      <Filter>user\save_signal_test</Filter>
+    </None>
+    <None Include="user\save_signal_test\task3.asm">
+      <Filter>user\save_signal_test</Filter>
+    </None>
+    <None Include="user\save_signal_test\user_entry.asm">
+      <Filter>user\save_signal_test</Filter>
+    </None>
+    <None Include="user\save_signal_test\user_space.asm">
+      <Filter>user\save_signal_test</Filter>
+    </None>
+    <None Include="user\shell\neosh.c">
+      <Filter>user\shell</Filter>
+    </None>
+    <None Include="user\shell\neosh_entry.asm">
+      <Filter>user\shell</Filter>
+    </None>
+    <None Include="user\task\task1.asm">
+      <Filter>user\task</Filter>
+    </None>
+    <None Include="user\task\task2.asm">
+      <Filter>user\task</Filter>
+    </None>
+    <None Include="user\task\task3.asm">
+      <Filter>user\task</Filter>
+    </None>
+    <None Include="user\task\task4.asm">
+      <Filter>user\task</Filter>
+    </None>
+    <None Include="user\task\task5.asm">
+      <Filter>user\task</Filter>
+    </None>
+    <None Include="user\task\task6.asm">
+      <Filter>user\task</Filter>
+    </None>
+    <None Include="user\task\user_entry.asm">
+      <Filter>user\task</Filter>
+    </None>
+    <None Include="user\task\user_image.asm">
+      <Filter>user\task</Filter>
     </None>
   </ItemGroup>
 </Project>
